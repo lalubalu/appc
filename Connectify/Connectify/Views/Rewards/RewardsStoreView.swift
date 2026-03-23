@@ -156,10 +156,10 @@ struct RewardsStoreView: View {
                         .padding(.horizontal, 14)
                         .padding(.vertical, 8)
                         .background(canAfford ? Color.connectifyGreen : .cardSurface)
-                        .clipShape(Capsule())
+                        .clipShape(RoundedRectangle(cornerRadius: 4))
                         .overlay {
                             if !canAfford {
-                                Capsule().strokeBorder(.subtleBorder, lineWidth: 1)
+                                RoundedRectangle(cornerRadius: 4).strokeBorder(.subtleBorder, lineWidth: 1)
                             }
                         }
                 }

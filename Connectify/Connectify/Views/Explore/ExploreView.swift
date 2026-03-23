@@ -72,7 +72,7 @@ struct ExploreView: View {
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
                         .background(.ultraThinMaterial)
-                        .clipShape(Capsule())
+                        .clipShape(RoundedRectangle(cornerRadius: 3))
                         .padding(12)
                     }
 

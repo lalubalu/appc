@@ -27,24 +27,24 @@ enum SampleData {
         reason: "The cherry blossoms are at peak bloom this week — a must-visit."
     )
 
-    // MARK: Events
+    // MARK: Events (primary points source)
 
     static let events: [Event] = [
-        Event(title: "River Cleanup Day", organizer: "Green Community Alliance", date: Calendar.current.date(byAdding: .day, value: 2, to: .now)!, time: "9:00 AM – 12:00 PM", locationName: "Riverside Park", attendeeCount: 34, maxAttendees: 50, category: .cleanup, imagePlaceholder: "sparkles"),
-        Event(title: "Sunset Yoga in the Park", organizer: "Mindful Movement Co.", date: Calendar.current.date(byAdding: .day, value: 3, to: .now)!, time: "6:30 PM – 7:30 PM", locationName: "Overlook Bluff", attendeeCount: 18, maxAttendees: 30, category: .social, imagePlaceholder: "figure.yoga"),
-        Event(title: "Weekend Farmers Market", organizer: "Local Growers Collective", date: Calendar.current.date(byAdding: .day, value: 5, to: .now)!, time: "8:00 AM – 1:00 PM", locationName: "The Commons", attendeeCount: 120, maxAttendees: nil, category: .market, imagePlaceholder: "bag.fill"),
-        Event(title: "Youth Basketball Tournament", organizer: "Parks & Rec Dept.", date: Calendar.current.date(byAdding: .day, value: 4, to: .now)!, time: "10:00 AM – 4:00 PM", locationName: "Cedar Court Complex", attendeeCount: 48, maxAttendees: 64, category: .sports, imagePlaceholder: "figure.basketball"),
-        Event(title: "Nature Photography Walk", organizer: "Shutter Club", date: Calendar.current.date(byAdding: .day, value: 6, to: .now)!, time: "7:00 AM – 9:00 AM", locationName: "Hawk Ridge Trail", attendeeCount: 12, maxAttendees: 20, category: .workshop, imagePlaceholder: "camera.fill"),
-        Event(title: "Spring Community Festival", organizer: "City of Maplewood", date: Calendar.current.date(byAdding: .day, value: 8, to: .now)!, time: "11:00 AM – 8:00 PM", locationName: "Riverside Park", attendeeCount: 230, maxAttendees: nil, category: .festival, imagePlaceholder: "party.popper.fill"),
+        Event(id: "river-cleanup-day", title: "River Cleanup Day", organizer: "Green Community Alliance", date: Calendar.current.date(byAdding: .day, value: 2, to: .now)!, time: "9:00 AM – 12:00 PM", locationName: "Riverside Park", attendeeCount: 34, maxAttendees: 50, category: .cleanup, imagePlaceholder: "sparkles", pointValue: 200),
+        Event(id: "sunset-yoga", title: "Sunset Yoga in the Park", organizer: "Mindful Movement Co.", date: Calendar.current.date(byAdding: .day, value: 3, to: .now)!, time: "6:30 PM – 7:30 PM", locationName: "Overlook Bluff", attendeeCount: 18, maxAttendees: 30, category: .social, imagePlaceholder: "figure.yoga", pointValue: 100),
+        Event(id: "weekend-farmers-market", title: "Weekend Farmers Market", organizer: "Local Growers Collective", date: Calendar.current.date(byAdding: .day, value: 5, to: .now)!, time: "8:00 AM – 1:00 PM", locationName: "The Commons", attendeeCount: 120, maxAttendees: nil, category: .market, imagePlaceholder: "bag.fill", pointValue: 75),
+        Event(id: "youth-basketball", title: "Youth Basketball Tournament", organizer: "Parks & Rec Dept.", date: Calendar.current.date(byAdding: .day, value: 4, to: .now)!, time: "10:00 AM – 4:00 PM", locationName: "Cedar Court Complex", attendeeCount: 48, maxAttendees: 64, category: .sports, imagePlaceholder: "figure.basketball", pointValue: 150),
+        Event(id: "nature-photo-walk", title: "Nature Photography Walk", organizer: "Shutter Club", date: Calendar.current.date(byAdding: .day, value: 6, to: .now)!, time: "7:00 AM – 9:00 AM", locationName: "Hawk Ridge Trail", attendeeCount: 12, maxAttendees: 20, category: .workshop, imagePlaceholder: "camera.fill", pointValue: 150),
+        Event(id: "spring-festival", title: "Spring Community Festival", organizer: "City of Maplewood", date: Calendar.current.date(byAdding: .day, value: 8, to: .now)!, time: "11:00 AM – 8:00 PM", locationName: "Riverside Park", attendeeCount: 230, maxAttendees: nil, category: .festival, imagePlaceholder: "party.popper.fill", pointValue: 250),
     ]
 
     // MARK: Challenges
 
     static let challenges: [Challenge] = [
-        Challenge(title: "Park Explorer", description: "Visit 5 different parks this month", xpReward: 250, progress: 0.6, icon: "leaf.fill", daysRemaining: 12),
-        Challenge(title: "Early Bird", description: "Check in before 8 AM three times", xpReward: 150, progress: 0.33, icon: "sunrise.fill", daysRemaining: 18),
-        Challenge(title: "Community Spirit", description: "Attend 2 community events", xpReward: 200, progress: 0.5, icon: "heart.fill", daysRemaining: 9),
-        Challenge(title: "Trail Blazer", description: "Complete 10 miles of trails", xpReward: 500, progress: 0.75, icon: "figure.hiking", daysRemaining: 21),
+        Challenge(title: "Event Regular", description: "Attend 3 events this month", xpReward: 300, progress: 0.33, icon: "calendar.badge.checkmark", daysRemaining: 12),
+        Challenge(title: "Community Hero", description: "Attend 2 cleanup events", xpReward: 250, progress: 0.5, icon: "heart.fill", daysRemaining: 18),
+        Challenge(title: "Social Butterfly", description: "Attend 5 social events", xpReward: 400, progress: 0.2, icon: "person.2.fill", daysRemaining: 25),
+        Challenge(title: "Park Explorer", description: "Visit 5 different parks", xpReward: 150, progress: 0.6, icon: "leaf.fill", daysRemaining: 9),
     ]
 
     // MARK: Community Posts
@@ -77,43 +77,59 @@ enum SampleData {
 
     // MARK: - Collectible Places
 
-    private static let mapCenter = CLLocationCoordinate2D(latitude: 44.9778, longitude: -93.2650)
+    /// Default center (Minneapolis) used before GPS lock
+    static let defaultCenter = CLLocationCoordinate2D(latitude: 44.9778, longitude: -93.2650)
 
-    static let collectiblePlaces: [CollectiblePlace] = places.map { place in
-        let hash = abs(place.name.hashValue)
-        let latOffset = Double(hash % 1000) / 20000.0 - 0.025
-        let lngOffset = Double((hash / 1000) % 1000) / 20000.0 - 0.025
-        return CollectiblePlace(
-            id: place.name.lowercased().replacingOccurrences(of: " ", with: "-"),
-            place: place,
-            rarity: CollectiblePlace.rarityFor(place.category),
-            coordinate: CLLocationCoordinate2D(
-                latitude: mapCenter.latitude + latOffset,
-                longitude: mapCenter.longitude + lngOffset
+    /// Generates collectible places around a center coordinate.
+    static func collectiblePlaces(around center: CLLocationCoordinate2D) -> [CollectiblePlace] {
+        let offsets: [(Double, Double)] = [
+            ( 0.003,  0.004),   // Riverside Park — very close
+            ( 0.015, -0.008),   // Hawk Ridge Trail — moderate
+            (-0.006,  0.010),   // Botanica Gardens — close
+            ( 0.005, -0.005),   // Lakeshore Playground — close
+            (-0.020,  0.018),   // Marina Point — far
+            ( 0.008,  0.002),   // Cedar Court Complex — close
+            ( 0.025, -0.022),   // Overlook Bluff — far (legendary!)
+            (-0.002, -0.003),   // The Commons — very close
+        ]
+
+        return zip(places, offsets).map { place, offset in
+            CollectiblePlace(
+                id: place.name.lowercased().replacingOccurrences(of: " ", with: "-"),
+                place: place,
+                rarity: CollectiblePlace.rarityFor(place.category),
+                coordinate: CLLocationCoordinate2D(
+                    latitude: center.latitude + offset.0,
+                    longitude: center.longitude + offset.1
+                )
             )
-        )
+        }
     }
+
+    /// Convenience: places around the default center (fallback before GPS)
+    static let collectiblePlaces: [CollectiblePlace] = collectiblePlaces(around: defaultCenter)
 
     /// Find the CollectiblePlace wrapper for a given Place
-    static func collectible(for place: Place) -> CollectiblePlace? {
-        collectiblePlaces.first { $0.place.id == place.id }
+    static func collectible(for place: Place, in list: [CollectiblePlace]? = nil) -> CollectiblePlace? {
+        let source = list ?? collectiblePlaces
+        return source.first { $0.place.id == place.id }
     }
 
-    // MARK: - Rewards
+    // MARK: - Rewards (rebalanced — requires sustained event attendance)
 
     static let rewards: [Reward] = [
-        // Bronze tier (200+ pts)
-        Reward(id: "starbucks-5", name: "$5 Starbucks", brand: "Starbucks", icon: "cup.and.saucer.fill", pointCost: 200, tier: .bronze),
-        Reward(id: "dunkin-5", name: "$5 Dunkin'", brand: "Dunkin'", icon: "mug.fill", pointCost: 200, tier: .bronze),
-        // Silver tier (500+ pts)
-        Reward(id: "amazon-10", name: "$10 Amazon", brand: "Amazon", icon: "shippingbox.fill", pointCost: 500, tier: .silver),
-        Reward(id: "target-10", name: "$10 Target", brand: "Target", icon: "cart.fill", pointCost: 500, tier: .silver),
-        Reward(id: "chipotle-10", name: "$10 Chipotle", brand: "Chipotle", icon: "fork.knife", pointCost: 500, tier: .silver),
-        // Gold tier (1500+ pts)
-        Reward(id: "amazon-25", name: "$25 Amazon", brand: "Amazon", icon: "shippingbox.fill", pointCost: 1500, tier: .gold),
-        Reward(id: "nike-25", name: "$25 Nike", brand: "Nike", icon: "shoe.fill", pointCost: 1500, tier: .gold),
-        // Platinum tier (5000+ pts)
-        Reward(id: "apple-50", name: "$50 Apple", brand: "Apple", icon: "apple.logo", pointCost: 5000, tier: .platinum),
-        Reward(id: "rei-50", name: "$50 REI", brand: "REI", icon: "tent.fill", pointCost: 5000, tier: .platinum),
+        // Bronze tier (1000 pts — ~7-10 events)
+        Reward(id: "starbucks-5", name: "$5 Starbucks", brand: "Starbucks", icon: "cup.and.saucer.fill", pointCost: 1000, tier: .bronze),
+        Reward(id: "dunkin-5", name: "$5 Dunkin'", brand: "Dunkin'", icon: "mug.fill", pointCost: 1000, tier: .bronze),
+        // Silver tier (2500 pts — ~17-25 events)
+        Reward(id: "amazon-10", name: "$10 Amazon", brand: "Amazon", icon: "shippingbox.fill", pointCost: 2500, tier: .silver),
+        Reward(id: "target-10", name: "$10 Target", brand: "Target", icon: "cart.fill", pointCost: 2500, tier: .silver),
+        Reward(id: "chipotle-10", name: "$10 Chipotle", brand: "Chipotle", icon: "fork.knife", pointCost: 2500, tier: .silver),
+        // Gold tier (7500 pts — ~40-50 events)
+        Reward(id: "amazon-25", name: "$25 Amazon", brand: "Amazon", icon: "shippingbox.fill", pointCost: 7500, tier: .gold),
+        Reward(id: "nike-25", name: "$25 Nike", brand: "Nike", icon: "shoe.fill", pointCost: 7500, tier: .gold),
+        // Platinum tier (20000 pts — ~100+ events)
+        Reward(id: "apple-50", name: "$50 Apple", brand: "Apple", icon: "apple.logo", pointCost: 20000, tier: .platinum),
+        Reward(id: "rei-50", name: "$50 REI", brand: "REI", icon: "tent.fill", pointCost: 20000, tier: .platinum),
     ]
 }

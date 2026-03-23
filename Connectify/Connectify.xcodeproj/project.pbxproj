@@ -15,6 +15,7 @@
 		2C5BE6D9FC397C10C2B98BA6 /* SampleData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64BC31EBB6363F1C52BFD343 /* SampleData.swift */; };
 		40A5A86C4CAC59BA96007D19 /* RarityBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45DB2E61A8B530A9DF9FF09A /* RarityBadge.swift */; };
 		57CBF3313524245A8B73F26A /* ExploreView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3370D95F34BF553E57C80734 /* ExploreView.swift */; };
+		583636C5BE052024FE1644C6 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4F643236BAA4C5A7B714E777 /* Assets.xcassets */; };
 		58D07981D0AFD272AC11802C /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50D1421DF08A3163BE90FE76 /* Models.swift */; };
 		62D668609705A564BC66B3BE /* MapExploreView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA1E8E39699244B5F2BFB684 /* MapExploreView.swift */; };
 		A6301A2BC36105B639A8259F /* CollectionCelebrationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3CE45D76CE36C3F8FC0BC14 /* CollectionCelebrationView.swift */; };
@@ -24,6 +25,7 @@
 		C743C1D2786D1E06FD2C3FE1 /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A74B64C73F9C4862293A40D8 /* ProfileView.swift */; };
 		DE3798AADC86AEF4AC65B4C7 /* CommunityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E1E7B6CA5D4722F0E829CD1 /* CommunityView.swift */; };
 		E5594EB45B9B188ED0DC434A /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81E6C714FC0619B63DEBCF49 /* OnboardingView.swift */; };
+		E7BE623B9A026608A628F87D /* LocationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50D3DA05D8287738413627E1 /* LocationManager.swift */; };
 		F08899862A627B10A048D514 /* ConnectifyTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97C2848B6C306F74C329243C /* ConnectifyTheme.swift */; };
 		F4960BB40C775DEF09FDB8F6 /* RewardConfirmationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FD8B3258F708018F217876E /* RewardConfirmationView.swift */; };
 		F4B5A78FA4D6195D250A8187 /* RewardsStoreView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05F7FE737165D6B04F331AA7 /* RewardsStoreView.swift */; };
@@ -35,9 +37,11 @@
 		3370D95F34BF553E57C80734 /* ExploreView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExploreView.swift; sourceTree = "<group>"; };
 		3E95FF8B81F4D765EF15847A /* PlaceDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceDetailView.swift; sourceTree = "<group>"; };
 		45DB2E61A8B530A9DF9FF09A /* RarityBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RarityBadge.swift; sourceTree = "<group>"; };
+		4F643236BAA4C5A7B714E777 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		4FD8B3258F708018F217876E /* RewardConfirmationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RewardConfirmationView.swift; sourceTree = "<group>"; };
 		50D1421DF08A3163BE90FE76 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
-		64963DF33478EBAA95210891 /* Connectify.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Connectify.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		50D3DA05D8287738413627E1 /* LocationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationManager.swift; sourceTree = "<group>"; };
+		64963DF33478EBAA95210891 /* Connectify.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Connectify.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		64BC31EBB6363F1C52BFD343 /* SampleData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleData.swift; sourceTree = "<group>"; };
 		6E60BDFCF0E7F5E26F20FDA8 /* SharedComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedComponents.swift; sourceTree = "<group>"; };
 		6EE9744D91BF6CA9C72E6307 /* CollectionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionModels.swift; sourceTree = "<group>"; };
@@ -157,6 +161,7 @@
 		E3E4585C98D72014B4E899D5 /* Connectify */ = {
 			isa = PBXGroup;
 			children = (
+				4F643236BAA4C5A7B714E777 /* Assets.xcassets */,
 				0BB93FA4D19C37192CEB7AA9 /* ConnectifyApp.swift */,
 				D483B715129EBF2E5A17F9AF /* Components */,
 				FD5C89DBC693B9264792567A /* Models */,
@@ -187,6 +192,7 @@
 			children = (
 				6EE9744D91BF6CA9C72E6307 /* CollectionModels.swift */,
 				8524EB8166001BE787B48ADA /* GameStateManager.swift */,
+				50D3DA05D8287738413627E1 /* LocationManager.swift */,
 				50D1421DF08A3163BE90FE76 /* Models.swift */,
 				64BC31EBB6363F1C52BFD343 /* SampleData.swift */,
 			);
@@ -201,6 +207,7 @@
 			buildConfigurationList = 7E479BFB1F1170FC5C146DAF /* Build configuration list for PBXNativeTarget "Connectify" */;
 			buildPhases = (
 				70BA6E7053955C701D2B1A99 /* Sources */,
+				EE33DE940AB5A91352651D98 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -221,8 +228,6 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1630;
-				TargetAttributes = {
-				};
 			};
 			buildConfigurationList = DD9F48B0F1DA4C3CB9D95AFE /* Build configuration list for PBXProject "Connectify" */;
 			developmentRegion = en;
@@ -243,6 +248,17 @@
 		};
 /* End PBXProject section */
 
+/* Begin PBXResourcesBuildPhase section */
+		EE33DE940AB5A91352651D98 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				583636C5BE052024FE1644C6 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		70BA6E7053955C701D2B1A99 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -257,6 +273,7 @@
 				BFBFE16DE620F534BBE88E0A /* EventsView.swift in Sources */,
 				57CBF3313524245A8B73F26A /* ExploreView.swift in Sources */,
 				B232217EA1E0F0165352AFBD /* GameStateManager.swift in Sources */,
+				E7BE623B9A026608A628F87D /* LocationManager.swift in Sources */,
 				A83D2813EA5CBE661089E2FE /* MainTabView.swift in Sources */,
 				62D668609705A564BC66B3BE /* MapExploreView.swift in Sources */,
 				58D07981D0AFD272AC11802C /* Models.swift in Sources */,
@@ -337,9 +354,11 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = 2K86T2P88V;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_GENERATION_MODE = GeneratedFile;
 				INFOPLIST_KEY_CFBundleDisplayName = Connectify;
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Connectify uses your location to find nearby events and places you can check in to.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
@@ -347,7 +366,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.connectify.app;
+				PRODUCT_BUNDLE_IDENTIFIER = com.vaiybhav.connectify;
 				SDKROOT = iphoneos;
 				SWIFT_STRICT_CONCURRENCY = minimal;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -359,9 +378,11 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = 2K86T2P88V;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_GENERATION_MODE = GeneratedFile;
 				INFOPLIST_KEY_CFBundleDisplayName = Connectify;
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Connectify uses your location to find nearby events and places you can check in to.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
@@ -369,7 +390,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.connectify.app;
+				PRODUCT_BUNDLE_IDENTIFIER = com.vaiybhav.connectify;
 				SDKROOT = iphoneos;
 				SWIFT_STRICT_CONCURRENCY = minimal;
 				TARGETED_DEVICE_FAMILY = "1,2";

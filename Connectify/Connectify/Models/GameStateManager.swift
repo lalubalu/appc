@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import CoreLocation
 import Observation
 
 @Observable
@@ -9,6 +10,10 @@ final class GameStateManager {
 
     var collectedPlaceIDs: Set<String> {
         didSet { save(collectedPlaceIDs, forKey: "collectedPlaceIDs") }
+    }
+
+    var checkedInEventIDs: Set<String> {
+        didSet { save(checkedInEventIDs, forKey: "checkedInEventIDs") }
     }
 
     var pointsBalance: Int {
@@ -26,6 +31,7 @@ final class GameStateManager {
     // MARK: - Computed
 
     var totalCollected: Int { collectedPlaceIDs.count }
+    var totalEventsAttended: Int { checkedInEventIDs.count }
 
     func collectionProgress(total: Int) -> Double {
         guard total > 0 else { return 0 }
@@ -36,20 +42,38 @@ final class GameStateManager {
 
     init() {
         self.collectedPlaceIDs = Self.loadSet(forKey: "collectedPlaceIDs")
+        self.checkedInEventIDs = Self.loadSet(forKey: "checkedInEventIDs")
         self.pointsBalance = UserDefaults.standard.integer(forKey: "pointsBalance")
         self.lifetimePoints = UserDefaults.standard.integer(forKey: "lifetimePoints")
         self.redeemedRewardIDs = Self.loadSet(forKey: "redeemedRewardIDs")
 
         // Seed demo data on first launch
-        if !UserDefaults.standard.bool(forKey: "gameStateSeeded") {
+        if !UserDefaults.standard.bool(forKey: "gameStateSeeded_v2") {
             seedDemoData()
-            UserDefaults.standard.set(true, forKey: "gameStateSeeded")
+            UserDefaults.standard.set(true, forKey: "gameStateSeeded_v2")
         }
     }
 
-    // MARK: - Actions
+    // MARK: - Event Check-in (primary points source)
 
-    /// Collect a place and return points earned
+    /// Check in to an event and earn points. Returns points earned.
+    @discardableResult
+    func checkInEvent(_ event: Event) -> Int {
+        guard !isCheckedIn(event.id) else { return 0 }
+        checkedInEventIDs.insert(event.id)
+        let pts = event.pointValue
+        pointsBalance += pts
+        lifetimePoints += pts
+        return pts
+    }
+
+    func isCheckedIn(_ eventID: String) -> Bool {
+        checkedInEventIDs.contains(eventID)
+    }
+
+    // MARK: - Place Collection (secondary, small points)
+
+    /// Collect a place — small bonus points
     @discardableResult
     func collectPlace(_ collectible: CollectiblePlace) -> Int {
         guard !isCollected(collectible.id) else { return 0 }
@@ -82,10 +106,14 @@ final class GameStateManager {
         pointsBalance >= reward.pointCost
     }
 
-    /// Uncollected places from a list, optionally filtered to nearby only
-    func uncollected(from places: [CollectiblePlace], nearbyOnly: Bool = false) -> [CollectiblePlace] {
+    /// Uncollected places, optionally filtered to GPS-nearby only
+    func uncollected(from places: [CollectiblePlace], nearbyOnly: Bool = false, userLocation: CLLocation? = nil) -> [CollectiblePlace] {
         places.filter { place in
-            !isCollected(place.id) && (!nearbyOnly || place.isNearby)
+            let notCollected = !isCollected(place.id)
+            if nearbyOnly {
+                return notCollected && place.isNearby(from: userLocation)
+            }
+            return notCollected
         }
     }
 
@@ -104,11 +132,13 @@ final class GameStateManager {
     // MARK: - Demo Seed
 
     private func seedDemoData() {
-        // Pre-collect 3 places for demo: Riverside Park, Botanica Gardens, The Commons
-        let demoIDs = ["riverside-park", "botanica-gardens", "the-commons"]
-        collectedPlaceIDs = Set(demoIDs)
-        pointsBalance = 250  // 50 (common) + 150 (uncommon) + 50 (common-ish) → start with some points
-        lifetimePoints = 250
+        // Pre-attend 2 events for demo
+        checkedInEventIDs = Set(["river-cleanup-day", "weekend-farmers-market"])
+        // Pre-collect 1 place
+        collectedPlaceIDs = Set(["riverside-park"])
+        // 200 (cleanup) + 75 (market) + 5 (common place) = 280 starting points
+        pointsBalance = 280
+        lifetimePoints = 280
     }
 
     // MARK: - Persistence Helpers
@@ -131,9 +161,10 @@ final class GameStateManager {
     /// Reset all game state (for testing)
     func resetAll() {
         collectedPlaceIDs = []
+        checkedInEventIDs = []
         pointsBalance = 0
         lifetimePoints = 0
         redeemedRewardIDs = []
-        UserDefaults.standard.removeObject(forKey: "gameStateSeeded")
+        UserDefaults.standard.removeObject(forKey: "gameStateSeeded_v2")
     }
 }

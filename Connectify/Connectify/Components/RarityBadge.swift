@@ -54,7 +54,7 @@ struct RarityBadge: View {
         .padding(.vertical, size.vPadding)
         .background(rarity.color.opacity(0.15))
         .foregroundStyle(rarity.color)
-        .clipShape(Capsule())
+        .clipShape(RoundedRectangle(cornerRadius: 3))
     }
 }
 
@@ -75,7 +75,7 @@ struct PointsBadge: View {
         .padding(.vertical, 4)
         .background(Color.accentAmber.opacity(0.15))
         .foregroundStyle(Color.accentAmber)
-        .clipShape(Capsule())
+        .clipShape(RoundedRectangle(cornerRadius: 3))
     }
 }
 

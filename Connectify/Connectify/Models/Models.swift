@@ -61,8 +61,8 @@ enum PlaceCategory: String, CaseIterable, Identifiable {
 
 // MARK: - Event
 
-struct Event: Identifiable {
-    let id = UUID()
+struct Event: Identifiable, Hashable {
+    let id: String               // stable ID for persistence
     let title: String
     let organizer: String
     let date: Date
@@ -72,6 +72,10 @@ struct Event: Identifiable {
     let maxAttendees: Int?
     let category: EventCategory
     let imagePlaceholder: String
+    let pointValue: Int          // points earned for attending
+
+    func hash(into hasher: inout Hasher) { hasher.combine(id) }
+    static func == (lhs: Event, rhs: Event) -> Bool { lhs.id == rhs.id }
 }
 
 enum EventCategory: String, CaseIterable, Identifiable {
@@ -92,6 +96,18 @@ enum EventCategory: String, CaseIterable, Identifiable {
         case .workshop: return "hammer.fill"
         case .market: return "bag.fill"
         case .festival: return "party.popper.fill"
+        }
+    }
+
+    /// Points earned for attending events of this category
+    var defaultPoints: Int {
+        switch self {
+        case .cleanup: return 200
+        case .sports: return 150
+        case .social: return 100
+        case .workshop: return 150
+        case .market: return 75
+        case .festival: return 250
         }
     }
 }

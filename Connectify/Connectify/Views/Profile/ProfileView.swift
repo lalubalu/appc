@@ -112,7 +112,7 @@ struct ProfileView: View {
                     Image(systemName: "trophy.fill")
                         .font(.system(size: 10))
                         .foregroundStyle(Color.connectifyGreen)
-                    Text("\(gameState.totalCollected)/\(SampleData.collectiblePlaces.count) collected")
+                    Text("\(gameState.totalEventsAttended) events · \(gameState.totalCollected) places")
                         .font(CFont.caption(12))
                         .foregroundStyle(.secondaryText)
                 }
@@ -149,8 +149,8 @@ struct ProfileView: View {
 
     private var statsRow: some View {
         HStack(spacing: Spacing.sm) {
-            StatCard(value: "\(gameState.totalCollected)", label: "Collected", icon: "trophy.fill")
-            StatCard(value: "\(user.totalXP)", label: "Total XP", icon: "bolt.fill")
+            StatCard(value: "\(gameState.totalEventsAttended)", label: "Events", icon: "calendar.badge.checkmark")
+            StatCard(value: "\(gameState.totalCollected)", label: "Places", icon: "trophy.fill")
             StatCard(value: "\(user.currentStreak)", label: "Day Streak", icon: "flame.fill")
         }
     }

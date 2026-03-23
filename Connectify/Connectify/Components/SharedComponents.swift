@@ -74,9 +74,9 @@ struct CategoryPill: View {
             .padding(.vertical, 8)
             .background(isSelected ? tint.opacity(0.15) : .cardSurface)
             .foregroundStyle(isSelected ? tint : .secondaryText)
-            .clipShape(Capsule())
+            .clipShape(RoundedRectangle(cornerRadius: 4))
             .overlay {
-                Capsule()
+                RoundedRectangle(cornerRadius: 4)
                     .strokeBorder(isSelected ? tint.opacity(0.4) : .subtleBorder, lineWidth: 1)
             }
         }
@@ -156,7 +156,7 @@ struct XPBadge: View {
         .padding(.vertical, 4)
         .background(.greenSurface)
         .foregroundStyle(Color.connectifyGreen)
-        .clipShape(Capsule())
+        .clipShape(RoundedRectangle(cornerRadius: 3))
     }
 }
 

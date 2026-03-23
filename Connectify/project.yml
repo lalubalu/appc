@@ -15,11 +15,13 @@ targets:
     sources:
       - Connectify
     settings:
-      PRODUCT_BUNDLE_IDENTIFIER: com.connectify.app
+      PRODUCT_BUNDLE_IDENTIFIER: com.vaiybhav.connectify
       INFOPLIST_GENERATION_MODE: GeneratedFile
       GENERATE_INFOPLIST_FILE: YES
       INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
       INFOPLIST_KEY_UILaunchScreen_Generation: YES
       INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait"
       INFOPLIST_KEY_CFBundleDisplayName: Connectify
+      ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
       SWIFT_STRICT_CONCURRENCY: minimal
+      INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "Connectify uses your location to find nearby events and places you can check in to."

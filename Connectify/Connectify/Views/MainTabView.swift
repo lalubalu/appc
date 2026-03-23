@@ -5,15 +5,15 @@ struct MainTabView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            ExploreView()
+            EventsView()
                 .tabItem {
-                    Label("Explore", systemImage: "safari.fill")
+                    Label("Events", systemImage: "calendar")
                 }
                 .tag(0)
 
-            CollectionView()
+            ExploreView()
                 .tabItem {
-                    Label("Collect", systemImage: "trophy.fill")
+                    Label("Explore", systemImage: "safari.fill")
                 }
                 .tag(1)
 
@@ -23,9 +23,9 @@ struct MainTabView: View {
                 }
                 .tag(2)
 
-            EventsView()
+            CollectionView()
                 .tabItem {
-                    Label("Events", systemImage: "calendar")
+                    Label("Collect", systemImage: "trophy.fill")
                 }
                 .tag(3)
 
@@ -48,4 +48,5 @@ struct MainTabView: View {
 #Preview {
     MainTabView()
         .environment(GameStateManager())
+        .environment(LocationManager())
 }

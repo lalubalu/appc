@@ -12,12 +12,13 @@ enum PlaceRarity: String, CaseIterable, Identifiable, Codable {
 
     var id: String { rawValue }
 
+    /// Place visit points — intentionally low; events are the main earner
     var pointValue: Int {
         switch self {
-        case .common: return 50
-        case .uncommon: return 150
-        case .rare: return 400
-        case .legendary: return 1000
+        case .common: return 5
+        case .uncommon: return 10
+        case .rare: return 25
+        case .legendary: return 50
         }
     }
 
@@ -59,7 +60,20 @@ struct CollectiblePlace: Identifiable, Hashable {
 
     var pointValue: Int { rarity.pointValue }
 
-    var isNearby: Bool { place.distanceValue < 1.0 }
+    /// Distance in miles from a location to this place
+    func distanceMiles(from location: CLLocation) -> Double {
+        let placeLoc = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+        return location.distance(from: placeLoc) / 1609.34
+    }
+
+    /// Whether the place is within collectible radius (500 ft ≈ 0.0947 mi)
+    func isNearby(from location: CLLocation?, radius: Double = 0.0947) -> Bool {
+        guard let loc = location else { return false }
+        return distanceMiles(from: loc) < radius
+    }
+
+    /// Legacy fallback using Place's static distanceValue (used when no GPS)
+    var isNearbyStatic: Bool { place.distanceValue < 0.1 }
 
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
     static func == (lhs: CollectiblePlace, rhs: CollectiblePlace) -> Bool { lhs.id == rhs.id }
@@ -87,10 +101,10 @@ enum RewardTier: String, CaseIterable, Identifiable, Codable {
 
     var minPoints: Int {
         switch self {
-        case .bronze: return 200
-        case .silver: return 500
-        case .gold: return 1500
-        case .platinum: return 5000
+        case .bronze: return 1000
+        case .silver: return 2500
+        case .gold: return 7500
+        case .platinum: return 20000
         }
     }
 

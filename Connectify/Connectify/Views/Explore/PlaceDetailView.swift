@@ -55,7 +55,7 @@ struct PlaceDetailView: View {
                                         .padding(.vertical, 4)
                                         .background(Color.connectifyGreen.opacity(0.2))
                                         .foregroundStyle(Color.connectifyGreen)
-                                        .clipShape(Capsule())
+                                        .clipShape(RoundedRectangle(cornerRadius: 3))
                                     }
                                 }
                             }
@@ -205,7 +205,7 @@ struct PlaceDetailView: View {
                     RoundedRectangle(cornerRadius: Radius.md)
                         .strokeBorder(Color.connectifyGreen.opacity(0.3), lineWidth: 1)
                 }
-            } else if c.isNearby {
+            } else if c.isNearbyStatic {
                 // Can collect
                 ConnectifyButton(
                     title: "Collect — +\(c.pointValue) pts",

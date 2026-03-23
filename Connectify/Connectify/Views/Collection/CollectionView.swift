@@ -83,7 +83,7 @@ struct CollectionView: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 5)
                     .background(.white)
-                    .clipShape(Capsule())
+                    .clipShape(RoundedRectangle(cornerRadius: 3))
                 }
             }
             .padding(Spacing.lg)
@@ -211,9 +211,9 @@ struct CollectionView: View {
             .padding(.vertical, 7)
             .background(selected ? tint.opacity(0.15) : .cardSurface)
             .foregroundStyle(selected ? tint : .secondaryText)
-            .clipShape(Capsule())
+            .clipShape(RoundedRectangle(cornerRadius: 4))
             .overlay {
-                Capsule()
+                RoundedRectangle(cornerRadius: 4)
                     .strokeBorder(selected ? tint.opacity(0.4) : .subtleBorder, lineWidth: 1)
             }
         }
@@ -454,7 +454,7 @@ private struct CollectibleDetailSheet: View {
                     .disabled(true)
                     .opacity(0.6)
                     .padding(.horizontal, Spacing.md)
-            } else if collectible.isNearby {
+            } else if collectible.isNearbyStatic {
                 ConnectifyButton(title: "Collect This Place", icon: "plus.circle.fill") {
                     collect()
                 }
