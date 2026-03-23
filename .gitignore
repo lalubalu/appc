@@ -1,0 +1,17 @@
+# Xcode
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+DerivedData/
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+build/
+
+# macOS
+.DS_Store
+*.swp
+*~
+
+# XcodeGen
+# Keep project.yml, ignore generated xcodeproj internals managed by user
