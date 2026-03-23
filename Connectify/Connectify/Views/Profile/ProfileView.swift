@@ -3,6 +3,8 @@ import SwiftUI
 struct ProfileView: View {
     @AppStorage("prefersDarkMode") private var prefersDarkMode = false
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = true
+    @Environment(GameStateManager.self) private var gameState
+    @State private var showRewardsStore = false
 
     private let user = SampleData.currentUser
 
@@ -12,6 +14,9 @@ struct ProfileView: View {
                 VStack(spacing: Spacing.lg) {
                     // Profile header
                     profileHeader
+
+                    // Points & collection card
+                    pointsCard
 
                     // Stats row
                     statsRow
@@ -33,6 +38,10 @@ struct ProfileView: View {
             }
             .background(.pageSurface)
             .navigationTitle("Profile")
+            .sheet(isPresented: $showRewardsStore) {
+                RewardsStoreView()
+                    .environment(gameState)
+            }
         }
     }
 
@@ -84,11 +93,63 @@ struct ProfileView: View {
         .padding(.top, Spacing.md)
     }
 
+    // MARK: - Points Card
+
+    private var pointsCard: some View {
+        HStack(spacing: Spacing.md) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("POINTS")
+                    .font(CFont.label(10))
+                    .tracking(0.8)
+                    .foregroundStyle(.secondaryText)
+
+                Text("\(gameState.pointsBalance)")
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .foregroundStyle(.primaryText)
+                    .contentTransition(.numericText())
+
+                HStack(spacing: 4) {
+                    Image(systemName: "trophy.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color.connectifyGreen)
+                    Text("\(gameState.totalCollected)/\(SampleData.collectiblePlaces.count) collected")
+                        .font(CFont.caption(12))
+                        .foregroundStyle(.secondaryText)
+                }
+            }
+
+            Spacer()
+
+            Button {
+                showRewardsStore = true
+            } label: {
+                VStack(spacing: 4) {
+                    Image(systemName: "gift.fill")
+                        .font(.system(size: 22))
+                    Text("Rewards")
+                        .font(CFont.label(11))
+                }
+                .foregroundStyle(.black)
+                .frame(width: 72, height: 72)
+                .background(Color.connectifyGreen)
+                .clipShape(RoundedRectangle(cornerRadius: Radius.md))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(Spacing.md)
+        .background(.cardSurface)
+        .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
+        .overlay {
+            RoundedRectangle(cornerRadius: Radius.lg)
+                .strokeBorder(.subtleBorder, lineWidth: 0.5)
+        }
+    }
+
     // MARK: - Stats
 
     private var statsRow: some View {
         HStack(spacing: Spacing.sm) {
-            StatCard(value: "\(user.placesVisited)", label: "Visited", icon: "mappin.circle.fill")
+            StatCard(value: "\(gameState.totalCollected)", label: "Collected", icon: "trophy.fill")
             StatCard(value: "\(user.totalXP)", label: "Total XP", icon: "bolt.fill")
             StatCard(value: "\(user.currentStreak)", label: "Day Streak", icon: "flame.fill")
         }
@@ -294,4 +355,5 @@ struct ProfileView: View {
 
 #Preview {
     ProfileView()
+        .environment(GameStateManager())
 }

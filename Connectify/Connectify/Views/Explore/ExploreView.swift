@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ExploreView: View {
+    @Environment(GameStateManager.self) private var gameState
     @State private var searchText = ""
     @State private var selectedCategory: PlaceCategory? = nil
     @State private var showGemDetail = false
@@ -165,7 +166,7 @@ struct ExploreView: View {
                 LazyVStack(spacing: 12) {
                     ForEach(filteredPlaces) { place in
                         NavigationLink(value: place) {
-                            PlaceRow(place: place)
+                            PlaceRow(place: place, gameState: gameState)
                         }
                         .buttonStyle(.plain)
                     }
@@ -228,6 +229,11 @@ private struct ChallengeCard: View {
 
 private struct PlaceRow: View {
     let place: Place
+    var gameState: GameStateManager? = nil
+
+    private var collectible: CollectiblePlace? {
+        SampleData.collectible(for: place)
+    }
 
     var body: some View {
         HStack(spacing: Spacing.md) {
@@ -242,7 +248,15 @@ private struct PlaceRow: View {
                         .textCase(.uppercase)
                         .tracking(0.5)
 
-                    if place.isFeatured {
+                    if let c = collectible {
+                        RarityDot(rarity: c.rarity)
+                    }
+
+                    if let c = collectible, let gs = gameState, gs.isCollected(c.id) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 8))
+                            .foregroundStyle(Color.connectifyGreen)
+                    } else if place.isFeatured {
                         Image(systemName: "star.fill")
                             .font(.system(size: 8))
                             .foregroundStyle(Color.accentAmber)
@@ -284,4 +298,5 @@ private struct PlaceRow: View {
 
 #Preview {
     ExploreView()
+        .environment(GameStateManager())
 }

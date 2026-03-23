@@ -11,9 +11,9 @@ struct MainTabView: View {
                 }
                 .tag(0)
 
-            EventsView()
+            CollectionView()
                 .tabItem {
-                    Label("Events", systemImage: "calendar")
+                    Label("Collect", systemImage: "trophy.fill")
                 }
                 .tag(1)
 
@@ -23,17 +23,23 @@ struct MainTabView: View {
                 }
                 .tag(2)
 
+            EventsView()
+                .tabItem {
+                    Label("Events", systemImage: "calendar")
+                }
+                .tag(3)
+
             CommunityView()
                 .tabItem {
                     Label("Community", systemImage: "bubble.left.and.bubble.right.fill")
                 }
-                .tag(3)
+                .tag(4)
 
             ProfileView()
                 .tabItem {
                     Label("Profile", systemImage: "person.fill")
                 }
-                .tag(4)
+                .tag(5)
         }
         .tint(Color.connectifyGreen)
     }
@@ -41,4 +47,5 @@ struct MainTabView: View {
 
 #Preview {
     MainTabView()
+        .environment(GameStateManager())
 }

@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import CoreLocation
 
 // MARK: - Sample Data (placeholders for backend integration)
 
@@ -8,14 +9,14 @@ enum SampleData {
     // MARK: Places
 
     static let places: [Place] = [
-        Place(name: "Riverside Park", category: .parks, shortDescription: "A sprawling green space along the river with walking paths and picnic areas.", distance: "0.3 mi", rating: 4.8, reviewCount: 124, imagePlaceholder: "leaf.fill", accentColor: .connectifyGreen, isFeatured: true),
-        Place(name: "Hawk Ridge Trail", category: .trails, shortDescription: "Moderate 2.4-mile loop with panoramic views of the valley.", distance: "1.2 mi", rating: 4.6, reviewCount: 89, imagePlaceholder: "figure.hiking", accentColor: .accentAmber, isFeatured: false),
-        Place(name: "Botanica Gardens", category: .gardens, shortDescription: "Community-maintained botanical garden with 200+ plant species.", distance: "0.8 mi", rating: 4.9, reviewCount: 201, imagePlaceholder: "camera.macro", accentColor: .accentCoral, isFeatured: true),
-        Place(name: "Lakeshore Playground", category: .playgrounds, shortDescription: "Modern playground with climbing structures and splash pad.", distance: "0.5 mi", rating: 4.4, reviewCount: 67, imagePlaceholder: "figure.play", accentColor: .accentSky, isFeatured: false),
-        Place(name: "Marina Point", category: .waterfront, shortDescription: "Scenic waterfront with kayak rentals and sunset viewing deck.", distance: "2.1 mi", rating: 4.7, reviewCount: 156, imagePlaceholder: "water.waves", accentColor: .accentSky, isFeatured: true),
-        Place(name: "Cedar Court Complex", category: .sports, shortDescription: "Public courts for basketball, tennis, and pickleball.", distance: "0.6 mi", rating: 4.3, reviewCount: 45, imagePlaceholder: "sportscourt.fill", accentColor: .accentCoral, isFeatured: false),
-        Place(name: "Overlook Bluff", category: .scenic, shortDescription: "The highest point in the county with 360° views.", distance: "3.4 mi", rating: 4.9, reviewCount: 312, imagePlaceholder: "mountain.2.fill", accentColor: .accentLavender, isFeatured: true),
-        Place(name: "The Commons", category: .community, shortDescription: "Outdoor gathering space hosting weekly farmers markets.", distance: "0.2 mi", rating: 4.5, reviewCount: 98, imagePlaceholder: "person.3.fill", accentColor: .accentMint, isFeatured: false),
+        Place(name: "Riverside Park", category: .parks, shortDescription: "A sprawling green space along the river with walking paths and picnic areas.", distance: "0.3 mi", distanceValue: 0.3, rating: 4.8, reviewCount: 124, imagePlaceholder: "leaf.fill", accentColor: .connectifyGreen, isFeatured: true),
+        Place(name: "Hawk Ridge Trail", category: .trails, shortDescription: "Moderate 2.4-mile loop with panoramic views of the valley.", distance: "1.2 mi", distanceValue: 1.2, rating: 4.6, reviewCount: 89, imagePlaceholder: "figure.hiking", accentColor: .accentAmber, isFeatured: false),
+        Place(name: "Botanica Gardens", category: .gardens, shortDescription: "Community-maintained botanical garden with 200+ plant species.", distance: "0.8 mi", distanceValue: 0.8, rating: 4.9, reviewCount: 201, imagePlaceholder: "camera.macro", accentColor: .accentCoral, isFeatured: true),
+        Place(name: "Lakeshore Playground", category: .playgrounds, shortDescription: "Modern playground with climbing structures and splash pad.", distance: "0.5 mi", distanceValue: 0.5, rating: 4.4, reviewCount: 67, imagePlaceholder: "figure.play", accentColor: .accentSky, isFeatured: false),
+        Place(name: "Marina Point", category: .waterfront, shortDescription: "Scenic waterfront with kayak rentals and sunset viewing deck.", distance: "2.1 mi", distanceValue: 2.1, rating: 4.7, reviewCount: 156, imagePlaceholder: "water.waves", accentColor: .accentSky, isFeatured: true),
+        Place(name: "Cedar Court Complex", category: .sports, shortDescription: "Public courts for basketball, tennis, and pickleball.", distance: "0.6 mi", distanceValue: 0.6, rating: 4.3, reviewCount: 45, imagePlaceholder: "sportscourt.fill", accentColor: .accentCoral, isFeatured: false),
+        Place(name: "Overlook Bluff", category: .scenic, shortDescription: "The highest point in the county with 360° views.", distance: "3.4 mi", distanceValue: 3.4, rating: 4.9, reviewCount: 312, imagePlaceholder: "mountain.2.fill", accentColor: .accentLavender, isFeatured: true),
+        Place(name: "The Commons", category: .community, shortDescription: "Outdoor gathering space hosting weekly farmers markets.", distance: "0.2 mi", distanceValue: 0.2, rating: 4.5, reviewCount: 98, imagePlaceholder: "person.3.fill", accentColor: .accentMint, isFeatured: false),
     ]
 
     // MARK: Daily Gem
@@ -73,4 +74,46 @@ enum SampleData {
             Badge(name: "Legend", icon: "crown.fill", earned: false),
         ]
     )
+
+    // MARK: - Collectible Places
+
+    private static let mapCenter = CLLocationCoordinate2D(latitude: 44.9778, longitude: -93.2650)
+
+    static let collectiblePlaces: [CollectiblePlace] = places.map { place in
+        let hash = abs(place.name.hashValue)
+        let latOffset = Double(hash % 1000) / 20000.0 - 0.025
+        let lngOffset = Double((hash / 1000) % 1000) / 20000.0 - 0.025
+        return CollectiblePlace(
+            id: place.name.lowercased().replacingOccurrences(of: " ", with: "-"),
+            place: place,
+            rarity: CollectiblePlace.rarityFor(place.category),
+            coordinate: CLLocationCoordinate2D(
+                latitude: mapCenter.latitude + latOffset,
+                longitude: mapCenter.longitude + lngOffset
+            )
+        )
+    }
+
+    /// Find the CollectiblePlace wrapper for a given Place
+    static func collectible(for place: Place) -> CollectiblePlace? {
+        collectiblePlaces.first { $0.place.id == place.id }
+    }
+
+    // MARK: - Rewards
+
+    static let rewards: [Reward] = [
+        // Bronze tier (200+ pts)
+        Reward(id: "starbucks-5", name: "$5 Starbucks", brand: "Starbucks", icon: "cup.and.saucer.fill", pointCost: 200, tier: .bronze),
+        Reward(id: "dunkin-5", name: "$5 Dunkin'", brand: "Dunkin'", icon: "mug.fill", pointCost: 200, tier: .bronze),
+        // Silver tier (500+ pts)
+        Reward(id: "amazon-10", name: "$10 Amazon", brand: "Amazon", icon: "shippingbox.fill", pointCost: 500, tier: .silver),
+        Reward(id: "target-10", name: "$10 Target", brand: "Target", icon: "cart.fill", pointCost: 500, tier: .silver),
+        Reward(id: "chipotle-10", name: "$10 Chipotle", brand: "Chipotle", icon: "fork.knife", pointCost: 500, tier: .silver),
+        // Gold tier (1500+ pts)
+        Reward(id: "amazon-25", name: "$25 Amazon", brand: "Amazon", icon: "shippingbox.fill", pointCost: 1500, tier: .gold),
+        Reward(id: "nike-25", name: "$25 Nike", brand: "Nike", icon: "shoe.fill", pointCost: 1500, tier: .gold),
+        // Platinum tier (5000+ pts)
+        Reward(id: "apple-50", name: "$50 Apple", brand: "Apple", icon: "apple.logo", pointCost: 5000, tier: .platinum),
+        Reward(id: "rei-50", name: "$50 REI", brand: "REI", icon: "tent.fill", pointCost: 5000, tier: .platinum),
+    ]
 }

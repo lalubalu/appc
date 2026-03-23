@@ -9,7 +9,8 @@
       "Bash(xcodebuild -project Connectify.xcodeproj -scheme Connectify -destination 'platform=iOS Simulator,name=iPhone 16 Pro' build)",
       "Bash(open:*)",
       "Bash(gh auth:*)",
-      "Bash(git config:*)"
+      "Bash(git config:*)",
+      "Bash(gh repo:*)"
     ]
   }
 }

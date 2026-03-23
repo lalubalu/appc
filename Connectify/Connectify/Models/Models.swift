@@ -9,6 +9,7 @@ struct Place: Identifiable, Hashable {
     let category: PlaceCategory
     let shortDescription: String
     let distance: String        // e.g. "0.4 mi"
+    let distanceValue: Double   // numeric miles for proximity checks
     let rating: Double
     let reviewCount: Int
     let imagePlaceholder: String // SF Symbol name
