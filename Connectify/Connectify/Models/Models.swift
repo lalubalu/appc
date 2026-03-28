@@ -4,7 +4,7 @@ import SwiftUI
 // MARK: - Place
 
 struct Place: Identifiable, Hashable {
-    let id = UUID()
+    let id: String              // Stable string ID (OSM node ID or sample slug)
     let name: String
     let category: PlaceCategory
     let shortDescription: String
@@ -73,18 +73,23 @@ struct Event: Identifiable, Hashable {
     let category: EventCategory
     let imagePlaceholder: String
     let pointValue: Int          // points earned for attending
+    var description: String?     // optional event description
+    var creatorID: String?       // Firebase UID of the event creator
 
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
     static func == (lhs: Event, rhs: Event) -> Bool { lhs.id == rhs.id }
 }
 
-enum EventCategory: String, CaseIterable, Identifiable {
+enum EventCategory: String, CaseIterable, Identifiable, Codable {
     case cleanup = "Cleanup"
     case sports = "Sports"
     case social = "Social"
     case workshop = "Workshop"
     case market = "Market"
     case festival = "Festival"
+    case hackathon = "Hackathon"
+    case meetup = "Meetup"
+    case volunteer = "Volunteer"
 
     var id: String { rawValue }
 
@@ -96,6 +101,9 @@ enum EventCategory: String, CaseIterable, Identifiable {
         case .workshop: return "hammer.fill"
         case .market: return "bag.fill"
         case .festival: return "party.popper.fill"
+        case .hackathon: return "laptopcomputer"
+        case .meetup: return "person.3.fill"
+        case .volunteer: return "heart.fill"
         }
     }
 
@@ -108,6 +116,9 @@ enum EventCategory: String, CaseIterable, Identifiable {
         case .workshop: return 150
         case .market: return 75
         case .festival: return 250
+        case .hackathon: return 200
+        case .meetup: return 100
+        case .volunteer: return 200
         }
     }
 }

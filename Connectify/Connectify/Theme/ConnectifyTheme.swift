@@ -3,9 +3,10 @@ import SwiftUI
 // MARK: - Brand Colors
 
 extension Color {
-    // Primary brand green — identical in both modes
-    static let connectifyGreen = Color(hue: 155/360, saturation: 1.0, brightness: 0.50)
-    static let connectifyGreenBright = Color(hue: 155/360, saturation: 1.0, brightness: 1.0)
+    // Primary brand green — punchy and vivid
+    static let connectifyGreen = Color(hue: 155/360, saturation: 0.85, brightness: 0.65)
+    static let connectifyGreenBright = Color(hue: 155/360, saturation: 0.75, brightness: 0.95)
+    static let connectifyGreenDeep = Color(hue: 160/360, saturation: 0.90, brightness: 0.35)
 
     // Adaptive surface colors
     static let surfaceBackground = Color("SurfaceBackground")
@@ -30,24 +31,23 @@ extension Color {
 }
 
 // MARK: - Adaptive Color Definitions (used when Asset Catalog is not set up)
-// These provide programmatic fallbacks.
 
 extension ShapeStyle where Self == Color {
     // Card background
     static var cardSurface: Color {
         Color(UIColor { traits in
             traits.userInterfaceStyle == .dark
-                ? UIColor(red: 0.15, green: 0.155, blue: 0.195, alpha: 1) // hsl(231,8%,16%)
+                ? UIColor(red: 0.13, green: 0.145, blue: 0.16, alpha: 1)
                 : UIColor.white
         })
     }
 
-    // Page background
+    // Page background — warm with a hint of green in light mode
     static var pageSurface: Color {
         Color(UIColor { traits in
             traits.userInterfaceStyle == .dark
-                ? UIColor(red: 0.075, green: 0.08, blue: 0.10, alpha: 1)  // hsl(231,15%,9%)
-                : UIColor(red: 0.965, green: 0.97, blue: 0.975, alpha: 1) // warm off-white
+                ? UIColor(red: 0.06, green: 0.075, blue: 0.08, alpha: 1)
+                : UIColor(red: 0.955, green: 0.975, blue: 0.965, alpha: 1)
         })
     }
 
@@ -55,7 +55,7 @@ extension ShapeStyle where Self == Color {
     static var elevatedSurface: Color {
         Color(UIColor { traits in
             traits.userInterfaceStyle == .dark
-                ? UIColor(red: 0.10, green: 0.105, blue: 0.135, alpha: 1) // hsl(231,11%,12%)
+                ? UIColor(red: 0.10, green: 0.105, blue: 0.135, alpha: 1)
                 : UIColor.white
         })
     }
@@ -65,7 +65,7 @@ extension ShapeStyle where Self == Color {
         Color(UIColor { traits in
             traits.userInterfaceStyle == .dark
                 ? UIColor.white
-                : UIColor(red: 0.10, green: 0.10, blue: 0.12, alpha: 1)
+                : UIColor(red: 0.08, green: 0.09, blue: 0.10, alpha: 1)
         })
     }
 
@@ -73,8 +73,8 @@ extension ShapeStyle where Self == Color {
     static var secondaryText: Color {
         Color(UIColor { traits in
             traits.userInterfaceStyle == .dark
-                ? UIColor(red: 0.62, green: 0.64, blue: 0.66, alpha: 1)
-                : UIColor(red: 0.42, green: 0.44, blue: 0.48, alpha: 1)
+                ? UIColor(red: 0.58, green: 0.62, blue: 0.63, alpha: 1)
+                : UIColor(red: 0.36, green: 0.40, blue: 0.42, alpha: 1)
         })
     }
 
@@ -82,8 +82,8 @@ extension ShapeStyle where Self == Color {
     static var tertiaryText: Color {
         Color(UIColor { traits in
             traits.userInterfaceStyle == .dark
-                ? UIColor(red: 0.42, green: 0.44, blue: 0.46, alpha: 1)
-                : UIColor(red: 0.62, green: 0.64, blue: 0.66, alpha: 1)
+                ? UIColor(red: 0.38, green: 0.42, blue: 0.43, alpha: 1)
+                : UIColor(red: 0.58, green: 0.62, blue: 0.63, alpha: 1)
         })
     }
 
@@ -91,17 +91,26 @@ extension ShapeStyle where Self == Color {
     static var subtleBorder: Color {
         Color(UIColor { traits in
             traits.userInterfaceStyle == .dark
-                ? UIColor(red: 0.22, green: 0.235, blue: 0.28, alpha: 1)
-                : UIColor(red: 0.90, green: 0.91, blue: 0.92, alpha: 1)
+                ? UIColor(red: 0.20, green: 0.22, blue: 0.24, alpha: 1)
+                : UIColor(red: 0.89, green: 0.91, blue: 0.90, alpha: 1)
         })
     }
 
-    // Green tinted background for badges / tags
+    // Green tinted background for badges / tags / success states
     static var greenSurface: Color {
         Color(UIColor { traits in
             traits.userInterfaceStyle == .dark
-                ? UIColor(red: 0.0, green: 0.25, blue: 0.15, alpha: 1)
-                : UIColor(red: 0.90, green: 0.99, blue: 0.94, alpha: 1)
+                ? UIColor(red: 0.04, green: 0.18, blue: 0.12, alpha: 1)
+                : UIColor(red: 0.91, green: 0.98, blue: 0.94, alpha: 1)
+        })
+    }
+
+    // Green-tinted card — for featured/highlighted cards
+    static var greenCard: Color {
+        Color(UIColor { traits in
+            traits.userInterfaceStyle == .dark
+                ? UIColor(red: 0.07, green: 0.14, blue: 0.11, alpha: 1)
+                : UIColor(red: 0.95, green: 0.995, blue: 0.97, alpha: 1)
         })
     }
 }
@@ -111,12 +120,12 @@ extension ShapeStyle where Self == Color {
 struct CFont {
     // Display — large hero text
     static func display(_ size: CGFloat = 34) -> Font {
-        .system(size: size, weight: .bold, design: .serif)
+        .system(size: size, weight: .black, design: .serif)
     }
 
-    // Title
+    // Title — bolder weight for authority
     static func title(_ size: CGFloat = 24) -> Font {
-        .system(size: size, weight: .semibold, design: .default)
+        .system(size: size, weight: .bold, design: .default)
     }
 
     // Headline
@@ -138,6 +147,11 @@ struct CFont {
     static func label(_ size: CGFloat = 11) -> Font {
         .system(size: size, weight: .semibold, design: .default)
     }
+
+    // Mono — for numbers/stats
+    static func mono(_ size: CGFloat = 16) -> Font {
+        .system(size: size, weight: .bold, design: .monospaced)
+    }
 }
 
 // MARK: - Spacing Constants
@@ -156,7 +170,7 @@ struct Spacing {
 struct Radius {
     static let sm: CGFloat = 2
     static let md: CGFloat = 4
-    static let lg: CGFloat = 6
-    static let xl: CGFloat = 8
+    static let lg: CGFloat = 8
+    static let xl: CGFloat = 12
     static let pill: CGFloat = 100
 }

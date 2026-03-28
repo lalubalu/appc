@@ -7,9 +7,10 @@ struct PlaceDetailView: View {
     @State private var celebrationPoints = 0
     @Environment(\.dismiss) private var dismiss
     @Environment(GameStateManager.self) private var gameState
+    @Environment(PlacesAPIService.self) private var placesService
 
     private var collectible: CollectiblePlace? {
-        SampleData.collectible(for: place)
+        placesService.collectible(for: place) ?? SampleData.collectible(for: place)
     }
 
     private var isCollected: Bool {
@@ -29,7 +30,6 @@ struct PlaceDetailView: View {
                             height: 280
                         )
 
-                        // Gradient overlay
                         LinearGradient(
                             colors: [.clear, .black.opacity(0.6)],
                             startPoint: .center,
@@ -39,7 +39,6 @@ struct PlaceDetailView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 0))
 
                         VStack(alignment: .leading, spacing: 6) {
-                            // Rarity badge on hero
                             if let c = collectible {
                                 HStack(spacing: 8) {
                                     RarityBadge(rarity: c.rarity)
@@ -77,7 +76,7 @@ struct PlaceDetailView: View {
                     }
 
                     VStack(alignment: .leading, spacing: Spacing.lg) {
-                        // Quick stats — now includes rarity/points
+                        // Quick stats
                         HStack(spacing: 0) {
                             quickStat(value: place.distance, label: "Away", icon: "location.fill")
                             Divider().frame(height: 36)
@@ -95,12 +94,8 @@ struct PlaceDetailView: View {
                             }
                         }
                         .padding(.vertical, Spacing.md)
-                        .background(.cardSurface)
-                        .clipShape(RoundedRectangle(cornerRadius: Radius.md))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: Radius.md)
-                                .strokeBorder(.subtleBorder, lineWidth: 0.5)
-                        }
+                        .background(.greenCard)
+                        .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
 
                         // Description
                         VStack(alignment: .leading, spacing: Spacing.sm) {
@@ -121,7 +116,6 @@ struct PlaceDetailView: View {
 
                         // Actions
                         VStack(spacing: Spacing.sm) {
-                            // Collection button
                             collectButton
 
                             ConnectifyButton(title: "Get Directions", icon: "arrow.triangle.turn.up.right.diamond.fill", style: .secondary) {
@@ -149,7 +143,7 @@ struct PlaceDetailView: View {
                                 .padding(.vertical, Spacing.lg)
                                 .frame(maxWidth: .infinity)
                                 .background(.cardSurface)
-                                .clipShape(RoundedRectangle(cornerRadius: Radius.md))
+                                .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
                         }
                     }
                     .padding(Spacing.md)
@@ -188,7 +182,6 @@ struct PlaceDetailView: View {
     private var collectButton: some View {
         if let c = collectible {
             if isCollected {
-                // Already collected
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(Color.connectifyGreen)
@@ -200,13 +193,8 @@ struct PlaceDetailView: View {
                 }
                 .padding(Spacing.md)
                 .background(.greenSurface)
-                .clipShape(RoundedRectangle(cornerRadius: Radius.md))
-                .overlay {
-                    RoundedRectangle(cornerRadius: Radius.md)
-                        .strokeBorder(Color.connectifyGreen.opacity(0.3), lineWidth: 1)
-                }
+                .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
             } else if c.isNearbyStatic {
-                // Can collect
                 ConnectifyButton(
                     title: "Collect — +\(c.pointValue) pts",
                     icon: "plus.circle.fill"
@@ -217,7 +205,6 @@ struct PlaceDetailView: View {
                     }
                 }
             } else {
-                // Too far
                 HStack(spacing: 8) {
                     Image(systemName: "location.slash.fill")
                         .foregroundStyle(.tertiaryText)
@@ -232,11 +219,7 @@ struct PlaceDetailView: View {
                 }
                 .padding(Spacing.md)
                 .background(.cardSurface)
-                .clipShape(RoundedRectangle(cornerRadius: Radius.md))
-                .overlay {
-                    RoundedRectangle(cornerRadius: Radius.md)
-                        .strokeBorder(.subtleBorder, lineWidth: 0.5)
-                }
+                .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
             }
         }
     }
@@ -263,5 +246,6 @@ struct PlaceDetailView: View {
     NavigationStack {
         PlaceDetailView(place: SampleData.places[0])
             .environment(GameStateManager())
+            .environment(PlacesAPIService())
     }
 }

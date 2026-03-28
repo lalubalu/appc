@@ -1,0 +1,176 @@
+rules_version = '2';
+
+// Connectify Firestore Security Rules
+// Deploy via: firebase deploy --only firestore:rules
+//
+// Threat model:
+//   - Users must be authenticated to read/write anything
+//   - Users can ONLY access their own document (no cross-user reads)
+//   - All fields are type-checked and size-limited
+//   - Points are clamped to sane ranges to prevent client-side manipulation
+//   - Array fields (IDs) are capped to prevent storage abuse
+//   - No wildcard collection access — only explicitly defined paths
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ──────────────────────────────────────────────
+    // DEFAULT: deny everything not explicitly allowed
+    // ──────────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ──────────────────────────────────────────────
+    // USER DOCUMENTS: /users/{userId}
+    // ──────────────────────────────────────────────
+    match /users/{userId} {
+
+      // Only the authenticated owner can read their own document
+      allow read: if isOwner(userId);
+
+      // Only the authenticated owner can create their document
+      allow create: if isOwner(userId)
+                    && validUserDocument(request.resource.data);
+
+      // Only the authenticated owner can update their document
+      allow update: if isOwner(userId)
+                    && validUserDocument(request.resource.data)
+                    && noForbiddenFieldChanges();
+
+      // Users cannot delete their own document (admin-only operation)
+      allow delete: if false;
+    }
+
+    // ──────────────────────────────────────────────
+    // COMMUNITY EVENTS: /events/{eventId}
+    // ──────────────────────────────────────────────
+    match /events/{eventId} {
+
+      // Any authenticated user can read events
+      allow read: if request.auth != null;
+
+      // Any authenticated user can create an event (must include their UID as creatorID)
+      allow create: if request.auth != null
+                    && request.resource.data.creatorID == request.auth.uid
+                    && validEventDocument(request.resource.data);
+
+      // Only the creator can update their event
+      allow update: if request.auth != null
+                    && resource.data.creatorID == request.auth.uid
+                    && request.resource.data.creatorID == request.auth.uid
+                    && validEventDocument(request.resource.data);
+
+      // Only the creator can delete their event
+      allow delete: if request.auth != null
+                    && resource.data.creatorID == request.auth.uid;
+    }
+
+    // ──────────────────────────────────────────────
+    // HELPER FUNCTIONS
+    // ──────────────────────────────────────────────
+
+    // Verify the request comes from the document owner
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    // Validate the full user document schema and value ranges
+    function validUserDocument(data) {
+      return validProfileFields(data) && validGameStateFields(data);
+    }
+
+    // Validate profile fields, timestamps, and field allowlist
+    function validProfileFields(data) {
+      let validDisplayName = !('displayName' in data) ||
+        (data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100);
+
+      let validEmail = !('email' in data) ||
+        (data.email is string && data.email.size() >= 5 && data.email.size() <= 320);
+
+      let validInterests = !('interests' in data) ||
+        (data.interests is list && data.interests.size() <= 20);
+
+      let validLastUpdated = !('lastUpdated' in data) ||
+        (data.lastUpdated is timestamp);
+
+      let validCreatedAt = !('createdAt' in data) ||
+        (data.createdAt is timestamp);
+
+      let allowedFields = [
+        'displayName', 'email', 'interests',
+        'collectedPlaceIDs', 'checkedInEventIDs', 'redeemedRewardIDs',
+        'pointsBalance', 'lifetimePoints',
+        'lastUpdated', 'createdAt'
+      ];
+      let noExtraFields = data.keys().hasOnly(allowedFields);
+
+      return validDisplayName && validEmail && validInterests
+          && validLastUpdated && validCreatedAt && noExtraFields;
+    }
+
+    // Validate game state fields (collections, points)
+    function validGameStateFields(data) {
+      let validCollectedPlaces = !('collectedPlaceIDs' in data) ||
+        (data.collectedPlaceIDs is list && data.collectedPlaceIDs.size() <= 500);
+
+      let validCheckedInEvents = !('checkedInEventIDs' in data) ||
+        (data.checkedInEventIDs is list && data.checkedInEventIDs.size() <= 500);
+
+      let validRedeemedRewards = !('redeemedRewardIDs' in data) ||
+        (data.redeemedRewardIDs is list && data.redeemedRewardIDs.size() <= 200);
+
+      let validPointsBalance = !('pointsBalance' in data) ||
+        (data.pointsBalance is int && data.pointsBalance >= 0 && data.pointsBalance <= 1000000);
+
+      let validLifetimePoints = !('lifetimePoints' in data) ||
+        (data.lifetimePoints is int && data.lifetimePoints >= 0 && data.lifetimePoints <= 10000000);
+
+      return validCollectedPlaces && validCheckedInEvents && validRedeemedRewards
+          && validPointsBalance && validLifetimePoints;
+    }
+
+    // Validate event document schema
+    function validEventDocument(data) {
+      let validTitle = data.title is string && data.title.size() >= 1 && data.title.size() <= 200;
+      let validDescription = !('description' in data) ||
+        (data.description is string && data.description.size() <= 2000);
+      let validOrganizer = data.organizer is string && data.organizer.size() >= 1 && data.organizer.size() <= 200;
+      let validDate = data.date is timestamp;
+      let validTime = data.time is string && data.time.size() >= 1 && data.time.size() <= 50;
+      let validLocation = data.locationName is string && data.locationName.size() >= 1 && data.locationName.size() <= 300;
+      let validAttendees = data.attendeeCount is int && data.attendeeCount >= 0 && data.attendeeCount <= 100000;
+      let validMaxAttendees = !('maxAttendees' in data) || data.maxAttendees == null ||
+        (data.maxAttendees is int && data.maxAttendees >= 1 && data.maxAttendees <= 100000);
+      let validCategory = data.category is string && data.category.size() <= 50;
+      let validPoints = data.pointValue is int && data.pointValue >= 0 && data.pointValue <= 1000;
+      let validCreator = data.creatorID is string && data.creatorID.size() >= 1;
+
+      let allowedFields = [
+        'title', 'description', 'organizer', 'date', 'time',
+        'locationName', 'attendeeCount', 'maxAttendees',
+        'category', 'imagePlaceholder', 'pointValue',
+        'creatorID', 'createdAt'
+      ];
+      let noExtraFields = data.keys().hasOnly(allowedFields);
+
+      return validTitle && validDescription && validOrganizer && validDate
+          && validTime && validLocation && validAttendees && validMaxAttendees
+          && validCategory && validPoints && validCreator && noExtraFields;
+    }
+
+    // Prevent changing fields that should be immutable after creation
+    function noForbiddenFieldChanges() {
+      // email and createdAt cannot be changed after document creation
+      let emailUnchanged = !('email' in request.resource.data) ||
+        !('email' in resource.data) ||
+        request.resource.data.email == resource.data.email;
+
+      let createdAtUnchanged = !('createdAt' in request.resource.data) ||
+        !('createdAt' in resource.data) ||
+        request.resource.data.createdAt == resource.data.createdAt;
+
+      return emailUnchanged && createdAtUnchanged;
+    }
+  }
+}

@@ -2,10 +2,16 @@ import SwiftUI
 
 struct OnboardingView: View {
     @Binding var hasCompletedOnboarding: Bool
+    @Environment(AuthService.self) private var authService
     @State private var currentPage = 0
     @State private var selectedInterests: Set<PlaceCategory> = []
     @State private var userName = ""
+    @State private var userEmail = ""
+    @State private var userPassword = ""
+    @State private var isSignUp = true
+    @State private var showPasswordField = false
     @State private var animateIn = false
+    @State private var isSubmitting = false
 
     private let pages = [
         OnboardingPage(
@@ -59,7 +65,7 @@ struct OnboardingView: View {
                     } else if currentPage == pages.count {
                         interestsPage
                     } else {
-                        namePage
+                        authPage
                     }
                 }
                 .transition(.asymmetric(
@@ -82,12 +88,24 @@ struct OnboardingView: View {
                     }
                     .padding(.bottom, Spacing.sm)
 
+                    // Error message
+                    if let error = authService.errorMessage {
+                        Text(error)
+                            .font(CFont.caption(13))
+                            .foregroundStyle(Color.connectifyDestructive)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, Spacing.lg)
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
+
                     ConnectifyButton(
                         title: buttonTitle,
                         icon: currentPage == totalPages - 1 ? "arrow.right" : nil
                     ) {
                         advance()
                     }
+                    .disabled(isSubmitting)
+                    .opacity(isSubmitting ? 0.6 : 1)
                     .padding(.horizontal, Spacing.lg)
                 }
                 .padding(.bottom, Spacing.xl)
@@ -174,36 +192,98 @@ struct OnboardingView: View {
         }
     }
 
-    // MARK: - Name Page
+    // MARK: - Auth Page (Name + Email + Password)
 
-    private var namePage: some View {
+    private var authPage: some View {
         VStack(spacing: Spacing.lg) {
-            Image(systemName: "hand.wave.fill")
+            Image(systemName: isSignUp ? "hand.wave.fill" : "person.circle.fill")
                 .font(.system(size: 48))
                 .foregroundStyle(Color.connectifyGreen)
 
             VStack(spacing: Spacing.sm) {
-                Text("What should we\ncall you?")
+                Text(isSignUp ? "Create your\naccount" : "Welcome\nback")
                     .font(CFont.display(30))
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.primaryText)
 
-                Text("Just a first name is fine.")
+                Text(isSignUp ? "Just a few details to get started." : "Sign in to pick up where you left off.")
                     .font(CFont.body(15))
                     .foregroundStyle(.secondaryText)
             }
 
-            TextField("Your name", text: $userName)
-                .font(CFont.body(18))
-                .multilineTextAlignment(.center)
-                .padding()
-                .background(.cardSurface)
-                .clipShape(RoundedRectangle(cornerRadius: Radius.md))
-                .overlay {
-                    RoundedRectangle(cornerRadius: Radius.md)
-                        .strokeBorder(.subtleBorder, lineWidth: 1)
+            VStack(spacing: 12) {
+                // Name field (sign-up only)
+                if isSignUp {
+                    TextField("Your name", text: $userName)
+                        .font(CFont.body(17))
+                        .padding()
+                        .background(.cardSurface)
+                        .clipShape(RoundedRectangle(cornerRadius: Radius.md))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: Radius.md)
+                                .strokeBorder(.subtleBorder, lineWidth: 1)
+                        }
+                        .textContentType(.name)
+                        .transition(.move(edge: .top).combined(with: .opacity))
                 }
-                .padding(.horizontal, Spacing.xxl)
+
+                // Email field
+                TextField("Email address", text: $userEmail)
+                    .font(CFont.body(17))
+                    .padding()
+                    .background(.cardSurface)
+                    .clipShape(RoundedRectangle(cornerRadius: Radius.md))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: Radius.md)
+                            .strokeBorder(.subtleBorder, lineWidth: 1)
+                    }
+                    .textContentType(.emailAddress)
+                    .keyboardType(.emailAddress)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .onChange(of: userEmail) { _, newValue in
+                        if !newValue.isEmpty && !showPasswordField {
+                            withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
+                                showPasswordField = true
+                            }
+                        }
+                    }
+
+                // Password field — slides in smoothly after email is typed
+                if showPasswordField {
+                    SecureField("Password (6+ characters)", text: $userPassword)
+                        .font(CFont.body(17))
+                        .padding()
+                        .background(.cardSurface)
+                        .clipShape(RoundedRectangle(cornerRadius: Radius.md))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: Radius.md)
+                                .strokeBorder(.subtleBorder, lineWidth: 1)
+                        }
+                        .textContentType(isSignUp ? .newPassword : .password)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .padding(.horizontal, Spacing.xxl)
+
+            // Toggle sign-up / sign-in
+            Button {
+                withAnimation(.spring(response: 0.4)) {
+                    isSignUp.toggle()
+                    authService.clearError()
+                }
+            } label: {
+                Text(isSignUp ? "Already have an account? **Sign in**" : "New here? **Create account**")
+                    .font(CFont.caption(14))
+                    .foregroundStyle(.secondaryText)
+            }
+            .buttonStyle(.plain)
+
+            if isSubmitting {
+                ProgressView()
+                    .tint(Color.connectifyGreen)
+                    .transition(.opacity)
+            }
         }
     }
 
@@ -214,17 +294,51 @@ struct OnboardingView: View {
     private var buttonTitle: String {
         if currentPage < pages.count { return "Continue" }
         if currentPage == pages.count { return selectedInterests.isEmpty ? "Continue" : "Continue (\(selectedInterests.count) selected)" }
-        return "Let's Go"
+        if isSubmitting { return "Creating account..." }
+        return isSignUp ? "Create Account" : "Sign In"
     }
 
     private func advance() {
+        authService.clearError()
+
         if currentPage >= totalPages - 1 {
-            withAnimation(.spring(response: 0.5)) {
-                hasCompletedOnboarding = true
-            }
+            // Auth page — submit
+            submitAuth()
         } else {
             withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
                 currentPage += 1
+            }
+        }
+    }
+
+    private func submitAuth() {
+        isSubmitting = true
+
+        Task {
+            do {
+                if isSignUp {
+                    try await authService.signUp(
+                        email: userEmail.trimmingCharacters(in: .whitespaces),
+                        password: userPassword,
+                        displayName: userName.trimmingCharacters(in: .whitespaces)
+                    )
+                } else {
+                    try await authService.signIn(
+                        email: userEmail.trimmingCharacters(in: .whitespaces),
+                        password: userPassword
+                    )
+                }
+
+                await MainActor.run {
+                    isSubmitting = false
+                    withAnimation(.spring(response: 0.5)) {
+                        hasCompletedOnboarding = true
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    isSubmitting = false
+                }
             }
         }
     }
@@ -273,4 +387,5 @@ private struct InterestTile: View {
 
 #Preview {
     OnboardingView(hasCompletedOnboarding: .constant(false))
+        .environment(AuthService())
 }

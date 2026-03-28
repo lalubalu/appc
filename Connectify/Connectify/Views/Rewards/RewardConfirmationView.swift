@@ -46,10 +46,10 @@ struct RewardConfirmationView: View {
                     .padding(.vertical, Spacing.md)
                     .padding(.horizontal, Spacing.lg)
                     .background(.cardSurface)
-                    .clipShape(RoundedRectangle(cornerRadius: Radius.md))
+                    .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
                     .overlay {
-                        RoundedRectangle(cornerRadius: Radius.md)
-                            .strokeBorder(.subtleBorder, style: StrokeStyle(lineWidth: 1, dash: [6]))
+                        RoundedRectangle(cornerRadius: Radius.lg)
+                            .strokeBorder(Color.connectifyGreen.opacity(0.3), style: StrokeStyle(lineWidth: 1, dash: [6]))
                     }
             }
             .opacity(showContent ? 1 : 0)

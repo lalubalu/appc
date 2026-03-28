@@ -49,4 +49,8 @@ struct MainTabView: View {
     MainTabView()
         .environment(GameStateManager())
         .environment(LocationManager())
+        .environment(AuthService())
+        .environment(FirestoreService())
+        .environment(PlacesAPIService())
+        .environment(EventsAPIService())
 }

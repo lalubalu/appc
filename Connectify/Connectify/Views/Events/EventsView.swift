@@ -4,12 +4,14 @@ import PhotosUI
 struct EventsView: View {
     @Environment(GameStateManager.self) private var gameState
     @Environment(LocationManager.self) private var locationManager
+    @Environment(EventsAPIService.self) private var eventsService
     @State private var selectedCategory: EventCategory? = nil
     @State private var selectedEvent: Event? = nil
+    @State private var showCreateEvent = false
 
     private var filteredEvents: [Event] {
-        guard let cat = selectedCategory else { return SampleData.events }
-        return SampleData.events.filter { $0.category == cat }
+        guard let cat = selectedCategory else { return eventsService.events }
+        return eventsService.events.filter { $0.category == cat }
     }
 
     private let dateFormatter: DateFormatter = {
@@ -40,6 +42,20 @@ struct EventsView: View {
                         .padding(.horizontal, Spacing.md)
                     }
 
+                    // Loading indicator
+                    if eventsService.isLoading {
+                        HStack {
+                            Spacer()
+                            ProgressView()
+                                .tint(.connectifyGreen)
+                            Text("Finding community events...")
+                                .font(CFont.caption(13))
+                                .foregroundStyle(.secondaryText)
+                            Spacer()
+                        }
+                        .padding(.vertical, Spacing.md)
+                    }
+
                     // Events list
                     LazyVStack(spacing: 12) {
                         ForEach(filteredEvents) { event in
@@ -53,10 +69,33 @@ struct EventsView: View {
             }
             .background(.pageSurface)
             .navigationTitle("Events")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showCreateEvent = true
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Color.connectifyGreen)
+                    }
+                }
+            }
+            .refreshable {
+                await eventsService.refresh(around: locationManager.userCoordinate)
+            }
+            .task {
+                await eventsService.fetchNearbyEvents(around: locationManager.userCoordinate)
+            }
             .sheet(item: $selectedEvent) { event in
                 EventDetailSheet(event: event, dateFormatter: dateFormatter)
                     .environment(gameState)
                     .environment(locationManager)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
+            }
+            .sheet(isPresented: $showCreateEvent) {
+                CreateEventSheet()
+                    .environment(eventsService)
                     .presentationDetents([.large])
                     .presentationDragIndicator(.visible)
             }
@@ -67,40 +106,34 @@ struct EventsView: View {
 
     private var pointsBanner: some View {
         HStack(spacing: Spacing.md) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("EARN POINTS BY ATTENDING")
-                    .font(CFont.label(10))
-                    .tracking(0.8)
+            VStack(alignment: .leading, spacing: 6) {
+                Text("\(gameState.totalEventsAttended)")
+                    .font(CFont.mono(36))
+                    .foregroundStyle(.white)
+
+                Text("events attended")
+                    .font(CFont.caption(13))
                     .foregroundStyle(.white.opacity(0.7))
 
                 HStack(spacing: 6) {
-                    Text("\(gameState.totalEventsAttended)")
-                        .font(.system(size: 28, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
-                    Text("events attended")
-                        .font(CFont.body(14))
-                        .foregroundStyle(.white.opacity(0.8))
+                    Image(systemName: "star.fill")
+                        .font(.system(size: 10))
+                    Text("\(gameState.pointsBalance) pts")
+                        .font(CFont.headline(14))
                 }
-
-                Text("\(gameState.pointsBalance) pts available")
-                    .font(CFont.caption(12))
-                    .foregroundStyle(.white.opacity(0.6))
+                .foregroundStyle(Color.connectifyGreenBright)
             }
 
             Spacer()
 
-            Image(systemName: "ticket.fill")
-                .font(.system(size: 32))
-                .foregroundStyle(.white.opacity(0.3))
+            VStack(spacing: 6) {
+                Image(systemName: "calendar.badge.checkmark")
+                    .font(.system(size: 28, weight: .light))
+                    .foregroundStyle(.white.opacity(0.4))
+            }
         }
         .padding(Spacing.lg)
-        .background(
-            LinearGradient(
-                colors: [Color.connectifyGreen, Color.connectifyGreen.opacity(0.7), Color.accentMint],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        )
+        .background(Color.connectifyGreenDeep)
         .clipShape(RoundedRectangle(cornerRadius: Radius.xl))
         .padding(.horizontal, Spacing.md)
     }
@@ -114,16 +147,276 @@ struct EventsView: View {
                     .font(CFont.caption(13))
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .background(selected ? Color.connectifyGreen.opacity(0.15) : .cardSurface)
-            .foregroundStyle(selected ? Color.connectifyGreen : .secondaryText)
-            .clipShape(RoundedRectangle(cornerRadius: 4))
-            .overlay {
-                RoundedRectangle(cornerRadius: 4)
-                    .strokeBorder(selected ? Color.connectifyGreen.opacity(0.4) : .subtleBorder, lineWidth: 1)
-            }
+            .padding(.vertical, 9)
+            .background(selected ? Color.connectifyGreen : .cardSurface)
+            .foregroundStyle(selected ? .white : .secondaryText)
+            .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
         }
         .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Create Event Sheet
+
+private struct CreateEventSheet: View {
+    @Environment(EventsAPIService.self) private var eventsService
+    @Environment(\.dismiss) private var dismiss
+    @State private var title = ""
+    @State private var description = ""
+    @State private var organizer = ""
+    @State private var locationName = ""
+    @State private var date = Date()
+    @State private var startTime = Date()
+    @State private var endTime = Calendar.current.date(byAdding: .hour, value: 2, to: Date())!
+    @State private var category: EventCategory = .meetup
+    @State private var maxAttendees = ""
+    @State private var isSubmitting = false
+    @State private var errorMessage: String?
+
+    private var isValid: Bool {
+        !title.trimmingCharacters(in: .whitespaces).isEmpty &&
+        !organizer.trimmingCharacters(in: .whitespaces).isEmpty &&
+        !locationName.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    private var timeString: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:mm a"
+        return "\(formatter.string(from: startTime)) – \(formatter.string(from: endTime))"
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: Spacing.lg) {
+                    categoryPicker
+                    formField(label: "EVENT TITLE", placeholder: "e.g. Spring Hackathon", text: $title)
+                    descriptionField
+                    formField(label: "ORGANIZED BY", placeholder: "e.g. Local Dev Collective", text: $organizer)
+                    formField(label: "LOCATION", placeholder: "e.g. Downtown Library", text: $locationName)
+                    dateTimeSection
+                    maxAttendeesField
+                    pointsInfo
+                    errorAndSubmit
+                }
+                .padding(Spacing.md)
+            }
+            .background(.pageSurface)
+            .navigationTitle("New Event")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") { dismiss() }
+                        .foregroundStyle(.secondaryText)
+                }
+            }
+        }
+    }
+
+    private var categoryPicker: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("CATEGORY")
+                .font(CFont.label(10))
+                .tracking(0.8)
+                .foregroundStyle(.secondaryText)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(EventCategory.allCases) { cat in
+                        categoryButton(for: cat)
+                    }
+                }
+            }
+        }
+    }
+
+    private func categoryButton(for cat: EventCategory) -> some View {
+        let isSelected = category == cat
+        return Button {
+            category = cat
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: cat.icon)
+                    .font(.system(size: 11))
+                Text(cat.rawValue)
+                    .font(CFont.caption(12))
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(isSelected ? Color.connectifyGreen : .cardSurface)
+            .foregroundStyle(isSelected ? .white : .secondaryText)
+            .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var descriptionField: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("DESCRIPTION")
+                .font(CFont.label(10))
+                .tracking(0.8)
+                .foregroundStyle(.secondaryText)
+
+            TextEditor(text: $description)
+                .font(CFont.body(14))
+                .frame(minHeight: 80)
+                .padding(Spacing.sm)
+                .background(.cardSurface)
+                .clipShape(RoundedRectangle(cornerRadius: Radius.md))
+                .overlay {
+                    RoundedRectangle(cornerRadius: Radius.md)
+                        .strokeBorder(.subtleBorder, lineWidth: 0.5)
+                }
+        }
+    }
+
+    private var dateTimeSection: some View {
+        HStack(spacing: Spacing.md) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("DATE")
+                    .font(CFont.label(10))
+                    .tracking(0.8)
+                    .foregroundStyle(.secondaryText)
+                DatePicker("", selection: $date, in: Date()..., displayedComponents: .date)
+                    .labelsHidden()
+                    .tint(.connectifyGreen)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("START")
+                    .font(CFont.label(10))
+                    .tracking(0.8)
+                    .foregroundStyle(.secondaryText)
+                DatePicker("", selection: $startTime, displayedComponents: .hourAndMinute)
+                    .labelsHidden()
+                    .tint(.connectifyGreen)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("END")
+                    .font(CFont.label(10))
+                    .tracking(0.8)
+                    .foregroundStyle(.secondaryText)
+                DatePicker("", selection: $endTime, displayedComponents: .hourAndMinute)
+                    .labelsHidden()
+                    .tint(.connectifyGreen)
+            }
+        }
+    }
+
+    private var maxAttendeesField: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("MAX ATTENDEES (OPTIONAL)")
+                .font(CFont.label(10))
+                .tracking(0.8)
+                .foregroundStyle(.secondaryText)
+
+            TextField("Leave empty for unlimited", text: $maxAttendees)
+                .font(CFont.body(14))
+                .keyboardType(.numberPad)
+                .padding(Spacing.sm)
+                .background(.cardSurface)
+                .clipShape(RoundedRectangle(cornerRadius: Radius.md))
+                .overlay {
+                    RoundedRectangle(cornerRadius: Radius.md)
+                        .strokeBorder(.subtleBorder, lineWidth: 0.5)
+                }
+        }
+    }
+
+    private var pointsInfo: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "star.fill")
+                .font(.system(size: 12))
+                .foregroundStyle(Color.accentAmber)
+            Text("Attendees earn +\(category.defaultPoints) pts for checking in")
+                .font(CFont.caption(13))
+                .foregroundStyle(.secondaryText)
+        }
+        .padding(Spacing.sm)
+        .background(Color.accentAmber.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: Radius.sm))
+    }
+
+    @ViewBuilder
+    private var errorAndSubmit: some View {
+        if let error = errorMessage {
+            Text(error)
+                .font(CFont.caption(12))
+                .foregroundStyle(.red)
+        }
+
+        Button {
+            Task { await submit() }
+        } label: {
+            submitButtonLabel
+        }
+        .disabled(!isValid || isSubmitting)
+        .buttonStyle(.plain)
+    }
+
+    private var submitButtonLabel: some View {
+        HStack(spacing: 8) {
+            if isSubmitting {
+                ProgressView()
+                    .tint(.white)
+                    .scaleEffect(0.8)
+            }
+            Image(systemName: "plus.circle.fill")
+                .font(.system(size: 14))
+            Text("Create Event")
+                .font(CFont.headline(16))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 14)
+        .background(isValid ? Color.connectifyGreen : Color.connectifyGreen.opacity(0.3))
+        .foregroundStyle(.white)
+        .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
+    }
+
+    private func formField(label: String, placeholder: String, text: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label)
+                .font(CFont.label(10))
+                .tracking(0.8)
+                .foregroundStyle(.secondaryText)
+
+            TextField(placeholder, text: text)
+                .font(CFont.body(14))
+                .padding(Spacing.sm)
+                .background(.cardSurface)
+                .clipShape(RoundedRectangle(cornerRadius: Radius.md))
+                .overlay {
+                    RoundedRectangle(cornerRadius: Radius.md)
+                        .strokeBorder(.subtleBorder, lineWidth: 0.5)
+                }
+        }
+    }
+
+    private func submit() async {
+        isSubmitting = true
+        errorMessage = nil
+
+        let maxAttendeesInt = Int(maxAttendees)
+
+        let result = await eventsService.createEvent(
+            title: title,
+            description: description,
+            organizer: organizer,
+            date: date,
+            time: timeString,
+            locationName: locationName,
+            maxAttendees: maxAttendeesInt,
+            category: category
+        )
+
+        isSubmitting = false
+
+        if result != nil {
+            dismiss()
+        } else {
+            errorMessage = eventsService.lastError ?? "Failed to create event."
+        }
     }
 }
 
@@ -237,12 +530,14 @@ private struct EventCard: View {
             }
         }
         .padding(Spacing.md)
-        .background(.cardSurface)
+        .background(
+            HStack(spacing: 0) {
+                Color.connectifyGreen.opacity(isCheckedIn ? 1 : 0.4)
+                    .frame(width: 3)
+                (isCheckedIn ? Color.greenCard : Color.cardSurface)
+            }
+        )
         .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
-        .overlay {
-            RoundedRectangle(cornerRadius: Radius.lg)
-                .strokeBorder(isCheckedIn ? Color.connectifyGreen.opacity(0.3) : .subtleBorder, lineWidth: isCheckedIn ? 1.5 : 0.5)
-        }
     }
 
     private func dayOfWeek(_ date: Date) -> String {
@@ -325,6 +620,17 @@ private struct EventDetailSheet: View {
                                 .font(CFont.body(14))
                                 .foregroundStyle(.secondaryText)
 
+                            // Description (if available)
+                            if let desc = event.description, !desc.isEmpty {
+                                Text(desc)
+                                    .font(CFont.body(14))
+                                    .foregroundStyle(.primaryText)
+                                    .padding(Spacing.md)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(.greenCard)
+                                    .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
+                            }
+
                             // Details grid
                             VStack(spacing: Spacing.sm) {
                                 detailRow(icon: "calendar", label: "Date", value: dateFormatter.string(from: event.date))
@@ -338,12 +644,8 @@ private struct EventDetailSheet: View {
                                 detailRow(icon: "star.fill", label: "Points", value: "+\(event.pointValue) for attending")
                             }
                             .padding(Spacing.md)
-                            .background(.cardSurface)
-                            .clipShape(RoundedRectangle(cornerRadius: Radius.md))
-                            .overlay {
-                                RoundedRectangle(cornerRadius: Radius.md)
-                                    .strokeBorder(.subtleBorder, lineWidth: 0.5)
-                            }
+                            .background(.greenCard)
+                            .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
 
                             // Check-in section
                             checkInSection
@@ -516,4 +818,5 @@ private struct EventDetailSheet: View {
     EventsView()
         .environment(GameStateManager())
         .environment(LocationManager())
+        .environment(EventsAPIService())
 }

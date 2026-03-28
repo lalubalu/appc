@@ -10,10 +10,8 @@ struct RewardsStoreView: View {
         NavigationStack {
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: Spacing.lg) {
-                    // Balance header
                     balanceHeader
 
-                    // Reward tiers
                     ForEach(RewardTier.allCases) { tier in
                         let tierRewards = SampleData.rewards.filter { $0.tier == tier }
                         if !tierRewards.isEmpty {
@@ -64,10 +62,10 @@ struct RewardsStoreView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Available Points")
                     .font(CFont.caption(13))
-                    .foregroundStyle(.secondaryText)
+                    .foregroundStyle(Color.connectifyGreenBright.opacity(0.7))
                 Text("\(gameState.pointsBalance)")
-                    .font(.system(size: 32, weight: .bold, design: .rounded))
-                    .foregroundStyle(.primaryText)
+                    .font(CFont.mono(32))
+                    .foregroundStyle(.white)
                     .contentTransition(.numericText())
             }
 
@@ -75,15 +73,11 @@ struct RewardsStoreView: View {
 
             Image(systemName: "gift.circle.fill")
                 .font(.system(size: 40))
-                .foregroundStyle(Color.connectifyGreen)
+                .foregroundStyle(.white.opacity(0.4))
         }
         .padding(Spacing.lg)
-        .background(.cardSurface)
-        .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
-        .overlay {
-            RoundedRectangle(cornerRadius: Radius.lg)
-                .strokeBorder(.subtleBorder, lineWidth: 0.5)
-        }
+        .background(Color.connectifyGreenDeep)
+        .clipShape(RoundedRectangle(cornerRadius: Radius.xl))
         .padding(.horizontal, Spacing.md)
     }
 
@@ -94,12 +88,10 @@ struct RewardsStoreView: View {
             HStack(spacing: 8) {
                 Image(systemName: tier.icon)
                     .font(.system(size: 14))
-                    .foregroundStyle(tier.color)
+                    .foregroundStyle(Color.connectifyGreen)
                 Text(tier.rawValue)
                     .font(CFont.headline(16))
                     .foregroundStyle(.primaryText)
-                Text("·")
-                    .foregroundStyle(.tertiaryText)
                 Text("\(tier.minPoints)+ pts")
                     .font(CFont.caption(13))
                     .foregroundStyle(.secondaryText)
@@ -117,14 +109,13 @@ struct RewardsStoreView: View {
         let canAfford = gameState.canAfford(reward)
 
         return HStack(spacing: Spacing.md) {
-            // Brand icon
             ZStack {
-                RoundedRectangle(cornerRadius: Radius.sm)
-                    .fill(reward.tier.color.opacity(0.12))
+                RoundedRectangle(cornerRadius: Radius.lg)
+                    .fill(Color.connectifyGreen.opacity(0.10))
                     .frame(width: 48, height: 48)
                 Image(systemName: reward.icon)
                     .font(.system(size: 20))
-                    .foregroundStyle(reward.tier.color)
+                    .foregroundStyle(Color.connectifyGreen)
             }
 
             VStack(alignment: .leading, spacing: 3) {
@@ -152,28 +143,19 @@ struct RewardsStoreView: View {
                 } label: {
                     Text("\(reward.pointCost) pts")
                         .font(CFont.headline(13))
-                        .foregroundStyle(canAfford ? .black : .tertiaryText)
+                        .foregroundStyle(canAfford ? .white : .tertiaryText)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 8)
                         .background(canAfford ? Color.connectifyGreen : .cardSurface)
-                        .clipShape(RoundedRectangle(cornerRadius: 4))
-                        .overlay {
-                            if !canAfford {
-                                RoundedRectangle(cornerRadius: 4).strokeBorder(.subtleBorder, lineWidth: 1)
-                            }
-                        }
+                        .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
                 }
                 .disabled(!canAfford)
                 .buttonStyle(.plain)
             }
         }
         .padding(Spacing.md)
-        .background(.cardSurface)
-        .clipShape(RoundedRectangle(cornerRadius: Radius.md))
-        .overlay {
-            RoundedRectangle(cornerRadius: Radius.md)
-                .strokeBorder(isRedeemed ? Color.connectifyGreen.opacity(0.3) : .subtleBorder, lineWidth: 0.5)
-        }
+        .background(isRedeemed ? Color.greenCard : Color.cardSurface)
+        .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
         .opacity(isRedeemed ? 0.7 : 1)
         .padding(.horizontal, Spacing.md)
     }

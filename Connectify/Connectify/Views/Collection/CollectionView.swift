@@ -2,13 +2,18 @@ import SwiftUI
 
 struct CollectionView: View {
     @Environment(GameStateManager.self) private var gameState
+    @Environment(PlacesAPIService.self) private var placesService
     @State private var showRewardsStore = false
     @State private var selectedCollectible: CollectiblePlace? = nil
     @State private var filterRarity: PlaceRarity? = nil
 
+    private var allCollectibles: [CollectiblePlace] {
+        placesService.collectiblePlaces
+    }
+
     private var displayedPlaces: [CollectiblePlace] {
-        guard let rarity = filterRarity else { return SampleData.collectiblePlaces }
-        return SampleData.collectiblePlaces.filter { $0.rarity == rarity }
+        guard let rarity = filterRarity else { return allCollectibles }
+        return allCollectibles.filter { $0.rarity == rarity }
     }
 
     var body: some View {
@@ -50,52 +55,44 @@ struct CollectionView: View {
     // MARK: - Wallet Card
 
     private var walletCard: some View {
-        VStack(spacing: 0) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("POINT BALANCE")
-                        .font(CFont.label(11))
-                        .tracking(1)
-                        .foregroundStyle(.white.opacity(0.7))
-
-                    Text("\(gameState.pointsBalance)")
-                        .font(.system(size: 42, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
-                        .contentTransition(.numericText())
-
-                    Text("Lifetime: \(gameState.lifetimePoints) pts earned")
-                        .font(CFont.caption(12))
-                        .foregroundStyle(.white.opacity(0.6))
-                }
-
-                Spacer()
-
-                VStack(spacing: 8) {
-                    Image(systemName: "gift.fill")
-                        .font(.system(size: 28))
-                        .foregroundStyle(.white.opacity(0.9))
-
-                    Button("Rewards") {
-                        showRewardsStore = true
-                    }
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("POINT BALANCE")
                     .font(CFont.label(11))
-                    .foregroundStyle(.black)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 5)
-                    .background(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 3))
-                }
+                    .tracking(1)
+                    .foregroundStyle(.white.opacity(0.6))
+
+                Text("\(gameState.pointsBalance)")
+                    .font(CFont.mono(42))
+                    .foregroundStyle(.white)
+                    .contentTransition(.numericText())
+
+                Text("Lifetime: \(gameState.lifetimePoints) pts earned")
+                    .font(CFont.caption(12))
+                    .foregroundStyle(Color.connectifyGreenBright.opacity(0.7))
             }
-            .padding(Spacing.lg)
-            .background(
-                LinearGradient(
-                    colors: [Color.connectifyGreen, Color.accentMint, Color.connectifyGreen.opacity(0.8)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .clipShape(RoundedRectangle(cornerRadius: Radius.xl))
+
+            Spacer()
+
+            VStack(spacing: 8) {
+                Image(systemName: "gift.fill")
+                    .font(.system(size: 28))
+                    .foregroundStyle(.white.opacity(0.8))
+
+                Button("Rewards") {
+                    showRewardsStore = true
+                }
+                .font(CFont.label(11))
+                .foregroundStyle(Color.connectifyGreenDeep)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 5)
+                .background(.white)
+                .clipShape(RoundedRectangle(cornerRadius: Radius.md))
+            }
         }
+        .padding(Spacing.lg)
+        .background(Color.connectifyGreenDeep)
+        .clipShape(RoundedRectangle(cornerRadius: Radius.xl))
         .padding(.horizontal, Spacing.md)
     }
 
@@ -103,14 +100,13 @@ struct CollectionView: View {
 
     private var progressSection: some View {
         HStack(spacing: Spacing.lg) {
-            // Big progress ring
             VStack(spacing: 8) {
                 ProgressRing(
-                    progress: gameState.collectionProgress(total: SampleData.collectiblePlaces.count),
+                    progress: gameState.collectionProgress(total: allCollectibles.count),
                     size: 90,
                     lineWidth: 6
                 )
-                Text("\(gameState.totalCollected)/\(SampleData.collectiblePlaces.count)")
+                Text("\(gameState.totalCollected)/\(allCollectibles.count)")
                     .font(CFont.headline(15))
                     .foregroundStyle(.primaryText)
                 Text("Collected")
@@ -118,11 +114,10 @@ struct CollectionView: View {
                     .foregroundStyle(.secondaryText)
             }
 
-            // Rarity breakdown
             VStack(alignment: .leading, spacing: 10) {
                 ForEach(PlaceRarity.allCases) { rarity in
-                    let count = SampleData.collectiblePlaces.filter { $0.rarity == rarity }.count
-                    let collected = SampleData.collectiblePlaces.filter {
+                    let count = allCollectibles.filter { $0.rarity == rarity }.count
+                    let collected = allCollectibles.filter {
                         $0.rarity == rarity && gameState.isCollected($0.id)
                     }.count
 
@@ -141,12 +136,8 @@ struct CollectionView: View {
             .frame(maxWidth: .infinity)
         }
         .padding(Spacing.md)
-        .background(.cardSurface)
+        .background(.greenCard)
         .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
-        .overlay {
-            RoundedRectangle(cornerRadius: Radius.lg)
-                .strokeBorder(.subtleBorder, lineWidth: 0.5)
-        }
         .padding(.horizontal, Spacing.md)
     }
 
@@ -159,7 +150,7 @@ struct CollectionView: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 10) {
-                    let catStats = gameState.collectionsByCategory(from: SampleData.collectiblePlaces)
+                    let catStats = gameState.collectionsByCategory(from: allCollectibles)
                     ForEach(PlaceCategory.allCases) { cat in
                         let stats = catStats[cat] ?? (0, 0)
                         CategoryCollectionCard(
@@ -209,13 +200,9 @@ struct CollectionView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 7)
-            .background(selected ? tint.opacity(0.15) : .cardSurface)
-            .foregroundStyle(selected ? tint : .secondaryText)
-            .clipShape(RoundedRectangle(cornerRadius: 4))
-            .overlay {
-                RoundedRectangle(cornerRadius: 4)
-                    .strokeBorder(selected ? tint.opacity(0.4) : .subtleBorder, lineWidth: 1)
-            }
+            .background(selected ? Color.connectifyGreen : .cardSurface)
+            .foregroundStyle(selected ? .white : .secondaryText)
+            .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
         }
         .buttonStyle(.plain)
     }
@@ -251,7 +238,6 @@ private struct CollectionCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Image area
             ZStack {
                 PlacePlaceholder(
                     icon: collectible.place.imagePlaceholder,
@@ -262,7 +248,6 @@ private struct CollectionCard: View {
                 .opacity(isCollected ? 1 : 0.3)
 
                 if !isCollected {
-                    // Mystery overlay
                     VStack(spacing: 4) {
                         Image(systemName: "questionmark")
                             .font(.system(size: 28, weight: .bold))
@@ -272,7 +257,6 @@ private struct CollectionCard: View {
                             .foregroundStyle(.tertiaryText)
                     }
                 } else {
-                    // Collected checkmark
                     VStack {
                         HStack {
                             Spacer()
@@ -288,7 +272,6 @@ private struct CollectionCard: View {
             }
             .clipShape(RoundedRectangle(cornerRadius: Radius.md))
 
-            // Info
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 4) {
                     RarityDot(rarity: collectible.rarity)
@@ -307,17 +290,9 @@ private struct CollectionCard: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 8)
         }
-        .background(.cardSurface)
+        .background(isCollected ? Color.greenCard : Color.cardSurface)
         .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
-        .overlay {
-            RoundedRectangle(cornerRadius: Radius.lg)
-                .strokeBorder(
-                    isCollected ? Color.connectifyGreen.opacity(0.3) : .subtleBorder,
-                    lineWidth: isCollected ? 1.5 : 0.5
-                )
-        }
-        // Legendary glow
-        .shadow(color: collectible.rarity.color.opacity(collectible.rarity.glowOpacity), radius: 8, y: 2)
+        .shadow(color: isCollected ? Color.connectifyGreen.opacity(0.15) : .clear, radius: 8, y: 2)
     }
 }
 
@@ -361,12 +336,8 @@ private struct CategoryCollectionCard: View {
         }
         .frame(width: 80)
         .padding(.vertical, Spacing.sm)
-        .background(.cardSurface)
-        .clipShape(RoundedRectangle(cornerRadius: Radius.md))
-        .overlay {
-            RoundedRectangle(cornerRadius: Radius.md)
-                .strokeBorder(.subtleBorder, lineWidth: 0.5)
-        }
+        .background(.greenCard)
+        .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
     }
 }
 
@@ -385,7 +356,6 @@ private struct CollectibleDetailSheet: View {
 
     var body: some View {
         VStack(spacing: Spacing.lg) {
-            // Header
             PlacePlaceholder(
                 icon: collectible.place.imagePlaceholder,
                 color: isCollected ? collectible.place.accentColor : .gray,
@@ -448,7 +418,6 @@ private struct CollectibleDetailSheet: View {
             }
             .padding(.horizontal, Spacing.md)
 
-            // Action button
             if isCollected {
                 ConnectifyButton(title: "Collected", icon: "checkmark.circle.fill", style: .secondary) {}
                     .disabled(true)
@@ -476,7 +445,6 @@ private struct CollectibleDetailSheet: View {
         withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
             justCollected = true
         }
-        // Animate points counting up
         withAnimation(.easeOut(duration: 0.8)) {
             animatedPoints = pts
         }
@@ -486,4 +454,5 @@ private struct CollectibleDetailSheet: View {
 #Preview {
     CollectionView()
         .environment(GameStateManager())
+        .environment(PlacesAPIService())
 }

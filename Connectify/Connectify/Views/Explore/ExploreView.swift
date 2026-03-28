@@ -2,12 +2,13 @@ import SwiftUI
 
 struct ExploreView: View {
     @Environment(GameStateManager.self) private var gameState
+    @Environment(PlacesAPIService.self) private var placesService
     @State private var searchText = ""
     @State private var selectedCategory: PlaceCategory? = nil
     @State private var showGemDetail = false
 
     private var filteredPlaces: [Place] {
-        var result = SampleData.places
+        var result = placesService.places
         if let cat = selectedCategory {
             result = result.filter { $0.category == cat }
         }
@@ -20,20 +21,34 @@ struct ExploreView: View {
         return result
     }
 
+    private var dailyGem: DailyGem {
+        let gemPlace = placesService.places.max(by: { $0.rating < $1.rating }) ?? SampleData.places[0]
+        return DailyGem(
+            place: gemPlace,
+            headline: "Discover \(gemPlace.name)",
+            reason: "Highly rated spot nearby — worth a visit today."
+        )
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: Spacing.lg) {
-                    // Daily Gem
+                    if placesService.isLoading {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                                .tint(Color.connectifyGreen)
+                            Text("Finding places nearby...")
+                                .font(CFont.caption(13))
+                                .foregroundStyle(.secondaryText)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, Spacing.sm)
+                    }
+
                     dailyGemSection
-
-                    // Active Challenges
                     challengeSection
-
-                    // Category Filters
                     categoryFilters
-
-                    // Places Grid
                     placesSection
                 }
                 .padding(.bottom, Spacing.xxl)
@@ -51,10 +66,9 @@ struct ExploreView: View {
             SectionHeader(title: "Daily Gem", action: nil)
                 .padding(.horizontal, Spacing.md)
 
-            let gem = SampleData.dailyGem
+            let gem = dailyGem
             Button { showGemDetail = true } label: {
                 VStack(alignment: .leading, spacing: 0) {
-                    // Image area
                     ZStack(alignment: .topLeading) {
                         PlacePlaceholder(
                             icon: gem.place.imagePlaceholder,
@@ -62,21 +76,21 @@ struct ExploreView: View {
                             height: 180
                         )
 
-                        // Badge
                         HStack(spacing: 6) {
                             Image(systemName: "sparkle")
                                 .font(.system(size: 11, weight: .bold))
                             Text("TODAY'S GEM")
                                 .font(CFont.label(10))
+                                .tracking(1)
                         }
+                        .foregroundStyle(.white)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
-                        .background(.ultraThinMaterial)
-                        .clipShape(RoundedRectangle(cornerRadius: 3))
+                        .background(Color.connectifyGreen)
+                        .clipShape(RoundedRectangle(cornerRadius: Radius.md))
                         .padding(12)
                     }
 
-                    // Info
                     VStack(alignment: .leading, spacing: 6) {
                         Text(gem.headline)
                             .font(CFont.headline(18))
@@ -92,17 +106,19 @@ struct ExploreView: View {
                             Label(String(format: "%.1f", gem.place.rating), systemImage: "star.fill")
                         }
                         .font(CFont.caption(12))
-                        .foregroundStyle(.tertiaryText)
+                        .foregroundStyle(Color.connectifyGreen)
                         .padding(.top, 2)
                     }
                     .padding(Spacing.md)
                 }
-                .background(.cardSurface)
+                .background(
+                    HStack(spacing: 0) {
+                        Color.connectifyGreen
+                            .frame(width: 3)
+                        Color.cardSurface
+                    }
+                )
                 .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
-                .overlay {
-                    RoundedRectangle(cornerRadius: Radius.lg)
-                        .strokeBorder(.subtleBorder, lineWidth: 0.5)
-                }
             }
             .buttonStyle(.plain)
             .padding(.horizontal, Spacing.md)
@@ -166,7 +182,7 @@ struct ExploreView: View {
                 LazyVStack(spacing: 12) {
                     ForEach(filteredPlaces) { place in
                         NavigationLink(value: place) {
-                            PlaceRow(place: place, gameState: gameState)
+                            PlaceRow(place: place, gameState: gameState, placesService: placesService)
                         }
                         .buttonStyle(.plain)
                     }
@@ -189,10 +205,10 @@ private struct ChallengeCard: View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
             HStack {
                 Image(systemName: challenge.icon)
-                    .font(.system(size: 18))
+                    .font(.system(size: 20))
                     .foregroundStyle(Color.connectifyGreen)
                 Spacer()
-                ProgressRing(progress: challenge.progress, size: 36, lineWidth: 3)
+                ProgressRing(progress: challenge.progress, size: 38, lineWidth: 3.5)
             }
 
             VStack(alignment: .leading, spacing: 4) {
@@ -216,12 +232,8 @@ private struct ChallengeCard: View {
         }
         .padding(Spacing.md)
         .frame(width: 200)
-        .background(.cardSurface)
+        .background(.greenCard)
         .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
-        .overlay {
-            RoundedRectangle(cornerRadius: Radius.lg)
-                .strokeBorder(.subtleBorder, lineWidth: 0.5)
-        }
     }
 }
 
@@ -230,9 +242,15 @@ private struct ChallengeCard: View {
 private struct PlaceRow: View {
     let place: Place
     var gameState: GameStateManager? = nil
+    var placesService: PlacesAPIService? = nil
 
     private var collectible: CollectiblePlace? {
-        SampleData.collectible(for: place)
+        placesService?.collectible(for: place) ?? SampleData.collectible(for: place)
+    }
+
+    private var isCollected: Bool {
+        guard let c = collectible, let gs = gameState else { return false }
+        return gs.isCollected(c.id)
     }
 
     var body: some View {
@@ -244,7 +262,7 @@ private struct PlaceRow: View {
                 HStack(spacing: 6) {
                     Text(place.category.rawValue)
                         .font(CFont.label(10))
-                        .foregroundStyle(place.accentColor)
+                        .foregroundStyle(Color.connectifyGreen)
                         .textCase(.uppercase)
                         .tracking(0.5)
 
@@ -252,13 +270,13 @@ private struct PlaceRow: View {
                         RarityDot(rarity: c.rarity)
                     }
 
-                    if let c = collectible, let gs = gameState, gs.isCollected(c.id) {
+                    if isCollected {
                         Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 8))
+                            .font(.system(size: 9))
                             .foregroundStyle(Color.connectifyGreen)
                     } else if place.isFeatured {
                         Image(systemName: "star.fill")
-                            .font(.system(size: 8))
+                            .font(.system(size: 9))
                             .foregroundStyle(Color.accentAmber)
                     }
                 }
@@ -284,19 +302,22 @@ private struct PlaceRow: View {
 
             Image(systemName: "chevron.right")
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.tertiaryText)
+                .foregroundStyle(Color.connectifyGreen.opacity(0.5))
         }
         .padding(Spacing.sm)
-        .background(.cardSurface)
-        .clipShape(RoundedRectangle(cornerRadius: Radius.md))
-        .overlay {
-            RoundedRectangle(cornerRadius: Radius.md)
-                .strokeBorder(.subtleBorder, lineWidth: 0.5)
-        }
+        .background(
+            HStack(spacing: 0) {
+                Color.connectifyGreen.opacity(isCollected ? 1 : 0.3)
+                    .frame(width: 3)
+                Color.cardSurface
+            }
+        )
+        .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
     }
 }
 
 #Preview {
     ExploreView()
         .environment(GameStateManager())
+        .environment(PlacesAPIService())
 }

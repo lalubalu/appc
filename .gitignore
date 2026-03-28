@@ -15,3 +15,8 @@ build/
 
 # XcodeGen
 # Keep project.yml, ignore generated xcodeproj internals managed by user
+
+# Secrets — API keys injected via xcconfig, never commit
+Connectify/Secrets.xcconfig
+Connectify/Connectify/GoogleService-Info.plist
+Connectify/Connectify/Info.plist

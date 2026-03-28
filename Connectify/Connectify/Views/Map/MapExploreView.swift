@@ -4,13 +4,15 @@ import MapKit
 struct MapExploreView: View {
     @Environment(GameStateManager.self) private var gameState
     @Environment(LocationManager.self) private var locationManager
+    @Environment(PlacesAPIService.self) private var placesService
     @State private var position: MapCameraPosition = .automatic
     @State private var selectedPlace: Place? = nil
     @State private var showList = false
     @State private var hasCentered = false
+    @State private var hasFetched = false
 
     private var collectiblePlaces: [CollectiblePlace] {
-        SampleData.collectiblePlaces(around: locationManager.userCoordinate)
+        placesService.collectiblePlaces
     }
 
     private var nearbyUncollected: [CollectiblePlace] {
@@ -46,9 +48,17 @@ struct MapExploreView: View {
                     }
                 }
                 .mapStyle(.standard(pointsOfInterest: .excludingAll))
-                .onAppear { centerOnUser() }
+                .mapControls {
+                    MapCompass()
+                        .mapControlVisibility(.visible)
+                }
+                .onAppear {
+                    centerOnUser()
+                    fetchPlacesIfNeeded()
+                }
                 .onChange(of: locationManager.userLocation) { _, _ in
                     if !hasCentered { centerOnUser() }
+                    fetchPlacesIfNeeded()
                 }
 
                 VStack(spacing: 0) {
@@ -66,7 +76,19 @@ struct MapExploreView: View {
                         .background(.regularMaterial)
                         .clipShape(RoundedRectangle(cornerRadius: 4))
 
-                        if !locationManager.isAuthorized {
+                        if placesService.isLoading {
+                            HStack(spacing: 4) {
+                                ProgressView()
+                                    .scaleEffect(0.7)
+                                Text("Loading...")
+                                    .font(CFont.label(10))
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(.regularMaterial)
+                            .foregroundStyle(.secondaryText)
+                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                        } else if !locationManager.isAuthorized {
                             HStack(spacing: 4) {
                                 Image(systemName: "location.slash.fill")
                                     .font(.system(size: 10))
@@ -86,6 +108,7 @@ struct MapExploreView: View {
                             mapButton(icon: "location.fill") { centerOnUser() }
                             mapButton(icon: "list.bullet") { showList.toggle() }
                         }
+                        .padding(.top, 48)
                     }
                     .padding(.horizontal, Spacing.md)
                     .padding(.top, Spacing.md)
@@ -112,6 +135,14 @@ struct MapExploreView: View {
                     .presentationDetents([.medium, .large])
                     .presentationDragIndicator(.visible)
             }
+        }
+    }
+
+    private func fetchPlacesIfNeeded() {
+        guard !hasFetched, locationManager.userLocation != nil else { return }
+        hasFetched = true
+        Task {
+            await placesService.fetchNearbyPlaces(around: locationManager.userCoordinate)
         }
     }
 
@@ -162,7 +193,7 @@ struct MapExploreView: View {
     }
 
     private func selectedPlaceCard(_ place: Place) -> some View {
-        let collectible = SampleData.collectible(for: place, in: collectiblePlaces)
+        let collectible = placesService.collectible(for: place)
         let collected = collectible.map { gameState.isCollected($0.id) } ?? false
         let distance = collectible.map { locationManager.formattedDistance(to: $0.coordinate) } ?? place.distance
 
@@ -469,4 +500,5 @@ private struct Triangle: Shape {
     MapExploreView()
         .environment(GameStateManager())
         .environment(LocationManager())
+        .environment(PlacesAPIService())
 }

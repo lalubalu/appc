@@ -4,33 +4,36 @@ struct ProfileView: View {
     @AppStorage("prefersDarkMode") private var prefersDarkMode = false
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = true
     @Environment(GameStateManager.self) private var gameState
+    @Environment(AuthService.self) private var authService
     @State private var showRewardsStore = false
+    @State private var showSignOutConfirm = false
 
-    private let user = SampleData.currentUser
+    private var displayName: String {
+        authService.currentUser?.displayName ?? "Explorer"
+    }
+
+    private var initials: String {
+        authService.currentUser?.initials ?? "ME"
+    }
+
+    private var joinDate: String {
+        authService.currentUser?.joinDateFormatted ?? "March 2026"
+    }
+
+    private var totalXP: Int {
+        gameState.lifetimePoints * 2
+    }
 
     var body: some View {
         NavigationStack {
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: Spacing.lg) {
-                    // Profile header
                     profileHeader
-
-                    // Points & collection card
                     pointsCard
-
-                    // Stats row
                     statsRow
-
-                    // Current streak
                     streakCard
-
-                    // Badges
                     badgesSection
-
-                    // Active challenges
                     challengesSection
-
-                    // Settings
                     settingsSection
                 }
                 .padding(.horizontal, Spacing.md)
@@ -49,44 +52,56 @@ struct ProfileView: View {
 
     private var profileHeader: some View {
         VStack(spacing: Spacing.md) {
-            AvatarCircle(initials: user.initials, size: 80)
+            // Avatar on green background
+            ZStack {
+                Circle()
+                    .fill(Color.connectifyGreen.opacity(0.12))
+                    .frame(width: 100, height: 100)
+                AvatarCircle(initials: initials, size: 80)
+            }
 
             VStack(spacing: Spacing.xs) {
-                Text(user.name)
+                Text(displayName)
                     .font(CFont.title(22))
                     .foregroundStyle(.primaryText)
 
-                Text("Member since \(user.joinDate)")
+                if let email = authService.currentUser?.email {
+                    Text(email)
+                        .font(CFont.caption(12))
+                        .foregroundStyle(.tertiaryText)
+                }
+
+                Text("Member since \(joinDate)")
                     .font(CFont.caption(13))
-                    .foregroundStyle(.secondaryText)
+                    .foregroundStyle(Color.connectifyGreen)
             }
 
             // XP bar
             VStack(spacing: 6) {
                 HStack {
-                    Text("Level \(user.totalXP / 500 + 1)")
-                        .font(CFont.label(11))
+                    Text("Level \(totalXP / 500 + 1)")
+                        .font(CFont.label(12))
                         .foregroundStyle(Color.connectifyGreen)
 
                     Spacer()
 
-                    Text("\(user.totalXP) / \((user.totalXP / 500 + 1) * 500) XP")
-                        .font(CFont.label(11))
+                    Text("\(totalXP) / \((totalXP / 500 + 1) * 500) XP")
+                        .font(CFont.label(12))
                         .foregroundStyle(.secondaryText)
                 }
 
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
                         Capsule()
-                            .fill(.subtleBorder)
-                            .frame(height: 6)
+                            .fill(Color.connectifyGreen.opacity(0.12))
+                            .frame(height: 8)
 
                         Capsule()
                             .fill(Color.connectifyGreen)
-                            .frame(width: geo.size.width * (Double(user.totalXP % 500) / 500.0), height: 6)
+                            .frame(width: geo.size.width * (Double(totalXP % 500) / 500.0), height: 8)
                     }
                 }
-                .frame(height: 6)
+                .frame(height: 8)
             }
             .padding(.horizontal, Spacing.xl)
         }
@@ -101,10 +116,10 @@ struct ProfileView: View {
                 Text("POINTS")
                     .font(CFont.label(10))
                     .tracking(0.8)
-                    .foregroundStyle(.secondaryText)
+                    .foregroundStyle(Color.connectifyGreen)
 
                 Text("\(gameState.pointsBalance)")
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .font(CFont.mono(32))
                     .foregroundStyle(.primaryText)
                     .contentTransition(.numericText())
 
@@ -129,20 +144,22 @@ struct ProfileView: View {
                     Text("Rewards")
                         .font(CFont.label(11))
                 }
-                .foregroundStyle(.black)
+                .foregroundStyle(.white)
                 .frame(width: 72, height: 72)
                 .background(Color.connectifyGreen)
-                .clipShape(RoundedRectangle(cornerRadius: Radius.md))
+                .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
             }
             .buttonStyle(.plain)
         }
         .padding(Spacing.md)
-        .background(.cardSurface)
+        .background(
+            HStack(spacing: 0) {
+                Color.connectifyGreen
+                    .frame(width: 3)
+                Color.cardSurface
+            }
+        )
         .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
-        .overlay {
-            RoundedRectangle(cornerRadius: Radius.lg)
-                .strokeBorder(.subtleBorder, lineWidth: 0.5)
-        }
     }
 
     // MARK: - Stats
@@ -151,7 +168,7 @@ struct ProfileView: View {
         HStack(spacing: Spacing.sm) {
             StatCard(value: "\(gameState.totalEventsAttended)", label: "Events", icon: "calendar.badge.checkmark")
             StatCard(value: "\(gameState.totalCollected)", label: "Places", icon: "trophy.fill")
-            StatCard(value: "\(user.currentStreak)", label: "Day Streak", icon: "flame.fill")
+            StatCard(value: "7", label: "Day Streak", icon: "flame.fill")
         }
     }
 
@@ -162,8 +179,8 @@ struct ProfileView: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     Image(systemName: "flame.fill")
-                        .foregroundStyle(Color.accentCoral)
-                    Text("\(user.currentStreak)-day streak!")
+                        .foregroundStyle(Color.connectifyGreen)
+                    Text("7-day streak!")
                         .font(CFont.headline(16))
                         .foregroundStyle(.primaryText)
                 }
@@ -175,22 +192,17 @@ struct ProfileView: View {
 
             Spacer()
 
-            // Week dots
             HStack(spacing: 6) {
-                ForEach(0..<7, id: \.self) { day in
+                ForEach(0..<7, id: \.self) { _ in
                     Circle()
-                        .fill(day < user.currentStreak ? Color.connectifyGreen : .subtleBorder)
+                        .fill(Color.connectifyGreen)
                         .frame(width: 10, height: 10)
                 }
             }
         }
         .padding(Spacing.md)
-        .background(.cardSurface)
+        .background(.greenCard)
         .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
-        .overlay {
-            RoundedRectangle(cornerRadius: Radius.lg)
-                .strokeBorder(.subtleBorder, lineWidth: 0.5)
-        }
     }
 
     // MARK: - Badges
@@ -199,12 +211,13 @@ struct ProfileView: View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
             SectionHeader(title: "Badges", action: "See All")
 
+            let badges = SampleData.currentUser.badges
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                ForEach(user.badges) { badge in
+                ForEach(badges) { badge in
                     VStack(spacing: 8) {
                         ZStack {
                             Circle()
-                                .fill(badge.earned ? .greenSurface : .cardSurface)
+                                .fill(badge.earned ? Color.connectifyGreen.opacity(0.15) : .cardSurface)
                                 .frame(width: 56, height: 56)
 
                             Image(systemName: badge.icon)
@@ -216,7 +229,7 @@ struct ProfileView: View {
                             .font(CFont.caption(11))
                             .foregroundStyle(badge.earned ? .primaryText : .tertiaryText)
                     }
-                    .opacity(badge.earned ? 1 : 0.5)
+                    .opacity(badge.earned ? 1 : 0.4)
                 }
             }
         }
@@ -246,13 +259,7 @@ struct ProfileView: View {
 
                     XPBadge(xp: challenge.xpReward)
                 }
-                .padding(Spacing.md)
-                .background(.cardSurface)
-                .clipShape(RoundedRectangle(cornerRadius: Radius.md))
-                .overlay {
-                    RoundedRectangle(cornerRadius: Radius.md)
-                        .strokeBorder(.subtleBorder, lineWidth: 0.5)
-                }
+                .greenAccentCard()
             }
         }
     }
@@ -261,12 +268,9 @@ struct ProfileView: View {
 
     private var settingsSection: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
-            Text("Settings")
-                .font(CFont.title(20))
-                .foregroundStyle(.primaryText)
+            SectionHeader(title: "Settings")
 
             VStack(spacing: 0) {
-                // Dark mode toggle
                 settingsRow(icon: "moon.fill", label: "Dark Mode") {
                     Toggle("", isOn: $prefersDarkMode)
                         .tint(Color.connectifyGreen)
@@ -275,7 +279,6 @@ struct ProfileView: View {
 
                 Divider().padding(.leading, 52)
 
-                // Notifications
                 settingsRow(icon: "bell.fill", label: "Notifications") {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 12, weight: .semibold))
@@ -284,7 +287,6 @@ struct ProfileView: View {
 
                 Divider().padding(.leading, 52)
 
-                // Privacy
                 settingsRow(icon: "lock.fill", label: "Privacy") {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 12, weight: .semibold))
@@ -293,7 +295,6 @@ struct ProfileView: View {
 
                 Divider().padding(.leading, 52)
 
-                // About
                 settingsRow(icon: "info.circle.fill", label: "About Connectify") {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 12, weight: .semibold))
@@ -302,16 +303,10 @@ struct ProfileView: View {
             }
             .background(.cardSurface)
             .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
-            .overlay {
-                RoundedRectangle(cornerRadius: Radius.lg)
-                    .strokeBorder(.subtleBorder, lineWidth: 0.5)
-            }
 
             // Sign out
             Button {
-                withAnimation {
-                    hasCompletedOnboarding = false
-                }
+                showSignOutConfirm = true
             } label: {
                 HStack {
                     Image(systemName: "rectangle.portrait.and.arrow.right")
@@ -323,13 +318,19 @@ struct ProfileView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
                 .background(.cardSurface)
-                .clipShape(RoundedRectangle(cornerRadius: Radius.md))
-                .overlay {
-                    RoundedRectangle(cornerRadius: Radius.md)
-                        .strokeBorder(Color.connectifyDestructive.opacity(0.2), lineWidth: 0.5)
-                }
+                .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
             }
             .buttonStyle(.plain)
+            .confirmationDialog("Sign out of Connectify?", isPresented: $showSignOutConfirm) {
+                Button("Sign Out", role: .destructive) {
+                    authService.signOut()
+                    gameState.disconnectCloud()
+                    withAnimation {
+                        hasCompletedOnboarding = false
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            }
         }
     }
 
@@ -356,4 +357,5 @@ struct ProfileView: View {
 #Preview {
     ProfileView()
         .environment(GameStateManager())
+        .environment(AuthService())
 }

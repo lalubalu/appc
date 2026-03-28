@@ -26,11 +26,11 @@ struct ConnectifyButton: View {
             .padding(.vertical, 15)
             .background(backgroundColorFor(style))
             .foregroundStyle(foregroundColorFor(style))
-            .clipShape(RoundedRectangle(cornerRadius: Radius.md))
+            .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
             .overlay {
                 if style == .secondary {
-                    RoundedRectangle(cornerRadius: Radius.md)
-                        .strokeBorder(.subtleBorder, lineWidth: 1.5)
+                    RoundedRectangle(cornerRadius: Radius.lg)
+                        .strokeBorder(Color.connectifyGreen.opacity(0.25), lineWidth: 1)
                 }
             }
         }
@@ -40,15 +40,16 @@ struct ConnectifyButton: View {
     private func backgroundColorFor(_ style: ButtonStyle) -> Color {
         switch style {
         case .primary: return Color.connectifyGreen
-        case .secondary: return Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.15, green: 0.155, blue: 0.195, alpha: 1) : .white })
+        case .secondary: return .greenSurface
         case .ghost: return .clear
         }
     }
 
     private func foregroundColorFor(_ style: ButtonStyle) -> Color {
         switch style {
-        case .primary: return .black
-        case .secondary, .ghost: return Color(UIColor { $0.userInterfaceStyle == .dark ? .white : UIColor(red: 0.1, green: 0.1, blue: 0.12, alpha: 1) })
+        case .primary: return .white
+        case .secondary: return Color.connectifyGreen
+        case .ghost: return Color.connectifyGreen
         }
     }
 }
@@ -71,14 +72,10 @@ struct CategoryPill: View {
                     .font(CFont.caption(13))
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .background(isSelected ? tint.opacity(0.15) : .cardSurface)
-            .foregroundStyle(isSelected ? tint : .secondaryText)
-            .clipShape(RoundedRectangle(cornerRadius: 4))
-            .overlay {
-                RoundedRectangle(cornerRadius: 4)
-                    .strokeBorder(isSelected ? tint.opacity(0.4) : .subtleBorder, lineWidth: 1)
-            }
+            .padding(.vertical, 9)
+            .background(isSelected ? Color.connectifyGreen : .cardSurface)
+            .foregroundStyle(isSelected ? .white : .secondaryText)
+            .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
         }
         .buttonStyle(.plain)
     }
@@ -92,13 +89,13 @@ struct StatCard: View {
     let icon: String
 
     var body: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 8) {
             Image(systemName: icon)
-                .font(.system(size: 18))
+                .font(.system(size: 20))
                 .foregroundStyle(Color.connectifyGreen)
 
             Text(value)
-                .font(CFont.title(22))
+                .font(CFont.mono(24))
                 .foregroundStyle(.primaryText)
 
             Text(label)
@@ -107,12 +104,8 @@ struct StatCard: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, Spacing.md)
-        .background(.cardSurface)
-        .clipShape(RoundedRectangle(cornerRadius: Radius.md))
-        .overlay {
-            RoundedRectangle(cornerRadius: Radius.md)
-                .strokeBorder(.subtleBorder, lineWidth: 0.5)
-        }
+        .background(.greenCard)
+        .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
     }
 }
 
@@ -124,11 +117,17 @@ struct SectionHeader: View {
     var onAction: (() -> Void)? = nil
 
     var body: some View {
-        HStack {
+        HStack(alignment: .center, spacing: 8) {
+            RoundedRectangle(cornerRadius: 1)
+                .fill(Color.connectifyGreen)
+                .frame(width: 3, height: 18)
+
             Text(title)
                 .font(CFont.title(20))
                 .foregroundStyle(.primaryText)
+
             Spacer()
+
             if let action {
                 Button(action) {
                     onAction?()
@@ -154,9 +153,9 @@ struct XPBadge: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
-        .background(.greenSurface)
-        .foregroundStyle(Color.connectifyGreen)
-        .clipShape(RoundedRectangle(cornerRadius: 3))
+        .background(Color.connectifyGreen)
+        .foregroundStyle(.white)
+        .clipShape(RoundedRectangle(cornerRadius: Radius.md))
     }
 }
 
@@ -169,18 +168,36 @@ struct PlacePlaceholder: View {
 
     var body: some View {
         ZStack {
+            // Richer background with green undertone
             LinearGradient(
-                colors: [color.opacity(0.25), color.opacity(0.08)],
+                colors: [
+                    Color.connectifyGreen.opacity(0.08),
+                    color.opacity(0.20),
+                    color.opacity(0.06)
+                ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
 
+            // Subtle pattern overlay
+            GeometryReader { geo in
+                Path { path in
+                    let w = geo.size.width
+                    let h = geo.size.height
+                    for i in stride(from: 0, through: w, by: 40) {
+                        path.move(to: CGPoint(x: i, y: 0))
+                        path.addLine(to: CGPoint(x: i + h * 0.5, y: h))
+                    }
+                }
+                .stroke(color.opacity(0.06), lineWidth: 1)
+            }
+
             Image(systemName: icon)
-                .font(.system(size: 32, weight: .light))
-                .foregroundStyle(color.opacity(0.6))
+                .font(.system(size: 36, weight: .light))
+                .foregroundStyle(color.opacity(0.45))
         }
         .frame(height: height)
-        .clipShape(RoundedRectangle(cornerRadius: Radius.md))
+        .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
     }
 }
 
@@ -193,16 +210,10 @@ struct AvatarCircle: View {
     var body: some View {
         ZStack {
             Circle()
-                .fill(
-                    LinearGradient(
-                        colors: [Color.connectifyGreen.opacity(0.7), Color.connectifyGreen],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
+                .fill(Color.connectifyGreen)
             Text(initials)
-                .font(.system(size: size * 0.36, weight: .semibold, design: .default))
-                .foregroundStyle(.black)
+                .font(.system(size: size * 0.36, weight: .bold, design: .default))
+                .foregroundStyle(.white)
         }
         .frame(width: size, height: size)
     }
@@ -219,7 +230,7 @@ struct EmptyStateView: View {
         VStack(spacing: Spacing.md) {
             Image(systemName: icon)
                 .font(.system(size: 44, weight: .light))
-                .foregroundStyle(.tertiaryText)
+                .foregroundStyle(Color.connectifyGreen.opacity(0.4))
 
             VStack(spacing: Spacing.xs) {
                 Text(title)
@@ -245,7 +256,7 @@ struct ProgressRing: View {
     var body: some View {
         ZStack {
             Circle()
-                .stroke(.subtleBorder, lineWidth: lineWidth)
+                .stroke(Color.connectifyGreen.opacity(0.12), lineWidth: lineWidth)
 
             Circle()
                 .trim(from: 0, to: progress)
@@ -257,8 +268,26 @@ struct ProgressRing: View {
 
             Text("\(Int(progress * 100))%")
                 .font(CFont.label(size * 0.24))
-                .foregroundStyle(.primaryText)
+                .foregroundStyle(Color.connectifyGreen)
         }
         .frame(width: size, height: size)
+    }
+}
+
+// MARK: - Green Accent Card modifier
+
+extension View {
+    /// Wraps the view in a card with a green left-edge accent bar
+    func greenAccentCard() -> some View {
+        self
+            .padding(Spacing.md)
+            .background(
+                HStack(spacing: 0) {
+                    Color.connectifyGreen
+                        .frame(width: 3)
+                    Color.cardSurface
+                }
+            )
+            .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
     }
 }

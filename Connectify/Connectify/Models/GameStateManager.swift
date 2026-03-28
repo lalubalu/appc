@@ -3,29 +3,72 @@ import SwiftUI
 import CoreLocation
 import Observation
 
-@Observable
+@MainActor @Observable
 final class GameStateManager {
 
     // MARK: - Persisted State
 
     var collectedPlaceIDs: Set<String> {
-        didSet { save(collectedPlaceIDs, forKey: "collectedPlaceIDs") }
+        didSet {
+            save(collectedPlaceIDs, forKey: "collectedPlaceIDs")
+            scheduleSyncIfNeeded()
+        }
     }
 
     var checkedInEventIDs: Set<String> {
-        didSet { save(checkedInEventIDs, forKey: "checkedInEventIDs") }
+        didSet {
+            save(checkedInEventIDs, forKey: "checkedInEventIDs")
+            scheduleSyncIfNeeded()
+        }
     }
 
     var pointsBalance: Int {
-        didSet { UserDefaults.standard.set(pointsBalance, forKey: "pointsBalance") }
+        didSet {
+            UserDefaults.standard.set(pointsBalance, forKey: "pointsBalance")
+            scheduleSyncIfNeeded()
+        }
     }
 
     var lifetimePoints: Int {
-        didSet { UserDefaults.standard.set(lifetimePoints, forKey: "lifetimePoints") }
+        didSet {
+            UserDefaults.standard.set(lifetimePoints, forKey: "lifetimePoints")
+            scheduleSyncIfNeeded()
+        }
     }
 
     var redeemedRewardIDs: Set<String> {
-        didSet { save(redeemedRewardIDs, forKey: "redeemedRewardIDs") }
+        didSet {
+            save(redeemedRewardIDs, forKey: "redeemedRewardIDs")
+            scheduleSyncIfNeeded()
+        }
+    }
+
+    // MARK: - Cloud Sync
+
+    private var firestoreService: FirestoreService?
+    private var currentUserID: String?
+    private var syncTask: Task<Void, Never>?
+
+    /// Connect to Firestore for cloud sync. Call after authentication.
+    func connectCloud(firestore: FirestoreService, userID: String) {
+        self.firestoreService = firestore
+        self.currentUserID = userID
+
+        // Attempt to merge cloud state
+        Task { @MainActor in
+            if let cloudState = await firestore.fetchGameState(userID: userID) {
+                self.mergeCloudState(cloudState)
+            } else {
+                self.syncToCloud()
+            }
+        }
+    }
+
+    /// Disconnect cloud sync (e.g., on sign out).
+    func disconnectCloud() {
+        syncTask?.cancel()
+        firestoreService = nil
+        currentUserID = nil
     }
 
     // MARK: - Computed
@@ -56,7 +99,6 @@ final class GameStateManager {
 
     // MARK: - Event Check-in (primary points source)
 
-    /// Check in to an event and earn points. Returns points earned.
     @discardableResult
     func checkInEvent(_ event: Event) -> Int {
         guard !isCheckedIn(event.id) else { return 0 }
@@ -73,7 +115,6 @@ final class GameStateManager {
 
     // MARK: - Place Collection (secondary, small points)
 
-    /// Collect a place — small bonus points
     @discardableResult
     func collectPlace(_ collectible: CollectiblePlace) -> Int {
         guard !isCollected(collectible.id) else { return 0 }
@@ -88,7 +129,6 @@ final class GameStateManager {
         collectedPlaceIDs.contains(placeID)
     }
 
-    /// Redeem a reward, returns true if successful
     @discardableResult
     func redeemReward(_ reward: Reward) -> Bool {
         guard pointsBalance >= reward.pointCost else { return false }
@@ -106,7 +146,6 @@ final class GameStateManager {
         pointsBalance >= reward.pointCost
     }
 
-    /// Uncollected places, optionally filtered to GPS-nearby only
     func uncollected(from places: [CollectiblePlace], nearbyOnly: Bool = false, userLocation: CLLocation? = nil) -> [CollectiblePlace] {
         places.filter { place in
             let notCollected = !isCollected(place.id)
@@ -117,7 +156,6 @@ final class GameStateManager {
         }
     }
 
-    /// Collection count per category
     func collectionsByCategory(from places: [CollectiblePlace]) -> [PlaceCategory: (collected: Int, total: Int)] {
         var result: [PlaceCategory: (collected: Int, total: Int)] = [:]
         for place in places {
@@ -129,14 +167,52 @@ final class GameStateManager {
         return result
     }
 
+    // MARK: - Cloud Merge
+
+    private func mergeCloudState(_ cloud: CloudGameState) {
+        // Union strategy: keep the superset of collected items, max of points
+        collectedPlaceIDs = collectedPlaceIDs.union(cloud.collectedPlaceIDs)
+        checkedInEventIDs = checkedInEventIDs.union(cloud.checkedInEventIDs)
+        redeemedRewardIDs = redeemedRewardIDs.union(cloud.redeemedRewardIDs)
+        pointsBalance = max(pointsBalance, cloud.pointsBalance)
+        lifetimePoints = max(lifetimePoints, cloud.lifetimePoints)
+
+        // Push merged state back to cloud
+        syncToCloud()
+    }
+
+    private func scheduleSyncIfNeeded() {
+        guard firestoreService != nil, currentUserID != nil else { return }
+
+        // Debounce: cancel pending sync, schedule a new one
+        syncTask?.cancel()
+        syncTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            self.syncToCloud()
+        }
+    }
+
+    private func syncToCloud() {
+        guard let firestore = firestoreService, let userID = currentUserID else { return }
+
+        Task {
+            await firestore.syncGameState(
+                userID: userID,
+                collectedPlaceIDs: collectedPlaceIDs,
+                checkedInEventIDs: checkedInEventIDs,
+                pointsBalance: pointsBalance,
+                lifetimePoints: lifetimePoints,
+                redeemedRewardIDs: redeemedRewardIDs
+            )
+        }
+    }
+
     // MARK: - Demo Seed
 
     private func seedDemoData() {
-        // Pre-attend 2 events for demo
-        checkedInEventIDs = Set(["river-cleanup-day", "weekend-farmers-market"])
-        // Pre-collect 1 place
         collectedPlaceIDs = Set(["riverside-park"])
-        // 200 (cleanup) + 75 (market) + 5 (common place) = 280 starting points
+        checkedInEventIDs = Set(["river-cleanup-day", "weekend-farmers-market"])
         pointsBalance = 280
         lifetimePoints = 280
     }

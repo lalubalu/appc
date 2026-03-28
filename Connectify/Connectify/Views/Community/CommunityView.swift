@@ -60,12 +60,8 @@ struct CommunityView: View {
                     .foregroundStyle(.secondaryText)
             }
             .padding(Spacing.md)
-            .background(.cardSurface)
+            .background(.greenCard)
             .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
-            .overlay {
-                RoundedRectangle(cornerRadius: Radius.lg)
-                    .strokeBorder(.subtleBorder, lineWidth: 0.5)
-            }
         }
         .buttonStyle(.plain)
         .padding(.horizontal, Spacing.md)
@@ -226,12 +222,14 @@ private struct PostCard: View {
             }
         }
         .padding(Spacing.md)
-        .background(.cardSurface)
+        .background(
+            HStack(spacing: 0) {
+                Color.connectifyGreen.opacity(0.4)
+                    .frame(width: 3)
+                Color.cardSurface
+            }
+        )
         .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
-        .overlay {
-            RoundedRectangle(cornerRadius: Radius.lg)
-                .strokeBorder(.subtleBorder, lineWidth: 0.5)
-        }
     }
 
     private func actionButton(icon: String, count: Int?, tint: Color? = nil, action: @escaping () -> Void) -> some View {
