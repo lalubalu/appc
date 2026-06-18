@@ -1,0 +1,325 @@
+import SwiftUI
+
+struct ExploreView: View {
+    @Environment(GameStateManager.self) private var gameState
+    @Environment(PlacesAPIService.self) private var placesService
+    @State private var gemPlace: Place? = nil
+
+    private var sourcePlaces: [Place] {
+        placesService.places.isEmpty ? SampleData.places : placesService.places
+    }
+    private var dailyGem: DailyGem {
+        let gem = sourcePlaces.max(by: { $0.rating < $1.rating }) ?? SampleData.places[0]
+        return DailyGem(place: gem, headline: gem.name,
+                        reason: "One of the highest-rated spots near you — go discover it today.")
+    }
+    private var level: Int { max(1, gameState.lifetimePoints / 500 + 1) }
+    private var xpInLevel: Int { gameState.lifetimePoints % 500 }
+    private var levelProgress: Double { Double(xpInLevel) / 500.0 }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(alignment: .leading, spacing: Spacing.lg) {
+                    header.riseIn(index: 0)
+                    heroBento.riseIn(index: 1)
+                    dailyGemTile.riseIn(index: 2)
+                    statsStrip.riseIn(index: 3)
+                    questsSection.riseIn(index: 4)
+                    nearbySection.riseIn(index: 5)
+                }
+                .padding(.horizontal, Spacing.md)
+                .padding(.top, Spacing.sm)
+                .padding(.bottom, 110)
+            }
+            .background(VerdureBackground())
+            .navigationDestination(for: Place.self) { PlaceDetailView(place: $0) }
+            .sheet(item: $gemPlace) { PlaceDetailView(place: $0) }
+        }
+    }
+
+    // MARK: - Header
+
+    private var header: some View {
+        HStack(alignment: .center) {
+            VStack(alignment: .leading, spacing: 4) {
+                KickerLabel(text: greeting, dot: Palette.gold.base)
+                Text("Explore").font(VType.display(38, .bold)).foregroundStyle(Palette.ink)
+            }
+            Spacer()
+            AvatarCircle(initials: "ME", size: 46, accent: Palette.spruce)
+        }
+    }
+
+    private var greeting: String {
+        let h = Calendar.current.component(.hour, from: Date())
+        return h < 12 ? "Good morning" : (h < 18 ? "Good afternoon" : "Good evening")
+    }
+
+    // MARK: - Hero bento (3D level tile + streak/points column)
+
+    private var heroBento: some View {
+        HStack(spacing: 12) {
+            levelTile
+            VStack(spacing: 12) {
+                statTile(value: "\(SampleData.currentUser.currentStreak)", unit: "day streak",
+                         icon: "flame.fill", kind: .terracotta)
+                statTile(value: "\(gameState.pointsBalance)", unit: "points",
+                         icon: "leaf.circle.fill", kind: .gold)
+            }
+            .frame(width: 132)
+        }
+    }
+
+    private var levelTile: some View {
+        VStack(spacing: 6) {
+            ZStack {
+                AmbientGlow(color: Palette.teal.base.opacity(0.4), size: 150, opacity: 0.7)
+                MedallionHero(size: 130, interactive: false)
+            }
+            .frame(height: 132)
+            HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("LEVEL").font(VType.body(9, .bold)).tracking(1.4).foregroundStyle(Palette.inkSoft)
+                    Text("\(level)").font(VType.num(26, .bold)).foregroundStyle(Palette.ink)
+                }
+                Spacer()
+                NeonProgressRing(progress: levelProgress, size: 42, lineWidth: 5,
+                                 color: Palette.teal.base, showLabel: false)
+                    .overlay {
+                        Image(systemName: "bolt.fill").font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(Palette.gold.base)
+                    }
+            }
+            Text("\(xpInLevel) / 500 XP to level \(level + 1)")
+                .font(VType.num(10, .medium)).foregroundStyle(Palette.inkFaint)
+                .lineLimit(1).minimumScaleFactor(0.7)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(Spacing.md)
+        .frame(maxWidth: .infinity)
+        .claySurface(.surface, radius: Radius.lg, elevation: 1.1)
+        .parallaxTilt(magnitude: 4, shadow: false)
+    }
+
+    private func statTile(value: String, unit: String, icon: String, kind: ClayStyle.ClayAccentKind) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Image(systemName: icon).font(.system(size: 18, weight: .bold)).foregroundStyle(kind.accent.base)
+            Spacer(minLength: 0)
+            Text(value).font(VType.num(28, .bold)).foregroundStyle(Palette.ink).monospacedDigit()
+                .lineLimit(1).minimumScaleFactor(0.5)
+            Text(unit).font(VType.body(11, .medium)).foregroundStyle(Palette.inkSoft).lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: 78)
+        .padding(Spacing.md)
+        .claySurface(.surface, radius: Radius.md, elevation: 0.8)
+    }
+
+    // MARK: - Daily Gem (wide immersive)
+
+    private var dailyGemTile: some View {
+        let gem = dailyGem
+        let kind = gem.place.category.clayKind
+        return Button(action: { Haptics.tap(); gemPlace = gem.place }) {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack {
+                    HStack(spacing: 5) {
+                        Image(systemName: "sparkle").font(.system(size: 10, weight: .bold))
+                        Text("TODAY'S GEM").font(VType.body(10, .bold)).tracking(1.2)
+                    }
+                    .foregroundStyle(Palette.gold.onColor)
+                    .padding(.horizontal, 11).padding(.vertical, 6)
+                    .background(ClayBackground(style: .accent(.gold), radius: Radius.chip, elevation: 0.4))
+                    Spacer()
+                    Image(systemName: gem.place.category.icon).font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(kind.accent.base)
+                }
+                .padding(.bottom, Spacing.md)
+                Text(gem.headline).font(VType.display(26, .semibold)).foregroundStyle(Palette.ink)
+                    .lineLimit(1)
+                Text(gem.reason).font(VType.body(14)).foregroundStyle(Palette.inkSoft)
+                    .lineLimit(2).fixedSize(horizontal: false, vertical: true).padding(.top, 4)
+                HStack(spacing: 10) {
+                    miniStat("location.fill", gem.place.distance)
+                    miniStat("star.fill", String(format: "%.1f", gem.place.rating))
+                    Spacer()
+                    HStack(spacing: 6) {
+                        Text("Discover").font(VType.body(14, .bold))
+                        Image(systemName: "arrow.right").font(.system(size: 12, weight: .bold))
+                    }
+                    .foregroundStyle(Palette.spruce.base)
+                }
+                .padding(.top, Spacing.md)
+            }
+            .padding(Spacing.lg)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .claySurface(.surface, radius: Radius.lg, elevation: 1.2)
+            // Clip ONLY the decorative glow to the card shape — leaving the clay
+            // outer float intact (a card-level clipShape would flatten it).
+            .overlay {
+                AmbientGlow(color: kind.accent.base.opacity(0.22), size: 200, opacity: 0.6)
+                    .offset(x: 40, y: -30)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .clipShape(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous))
+                    .allowsHitTesting(false)
+            }
+        }
+        .buttonStyle(Card3DButtonStyle())
+    }
+
+    private func miniStat(_ icon: String, _ text: String) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: icon).font(.system(size: 11, weight: .bold))
+            Text(text).font(VType.num(13, .semibold))
+        }
+        .foregroundStyle(Palette.inkSoft)
+        .padding(.horizontal, 10).padding(.vertical, 6)
+        .background(ClayBackground(style: .inset, radius: Radius.chip))
+    }
+
+    // MARK: - Stats strip
+
+    private var statsStrip: some View {
+        HStack(spacing: 12) {
+            pill("\(gameState.totalCollected)", "Collected", "leaf.fill", .teal)
+            pill("\(gameState.totalEventsAttended)", "Events", "calendar", .spruce)
+            pill("\(gameState.lifetimePoints)", "Lifetime", "chart.line.uptrend.xyaxis", .gold)
+        }
+    }
+
+    private func pill(_ value: String, _ label: String, _ icon: String, _ kind: ClayStyle.ClayAccentKind) -> some View {
+        VStack(spacing: 6) {
+            Image(systemName: icon).font(.system(size: 15, weight: .bold)).foregroundStyle(kind.accent.base)
+            Text(value).font(VType.num(20, .bold)).foregroundStyle(Palette.ink).monospacedDigit()
+                .lineLimit(1).minimumScaleFactor(0.5)
+            Text(label).font(VType.body(10, .medium)).foregroundStyle(Palette.inkSoft).lineLimit(1)
+        }
+        .frame(maxWidth: .infinity).padding(.vertical, Spacing.md)
+        .claySurface(.surface, radius: Radius.md, elevation: 0.7)
+    }
+
+    // MARK: - Quests
+
+    private var questsSection: some View {
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            ClaySectionHeader(index: "01", kicker: "This week", title: "Your Quests",
+                              accent: Palette.gold.base)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 14) {
+                    ForEach(Array(SampleData.challenges.enumerated()), id: \.element.id) { i, c in
+                        QuestCard(challenge: c, kind: [.teal, .gold, .spruce, .terracotta][i % 4])
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+        }
+    }
+
+    // MARK: - Nearby
+
+    private var nearbySection: some View {
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            ClaySectionHeader(index: "02", kicker: "Around you", title: "Nearby Places",
+                              accent: Palette.teal.base)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 14) {
+                    ForEach(sourcePlaces.prefix(6)) { place in
+                        NavigationLink(value: place) {
+                            NearbyCard(place: place, collected: isCollected(place))
+                        }
+                        .buttonStyle(Card3DButtonStyle())
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+        }
+    }
+
+    private func isCollected(_ place: Place) -> Bool {
+        let id = placesService.collectible(for: place)?.id ?? SampleData.collectible(for: place)?.id ?? ""
+        return gameState.isCollected(id)
+    }
+}
+
+// MARK: - Quest card
+
+private struct QuestCard: View {
+    let challenge: Challenge
+    let kind: ClayStyle.ClayAccentKind
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .top) {
+                ClayIconTile(systemImage: challenge.icon, kind: kind, size: 44, radius: Radius.chip)
+                Spacer()
+                NeonProgressRing(progress: challenge.progress, size: 40, lineWidth: 4,
+                                 color: kind.accent.base)
+            }
+            .padding(.bottom, Spacing.md)
+            Text(challenge.title).font(VType.display(16, .semibold)).foregroundStyle(Palette.ink)
+            Text(challenge.description).font(VType.body(12)).foregroundStyle(Palette.inkSoft)
+                .lineLimit(2).fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 2)
+            Spacer(minLength: Spacing.md)
+            HStack {
+                XPBadge(xp: challenge.xpReward)
+                Spacer()
+                Text("\(challenge.daysRemaining)d").font(VType.body(11, .semibold)).foregroundStyle(Palette.inkFaint)
+            }
+        }
+        .padding(Spacing.md)
+        .frame(width: 196, height: 184, alignment: .topLeading)
+        .claySurface(.surface, radius: Radius.md, elevation: 0.9)
+        .overlay(alignment: .top) {
+            Capsule().fill(kind.accent.faceGradient).frame(height: 5)
+                .padding(.horizontal, 20).offset(y: 2)
+        }
+    }
+}
+
+// MARK: - Nearby card (vertical poster, not a list row)
+
+private struct NearbyCard: View {
+    let place: Place
+    let collected: Bool
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
+                    .fill(place.category.accent.faceGradient)
+                    .frame(height: 110)
+                    .overlay {
+                        Image(systemName: place.imagePlaceholder)
+                            .font(.system(size: 42, weight: .semibold))
+                            .foregroundStyle(place.category.accent.onColor.opacity(0.9))
+                    }
+                if collected {
+                    VStack { HStack { Spacer()
+                        Image(systemName: "checkmark.seal.fill").font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(.white).shadow(radius: 2) }
+                        Spacer() }.padding(8)
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: Radius.sm, style: .continuous))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(place.category.rawValue.uppercased()).font(VType.body(9, .bold)).tracking(0.6)
+                    .foregroundStyle(place.category.accent.base)
+                Text(place.name).font(VType.display(15, .semibold)).foregroundStyle(Palette.ink).lineLimit(1)
+                HStack(spacing: 10) {
+                    Label(place.distance, systemImage: "location.fill")
+                    Label(String(format: "%.1f", place.rating), systemImage: "star.fill")
+                }
+                .font(VType.num(11, .semibold)).foregroundStyle(Palette.inkFaint)
+            }
+        }
+        .padding(10)
+        .frame(width: 168)
+        .claySurface(.surface, radius: Radius.md, elevation: 0.85)
+    }
+}
+
+#Preview {
+    ExploreView()
+        .environment(GameStateManager())
+        .environment(PlacesAPIService())
+}
