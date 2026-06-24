@@ -213,11 +213,18 @@ private struct GemTile: View {
                 HStack(spacing: 5) {
                     RarityDot(rarity: collectible.rarity, size: 8)
                     Spacer()
-                    PointsBadge(points: collectible.pointValue, prefix: isCollected ? "" : "+")
+                    PointsBadge(points: collectible.pointValue, prefix: isCollected ? "" : "+",
+                                kind: collectible.rarity.clayKind)
                 }
             }
             .padding(10)
             .claySurface(.surface, radius: Radius.md, elevation: isCollected ? 0.95 : 0.6)
+            // Rarity-tinted border so each tier reads distinctly (Vishvak/Rishit feedback).
+            .overlay(
+                RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
+                    .strokeBorder(collectible.rarity.accent.base.opacity(isCollected ? 0.6 : 0.28),
+                                  lineWidth: isCollected ? 2 : 1.5)
+            )
         }
         .buttonStyle(Card3DButtonStyle())
         .idleFloat(distance: isCollected ? 4 : 0, duration: 3.2)

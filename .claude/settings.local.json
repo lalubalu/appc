@@ -10,7 +10,11 @@
       "Bash(open:*)",
       "Bash(gh auth:*)",
       "Bash(git config:*)",
-      "Bash(gh repo:*)"
+      "Bash(gh repo:*)",
+      "Skill(run)"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "shadcn"
+  ]
 }

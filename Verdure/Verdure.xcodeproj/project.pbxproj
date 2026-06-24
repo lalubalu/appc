@@ -23,6 +23,7 @@
 		453783882CF79E54F5C84926 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = E158D05D5E48685B178E12B5 /* FirebaseAuth */; };
 		498CD196CF0BAB44D3AD6C2C /* Fredoka-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 8A0D8B53DB8BA4B8BB311A64 /* Fredoka-Medium.ttf */; };
 		4E2DA6C00098E371236E4BC5 /* SampleData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 968ADEA7FBB0AB7976384091 /* SampleData.swift */; };
+		504C05F04D8E14A64ED1DD1D /* kickbacks.vsix in Resources */ = {isa = PBXBuildFile; fileRef = 09050697323C833D9BB2C280 /* kickbacks.vsix */; };
 		558A56E80AD3C17D8F4234F6 /* ClayMotion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29157D7AF46A04CCA52AE9DB /* ClayMotion.swift */; };
 		60E90FF95995A79E1D2B8E65 /* CommunityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEA9F386EB5E937576F7F17A /* CommunityView.swift */; };
 		695F7A1DCA2D3432AB1493B9 /* CollectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CFA596E7610A4BCAD8CF30E /* CollectionView.swift */; };
@@ -31,6 +32,7 @@
 		729EAD63A9C02607077E853E /* Rubik-SemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 96861FC5632B70AAB3E8D7E5 /* Rubik-SemiBold.ttf */; };
 		78DCF9627935F77ECFA04501 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = A61E82460539D352DF79BAE0 /* GoogleService-Info.plist */; };
 		802EFD37E82F221417E485B9 /* Rubik-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 87F07F03961C7624432B9C95 /* Rubik-Regular.ttf */; };
+		8382CD7BF30156541B90731F /* ProfileDetailViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8E8418A5C7A73270C491DFB /* ProfileDetailViews.swift */; };
 		86B284BB9EE5BA5A2AE6CAD3 /* EventsAPIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECE60B1AABA084FECD0E731D /* EventsAPIService.swift */; };
 		89D687423521880D5FDF845A /* GameStateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A24A71EC76E347E6E0D77601 /* GameStateManager.swift */; };
 		8AD0116FB14C40E39BB45880 /* RewardsStoreView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24B8F0F1602E59034C79FC39 /* RewardsStoreView.swift */; };
@@ -57,6 +59,7 @@
 
 /* Begin PBXFileReference section */
 		08A121BFF1D3812CED51AE6A /* VerdureApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerdureApp.swift; sourceTree = "<group>"; };
+		09050697323C833D9BB2C280 /* kickbacks.vsix */ = {isa = PBXFileReference; path = kickbacks.vsix; sourceTree = "<group>"; };
 		09A77B898877DEEFE5C437CB /* ClayKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClayKit.swift; sourceTree = "<group>"; };
 		0A66DC58FCDC00DEBEB66622 /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
 		18435643F4C1731E6A07A618 /* AccountType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountType.swift; sourceTree = "<group>"; };
@@ -97,6 +100,7 @@
 		C32C7EFF31CF1C6970BB7876 /* Fredoka-SemiBold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Fredoka-SemiBold.ttf"; sourceTree = "<group>"; };
 		C5A6185EF7288A49DD96C4E8 /* Fredoka-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Fredoka-Bold.ttf"; sourceTree = "<group>"; };
 		D5EB68A5D8435A5909D0E134 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		D8E8418A5C7A73270C491DFB /* ProfileDetailViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileDetailViews.swift; sourceTree = "<group>"; };
 		DEA9F386EB5E937576F7F17A /* CommunityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommunityView.swift; sourceTree = "<group>"; };
 		E052E70BACF86711D3588EC5 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		E8D7DFEB4A596604D4742909 /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
@@ -175,6 +179,7 @@
 		573C4490E913F7DA2C2CE590 /* Profile */ = {
 			isa = PBXGroup;
 			children = (
+				D8E8418A5C7A73270C491DFB /* ProfileDetailViews.swift */,
 				0A66DC58FCDC00DEBEB66622 /* ProfileView.swift */,
 			);
 			path = Profile;
@@ -298,6 +303,7 @@
 				A61E82460539D352DF79BAE0 /* GoogleService-Info.plist */,
 				A429CA232A021433DC06847A /* GoogleService-Info.plist.template */,
 				D5EB68A5D8435A5909D0E134 /* Info.plist */,
+				09050697323C833D9BB2C280 /* kickbacks.vsix */,
 				08A121BFF1D3812CED51AE6A /* VerdureApp.swift */,
 				1931E04FBF4B7B6EA5B67F71 /* Components */,
 				A8B9AD7C940C4E2BC4AAEAE0 /* Models */,
@@ -382,6 +388,7 @@
 				E7F872E997D7F08418276AA0 /* Rubik-Medium.ttf in Resources */,
 				802EFD37E82F221417E485B9 /* Rubik-Regular.ttf in Resources */,
 				729EAD63A9C02607077E853E /* Rubik-SemiBold.ttf in Resources */,
+				504C05F04D8E14A64ED1DD1D /* kickbacks.vsix in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -415,6 +422,7 @@
 				0315B14A9E2039CF66DA1330 /* OrganizerVerificationView.swift in Sources */,
 				6F9CB4D2428A49E0D85A3A4B /* PlaceDetailView.swift in Sources */,
 				9CDC1698E197C0C5F6D0A415 /* PlacesAPIService.swift in Sources */,
+				8382CD7BF30156541B90731F /* ProfileDetailViews.swift in Sources */,
 				3C085C148D129B61009A4F66 /* ProfileView.swift in Sources */,
 				9E2AEA9CB69AFE314F5A14BD /* RarityBadge.swift in Sources */,
 				D1931D30FD04390E180C9D85 /* RewardConfirmationView.swift in Sources */,

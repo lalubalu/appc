@@ -175,4 +175,7 @@ struct Badge: Identifiable {
     let name: String
     let icon: String
     let earned: Bool
+    var detail: String = ""
+    var requirement: String = ""       // how it's unlocked
+    var earnedDate: String? = nil      // e.g. "June 12, 2026" — nil if locked
 }

@@ -93,14 +93,16 @@ struct RarityBadge: View {
 struct PointsBadge: View {
     let points: Int
     var prefix: String = "+"
+    /// Tint the tag by tier so the colour signals point value at a glance (defaults to gold).
+    var kind: ClayStyle.ClayAccentKind = .gold
     var body: some View {
         HStack(spacing: 4) {
             Image(systemName: "leaf.circle.fill").font(.system(size: 11, weight: .bold))
             Text("\(prefix)\(points) pts").font(VType.num(11, .bold)).monospacedDigit()
         }
-        .foregroundStyle(Palette.gold.onColor)
+        .foregroundStyle(kind.accent.onColor)
         .padding(.horizontal, 9).padding(.vertical, 5)
-        .background(ClayBackground(style: .accent(.gold), radius: Radius.chip, elevation: 0.35))
+        .background(ClayBackground(style: .accent(kind), radius: Radius.chip, elevation: 0.35))
     }
 }
 

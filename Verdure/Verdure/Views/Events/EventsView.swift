@@ -82,29 +82,29 @@ struct EventsView: View {
                 }
             }
 
-            // Giant attended count with pulse halo
-            HStack(alignment: .firstTextBaseline, spacing: 14) {
-                ZStack {
-                    PulseHalo(color: Palette.teal.base.opacity(0.5), size: 120, lineWidth: 2)
+            // Attended summary — card layout (per feedback)
+            HStack(alignment: .center, spacing: Spacing.md) {
+                VStack(alignment: .leading, spacing: 3) {
                     CountUp(value: gameState.totalEventsAttended)
-                        .font(VType.num(86, .bold)).monospacedDigit()
-                        .foregroundStyle(
-                            LinearGradient(colors: [Palette.ink, Palette.spruce.base],
-                                           startPoint: .top, endPoint: .bottom))
+                        .font(VType.num(54, .bold)).monospacedDigit()
+                        .foregroundStyle(Palette.evergreen.onColor)
                         .breathing(scale: 1.03, duration: 3)
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("events").font(VType.display(20, .semibold)).foregroundStyle(Palette.inkSoft)
-                    Text("attended").font(VType.display(20, .semibold)).foregroundStyle(Palette.inkSoft)
+                    Text("events attended").font(VType.body(14, .semibold))
+                        .foregroundStyle(Palette.evergreen.onColor.opacity(0.85))
                     HStack(spacing: 5) {
-                        Image(systemName: "leaf.circle.fill").font(.system(size: 12, weight: .bold))
-                        Text("\(gameState.pointsBalance) pts").font(VType.num(13, .bold))
+                        Image(systemName: "star.fill").font(.system(size: 12, weight: .bold))
+                        Text("\(gameState.pointsBalance) pts").font(VType.num(14, .bold))
                     }
                     .foregroundStyle(Palette.gold.base).padding(.top, 4)
                 }
                 Spacer()
+                Image(systemName: "calendar.badge.checkmark")
+                    .font(.system(size: 42, weight: .semibold))
+                    .foregroundStyle(Palette.evergreen.onColor.opacity(0.55))
             }
-            .padding(.leading, 6)
+            .padding(Spacing.lg)
+            .frame(maxWidth: .infinity)
+            .background(ClayBackground(style: .accent(.evergreen), radius: Radius.lg, elevation: 1.1))
 
             // Search
             HStack(spacing: 10) {
@@ -502,6 +502,7 @@ private struct EventDetailSheet: View {
     let dateFormatter: DateFormatter
     @Environment(GameStateManager.self) private var gameState
     @Environment(LocationManager.self) private var locationManager
+    @Environment(\.openURL) private var openURL
     @State private var showPhotoPicker = false
     @State private var selectedPhotoItem: PhotosPickerItem? = nil
     @State private var proofPhotoData: Data? = nil
@@ -510,6 +511,14 @@ private struct EventDetailSheet: View {
 
     private var isCheckedIn: Bool { gameState.isCheckedIn(event.id) }
     private var kind: ClayStyle.ClayAccentKind { event.category.clayKind }
+
+    /// Open Apple Maps to the event location (search by name — events carry no coordinates).
+    private func openDirections() {
+        Haptics.tap()
+        let query = "\(event.title), \(event.locationName)"
+            .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        if let url = URL(string: "http://maps.apple.com/?q=\(query)") { openURL(url) }
+    }
 
     var body: some View {
         NavigationStack {
@@ -529,7 +538,7 @@ private struct EventDetailSheet: View {
                             detailGrid
                             checkInSection
                             ClayButton("Get Directions", systemImage: "arrow.triangle.turn.up.right.diamond.fill",
-                                       kind: .teal, fullWidth: true) {}
+                                       kind: .teal, fullWidth: true) { openDirections() }
                         }
                         .padding(.horizontal, Spacing.md)
                     }

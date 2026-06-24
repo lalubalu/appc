@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct ProfileView: View {
+    /// Muted brick red for the destructive Sign Out action — reads on both cream + graphite.
+    static let signOutRed = Color(red: 0.82, green: 0.28, blue: 0.25)
     @AppStorage("prefersDarkMode") private var prefersDarkMode = false
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = true
     @AppStorage("accountType") private var accountTypeRaw = AccountType.visitor.rawValue
@@ -9,6 +11,11 @@ struct ProfileView: View {
     @State private var showRewardsStore = false
     @State private var showSignOutConfirm = false
     @State private var showOrganizerVerify = false
+    @State private var showAllBadges = false
+    @State private var showAllChallenges = false
+    @State private var showAbout = false
+    @State private var selectedBadge: Badge?
+    @State private var selectedChallenge: Challenge?
     @State private var heroAppeared = false
 
     private var displayName: String { authService.currentUser?.displayName ?? "Explorer" }
@@ -36,6 +43,15 @@ struct ProfileView: View {
             .sheet(isPresented: $showRewardsStore) {
                 RewardsStoreView().environment(gameState)
             }
+            .sheet(isPresented: $showAllBadges) {
+                AllBadgesView(badges: SampleData.currentUser.badges)
+            }
+            .sheet(isPresented: $showAllChallenges) {
+                AllChallengesView(challenges: SampleData.challenges)
+            }
+            .sheet(isPresented: $showAbout) { AboutVerdureView() }
+            .sheet(item: $selectedBadge) { BadgeDetailSheet(badge: $0) }
+            .sheet(item: $selectedChallenge) { ChallengeDetailSheet(challenge: $0) }
             .onAppear {
                 withAnimation(.spring(response: 0.7, dampingFraction: 0.72).delay(0.15)) { heroAppeared = true }
             }
@@ -53,8 +69,9 @@ struct ProfileView: View {
             VStack(spacing: Spacing.md) {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("PLAYER CARD").font(VType.body(10, .bold)).tracking(2)
+                        Text("PLAYER CARD").font(VType.body(12, .bold)).tracking(2.5)
                             .foregroundStyle(Palette.gold.base)
+                            .shadow(color: .black.opacity(0.35), radius: 3, x: 0, y: 1)
                         Text(displayName).font(VType.display(28, .bold))
                             .foregroundStyle(Palette.evergreen.onColor).lineLimit(1)
                         Text("Member since \(joinDate)")
@@ -152,6 +169,8 @@ struct ProfileView: View {
         }
         .frame(maxWidth: .infinity).padding(.vertical, Spacing.md)
         .claySurface(.surface, radius: Radius.md, elevation: 0.8)
+        .overlay(RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
+            .strokeBorder(kind.accent.base.opacity(0.38), lineWidth: 1.5))
         .offset(y: dy)
     }
 
@@ -159,12 +178,15 @@ struct ProfileView: View {
 
     private var badgesConstellation: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
-            SectionHeader(title: "Badges", action: "See All")
+            SectionHeader(title: "Badges", action: "See All") { Haptics.tap(); showAllBadges = true }
             let badges = SampleData.currentUser.badges
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 22) {
                 ForEach(Array(badges.enumerated()), id: \.element.id) { i, badge in
-                    badgeTile(badge, index: i)
-                        .offset(y: [0, 9, 4][i % 3])
+                    Button { Haptics.soft(); selectedBadge = badge } label: {
+                        badgeTile(badge, index: i)
+                    }
+                    .buttonStyle(.plain)
+                    .offset(y: [0, 9, 4][i % 3])
                 }
             }
             .padding(.bottom, 12)
@@ -200,11 +222,14 @@ struct ProfileView: View {
 
     private var challengesRail: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
-            SectionHeader(title: "Active Challenges", action: "View All")
+            SectionHeader(title: "Active Challenges", action: "View All") { Haptics.tap(); showAllChallenges = true }
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
                     ForEach(Array(SampleData.challenges.enumerated()), id: \.element.id) { i, c in
-                        challengeCard(c, kind: [.teal, .gold, .spruce, .terracotta][i % 4])
+                        Button { Haptics.soft(); selectedChallenge = c } label: {
+                            challengeCard(c, kind: [.teal, .gold, .spruce, .terracotta][i % 4])
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
                 .padding(.vertical, 4)
@@ -228,6 +253,8 @@ struct ProfileView: View {
         .padding(Spacing.md)
         .frame(width: 184, height: 168, alignment: .topLeading)
         .claySurface(.surface, radius: Radius.md, elevation: 0.85)
+        .overlay(RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
+            .strokeBorder(kind.accent.base.opacity(0.4), lineWidth: 1.5))
     }
 
     // MARK: - Settings
@@ -255,14 +282,27 @@ struct ProfileView: View {
                 rowDivider
                 settingsRow(icon: "lock.fill", label: "Privacy", accent: .teal) { chevron }
                 rowDivider
-                settingsRow(icon: "info.circle.fill", label: "About Verdure", accent: .terracotta) { chevron }
+                Button { Haptics.tap(); showAbout = true } label: {
+                    settingsRow(icon: "info.circle.fill", label: "About Verdure", accent: .terracotta) { chevron }
+                }
+                .buttonStyle(.plain)
             }
             .padding(.vertical, 6)
             .claySurface(.surface, radius: Radius.md)
 
-            ClayButton("Sign Out", systemImage: "rectangle.portrait.and.arrow.right", kind: .ghost, fullWidth: true) {
-                showSignOutConfirm = true
+            Button { Haptics.tap(); showSignOutConfirm = true } label: {
+                HStack(spacing: 9) {
+                    Image(systemName: "rectangle.portrait.and.arrow.right").font(.system(size: 16, weight: .bold))
+                    Text("Sign Out").font(VType.body(17, .bold))
+                }
+                .foregroundStyle(Self.signOutRed)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(ClayBackground(style: .surface, radius: Radius.md))
+                .overlay(RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
+                    .strokeBorder(Self.signOutRed.opacity(0.4), lineWidth: 1.5))
             }
+            .buttonStyle(.plain)
             .confirmationDialog("Sign out of Verdure?", isPresented: $showSignOutConfirm) {
                 Button("Sign Out", role: .destructive) {
                     authService.signOut(); gameState.disconnectCloud()

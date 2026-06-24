@@ -134,13 +134,47 @@ struct PlaceDetailView: View {
     // MARK: - About
 
     private var aboutSection: some View {
-        VStack(alignment: .leading, spacing: Spacing.sm) {
+        VStack(alignment: .leading, spacing: Spacing.md) {
             Text("About").font(VType.display(20, .semibold)).foregroundStyle(Palette.ink)
             Text(place.shortDescription)
                 .font(VType.body(15)).foregroundStyle(Palette.inkSoft).lineSpacing(4)
-            Text("Hours, amenities, accessibility, and community photos arrive once the backend is connected.")
-                .font(VType.body(13.5)).foregroundStyle(Palette.inkFaint).lineSpacing(3)
-                .padding(.top, 2)
+
+            Divider().background(Palette.surfaceShadow.opacity(0.4))
+
+            // Hours
+            HStack(spacing: 10) {
+                Image(systemName: "clock.fill").font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(kind.accent.base).frame(width: 22)
+                Text("Hours").font(VType.body(13, .semibold)).foregroundStyle(Palette.inkSoft)
+                Spacer()
+                Text(place.openHours).font(VType.body(13, .semibold)).foregroundStyle(Palette.ink)
+            }
+
+            // Amenities
+            VStack(alignment: .leading, spacing: Spacing.sm) {
+                Text("Amenities").font(VType.body(13, .semibold)).foregroundStyle(Palette.inkSoft)
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 118), spacing: 8)], spacing: 8) {
+                    ForEach(place.amenities, id: \.label) { item in
+                        HStack(spacing: 6) {
+                            Image(systemName: item.icon).font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(kind.accent.base)
+                            Text(item.label).font(VType.body(12.5, .medium)).foregroundStyle(Palette.ink)
+                                .lineLimit(1)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 12).padding(.vertical, 9)
+                        .background(ClayBackground(style: .inset, radius: Radius.chip))
+                    }
+                }
+            }
+
+            // Accessibility
+            HStack(spacing: 10) {
+                Image(systemName: "figure.roll").font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(kind.accent.base).frame(width: 22)
+                Text(place.accessibilityNote).font(VType.body(13, .medium)).foregroundStyle(Palette.inkSoft)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(Spacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -219,5 +253,58 @@ struct PlaceDetailView: View {
         PlaceDetailView(place: SampleData.places[0])
             .environment(GameStateManager())
             .environment(PlacesAPIService())
+    }
+}
+
+// MARK: - Derived place info (category-based, deterministic — stands in for backend data)
+
+extension Place {
+    /// Opening hours inferred from the place category.
+    var openHours: String {
+        switch category {
+        case .parks, .gardens:        return "6:00 AM – 10:00 PM"
+        case .trails, .scenic:        return "Dawn to dusk"
+        case .playgrounds:            return "8:00 AM – 8:00 PM"
+        case .waterfront:             return "Open 24 hours"
+        case .sports:                 return "7:00 AM – 9:00 PM"
+        case .community:              return "9:00 AM – 6:00 PM"
+        }
+    }
+
+    /// Amenity chips (SF Symbol + label) inferred from category.
+    var amenities: [(icon: String, label: String)] {
+        switch category {
+        case .parks:
+            return [("figure.walk", "Walking paths"), ("car.fill", "Parking"),
+                    ("toilet.fill", "Restrooms"), ("dog.fill", "Dog friendly")]
+        case .trails, .scenic:
+            return [("car.fill", "Trailhead parking"), ("mountain.2.fill", "Scenic views"),
+                    ("signpost.right.fill", "Trail markers")]
+        case .gardens:
+            return [("leaf.fill", "Botanical garden"), ("toilet.fill", "Restrooms"),
+                    ("bag.fill", "Gift shop"), ("figure.2.arms.open", "Guided tours")]
+        case .playgrounds:
+            return [("figure.play", "Play structures"), ("car.fill", "Parking"),
+                    ("umbrella.fill", "Shaded seating"), ("toilet.fill", "Restrooms")]
+        case .waterfront:
+            return [("water.waves", "Waterfront"), ("car.fill", "Parking"),
+                    ("sailboat.fill", "Boating"), ("toilet.fill", "Restrooms")]
+        case .sports:
+            return [("sportscourt.fill", "Courts & fields"), ("car.fill", "Parking"),
+                    ("drop.fill", "Water fountains"), ("toilet.fill", "Restrooms")]
+        case .community:
+            return [("building.2.fill", "Community space"), ("wifi", "Free Wi-Fi"),
+                    ("cup.and.saucer.fill", "Café"), ("toilet.fill", "Restrooms")]
+        }
+    }
+
+    /// Accessibility summary inferred from category.
+    var accessibilityNote: String {
+        switch category {
+        case .trails, .scenic:
+            return "Some unpaved terrain — partially wheelchair accessible."
+        default:
+            return "Wheelchair accessible with paved paths and accessible parking."
+        }
     }
 }

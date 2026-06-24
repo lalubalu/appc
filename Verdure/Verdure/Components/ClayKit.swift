@@ -253,7 +253,10 @@ struct ClaySectionHeader: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 10) {
                 if let index {
-                    Text(index).font(VType.num(13, .bold)).foregroundStyle(accent)
+                    Text(index).font(VType.num(16, .bold)).foregroundStyle(accent)
+                        .padding(.horizontal, 9).padding(.vertical, 4)
+                        .background(Capsule().fill(accent.opacity(0.16)))
+                        .overlay(Capsule().strokeBorder(accent.opacity(0.35), lineWidth: 1))
                 }
                 KickerLabel(text: kicker)
             }

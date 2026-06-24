@@ -99,6 +99,8 @@ struct ExploreView: View {
         .padding(Spacing.md)
         .frame(maxWidth: .infinity)
         .claySurface(.surface, radius: Radius.lg, elevation: 1.1)
+        .overlay(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous)
+            .strokeBorder(Palette.teal.base.opacity(0.38), lineWidth: 1.5))
         .parallaxTilt(magnitude: 4, shadow: false)
     }
 
@@ -114,6 +116,8 @@ struct ExploreView: View {
         .frame(height: 78)
         .padding(Spacing.md)
         .claySurface(.surface, radius: Radius.md, elevation: 0.8)
+        .overlay(RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
+            .strokeBorder(kind.accent.base.opacity(0.38), lineWidth: 1.5))
     }
 
     // MARK: - Daily Gem (wide immersive)
@@ -197,6 +201,8 @@ struct ExploreView: View {
         }
         .frame(maxWidth: .infinity).padding(.vertical, Spacing.md)
         .claySurface(.surface, radius: Radius.md, elevation: 0.7)
+        .overlay(RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
+            .strokeBorder(kind.accent.base.opacity(0.35), lineWidth: 1.5))
     }
 
     // MARK: - Quests
