@@ -43,6 +43,11 @@ final class GameStateManager {
         }
     }
 
+    /// Bookmarked events (local only — not cloud-synced).
+    var savedEventIDs: Set<String> {
+        didSet { save(savedEventIDs, forKey: "savedEventIDs") }
+    }
+
     // MARK: - Cloud Sync
 
     private var firestoreService: FirestoreService?
@@ -89,6 +94,7 @@ final class GameStateManager {
         self.pointsBalance = UserDefaults.standard.integer(forKey: "pointsBalance")
         self.lifetimePoints = UserDefaults.standard.integer(forKey: "lifetimePoints")
         self.redeemedRewardIDs = Self.loadSet(forKey: "redeemedRewardIDs")
+        self.savedEventIDs = Self.loadSet(forKey: "savedEventIDs")
 
         // Seed demo data on first launch
         if !UserDefaults.standard.bool(forKey: "gameStateSeeded_v2") {
@@ -111,6 +117,15 @@ final class GameStateManager {
 
     func isCheckedIn(_ eventID: String) -> Bool {
         checkedInEventIDs.contains(eventID)
+    }
+
+    // MARK: - Saved / bookmarked events
+
+    func isSaved(_ eventID: String) -> Bool { savedEventIDs.contains(eventID) }
+
+    func toggleSaved(_ event: Event) {
+        if savedEventIDs.contains(event.id) { savedEventIDs.remove(event.id) }
+        else { savedEventIDs.insert(event.id); Haptics.success() }
     }
 
     // MARK: - Place Collection (secondary, small points)

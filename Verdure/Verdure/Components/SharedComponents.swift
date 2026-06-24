@@ -157,6 +157,37 @@ struct PlacePlaceholder: View {
 
 // MARK: - Avatar Circle (clay)
 
+/// Avatar that shows the user's chosen profile photo if set, else falls back to initials.
+struct UserAvatar: View {
+    @AppStorage("profileImageData") private var profileImageData = Data()
+    var initials: String = "ME"
+    var size: CGFloat = 44
+    var accent: ClayAccent = Palette.spruce
+
+    var body: some View {
+        if !profileImageData.isEmpty, let ui = UIImage(data: profileImageData) {
+            Image(uiImage: ui).resizable().scaledToFill()
+                .frame(width: size, height: size)
+                .clipShape(Circle())
+                .overlay(Circle().strokeBorder(accent.base.opacity(0.6), lineWidth: 2))
+        } else {
+            AvatarCircle(initials: initials, size: size, accent: accent)
+        }
+    }
+}
+
+extension UIImage {
+    /// Downscale so the longest side is at most `maxDimension` (keeps UserDefaults small).
+    func downscaled(maxDimension: CGFloat = 400) -> UIImage {
+        let longest = max(size.width, size.height)
+        guard longest > maxDimension else { return self }
+        let scale = maxDimension / longest
+        let newSize = CGSize(width: size.width * scale, height: size.height * scale)
+        let renderer = UIGraphicsImageRenderer(size: newSize)
+        return renderer.image { _ in draw(in: CGRect(origin: .zero, size: newSize)) }
+    }
+}
+
 struct AvatarCircle: View {
     let initials: String
     var size: CGFloat = 40

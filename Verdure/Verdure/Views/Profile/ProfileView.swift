@@ -1,9 +1,12 @@
 import SwiftUI
+import PhotosUI
 
 struct ProfileView: View {
     /// Muted brick red for the destructive Sign Out action — reads on both cream + graphite.
     static let signOutRed = Color(red: 0.82, green: 0.28, blue: 0.25)
     @AppStorage("prefersDarkMode") private var prefersDarkMode = false
+    @AppStorage("profileImageData") private var profileImageData = Data()
+    @State private var photoItem: PhotosPickerItem?
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = true
     @AppStorage("accountType") private var accountTypeRaw = AccountType.visitor.rawValue
     @Environment(GameStateManager.self) private var gameState
@@ -52,6 +55,19 @@ struct ProfileView: View {
             .sheet(isPresented: $showAbout) { AboutVerdureView() }
             .sheet(item: $selectedBadge) { BadgeDetailSheet(badge: $0) }
             .sheet(item: $selectedChallenge) { ChallengeDetailSheet(challenge: $0) }
+            .onChange(of: photoItem) { _, item in
+                guard let item else { return }
+                Task {
+                    if let data = try? await item.loadTransferable(type: Data.self),
+                       let ui = UIImage(data: data),
+                       let jpeg = ui.downscaled().jpegData(compressionQuality: 0.85) {
+                        await MainActor.run {
+                            Haptics.success()
+                            profileImageData = jpeg
+                        }
+                    }
+                }
+            }
             .onAppear {
                 withAnimation(.spring(response: 0.7, dampingFraction: 0.72).delay(0.15)) { heroAppeared = true }
             }
@@ -61,19 +77,31 @@ struct ProfileView: View {
     // MARK: - Player card (full-bleed 3D trading card)
 
     private var playerCard: some View {
-        ZStack {
+        let avatarInitials = initials
+        return ZStack {
             // ambient depth behind the medallion
             FloatingBlob(color: Palette.teal.base.opacity(0.45), size: 150, delay: 0).offset(x: -80, y: -60)
             FloatingBlob(color: Palette.gold.base.opacity(0.4), size: 120, delay: 0.7).offset(x: 90, y: 10)
 
             VStack(spacing: Spacing.md) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .top, spacing: Spacing.md) {
+                    PhotosPicker(selection: $photoItem, matching: .images) {
+                        ZStack(alignment: .bottomTrailing) {
+                            UserAvatar(initials: avatarInitials, size: 52, accent: Palette.teal)
+                            Image(systemName: "camera.fill").font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(Palette.spruce.onColor)
+                                .padding(5).background(Circle().fill(Palette.spruce.base))
+                                .overlay(Circle().strokeBorder(Palette.evergreen.base, lineWidth: 1.5))
+                                .offset(x: 3, y: 3)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    VStack(alignment: .leading, spacing: 4) {
                         Text("PLAYER CARD").font(VType.body(12, .bold)).tracking(2.5)
                             .foregroundStyle(Palette.gold.base)
                             .shadow(color: .black.opacity(0.35), radius: 3, x: 0, y: 1)
-                        Text(displayName).font(VType.display(28, .bold))
-                            .foregroundStyle(Palette.evergreen.onColor).lineLimit(1)
+                        Text(displayName).font(VType.display(26, .bold))
+                            .foregroundStyle(Palette.evergreen.onColor).lineLimit(1).minimumScaleFactor(0.7)
                         Text("Member since \(joinDate)")
                             .font(VType.body(12, .medium))
                             .foregroundStyle(Palette.evergreen.onColor.opacity(0.6))

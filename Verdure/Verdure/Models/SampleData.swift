@@ -89,6 +89,59 @@ enum SampleData {
         ]
     )
 
+    // MARK: - Daily Gem facts (rotate by day; can repeat older facts)
+
+    static let gemFacts: [GemFact] = [
+        GemFact(kind: "Did you know", icon: "leaf.fill",
+                text: "The parks in your neighborhood absorb over 2 tons of CO₂ every year — just by being green.",
+                accent: .spruce),
+        GemFact(kind: "Fun event", icon: "music.note",
+                text: "Free outdoor jazz returns to The Commons every Friday evening this summer.",
+                accent: .gold),
+        GemFact(kind: "Nature fact", icon: "bird.fill",
+                text: "Over 40 species of birds have been spotted along Hawk Ridge Trail this spring.",
+                accent: .teal),
+        GemFact(kind: "Community", icon: "person.3.fill",
+                text: "Local volunteers have logged more than 1,200 hours cleaning up the riverbank this year.",
+                accent: .terracotta),
+        GemFact(kind: "Did you know", icon: "drop.fill",
+                text: "Marina Point's wetlands filter rainwater for the whole district before it reaches the bay.",
+                accent: .sky),
+        GemFact(kind: "Fun event", icon: "basket.fill",
+                text: "The Weekend Farmers Market now hosts 30+ local growers — go early for the good tomatoes.",
+                accent: .gold),
+        GemFact(kind: "Nature fact", icon: "tree.fill",
+                text: "Some of the oak trees in Riverside Park are over 150 years old.",
+                accent: .spruce),
+        GemFact(kind: "Community", icon: "heart.fill",
+                text: "Neighbors planted 500 native wildflowers at Botanica Gardens last month.",
+                accent: .teal),
+        GemFact(kind: "Did you know", icon: "moon.stars.fill",
+                text: "Overlook Bluff is one of the best low-light spots in the city for stargazing.",
+                accent: .sky),
+        GemFact(kind: "Fun event", icon: "figure.run",
+                text: "A community 5K loops through three parks on the last Saturday of every month.",
+                accent: .terracotta),
+        GemFact(kind: "Nature fact", icon: "ant.fill",
+                text: "Pollinator gardens nearby support honeybees that travel up to 3 miles to forage.",
+                accent: .gold),
+        GemFact(kind: "Community", icon: "hands.sparkles.fill",
+                text: "Cedar Court's little free library has swapped over 800 books since it opened.",
+                accent: .spruce),
+        GemFact(kind: "Did you know", icon: "sun.max.fill",
+                text: "Tree canopy in your area keeps summer streets up to 10°F cooler than bare pavement.",
+                accent: .gold),
+        GemFact(kind: "Fun event", icon: "paintpalette.fill",
+                text: "A free outdoor mural festival takes over the waterfront walls this season.",
+                accent: .teal),
+    ]
+
+    /// Today's gem fact — deterministic by day of year, so it changes daily and can repeat older facts.
+    static func todaysFact(for date: Date = Date()) -> GemFact {
+        let day = Calendar.current.ordinality(of: .day, in: .year, for: date) ?? 1
+        return gemFacts[day % gemFacts.count]
+    }
+
     // MARK: - Collectible Places
 
     /// Default center (Minneapolis) used before GPS lock

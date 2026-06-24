@@ -53,8 +53,21 @@ struct OnboardingView: View {
             VerdureBackground()
 
             VStack(spacing: 0) {
-                // Skip
+                // Back / Skip
                 HStack {
+                    if currentPage > 0 {
+                        Button {
+                            Haptics.soft()
+                            withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) { currentPage -= 1 }
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "chevron.left").font(.system(size: 13, weight: .bold))
+                                Text("Back").font(VType.body(15, .medium))
+                            }
+                            .foregroundStyle(Palette.inkSoft)
+                        }
+                        .padding(.leading, Spacing.lg).padding(.top, Spacing.md)
+                    }
                     Spacer()
                     if currentPage < pages.count {
                         Button("Skip") {

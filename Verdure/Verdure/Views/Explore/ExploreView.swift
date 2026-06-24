@@ -4,9 +4,21 @@ struct ExploreView: View {
     @Environment(GameStateManager.self) private var gameState
     @Environment(PlacesAPIService.self) private var placesService
     @State private var gemPlace: Place? = nil
+    @State private var placeSearch = ""
+    @State private var placeFilter: PlaceCategory? = nil
 
     private var sourcePlaces: [Place] {
         placesService.places.isEmpty ? SampleData.places : placesService.places
+    }
+    private var nearbyCategories: [PlaceCategory] {
+        let present = Set(sourcePlaces.map(\.category))
+        return PlaceCategory.allCases.filter { present.contains($0) }
+    }
+    private var filteredPlaces: [Place] {
+        sourcePlaces.filter { p in
+            (placeFilter == nil || p.category == placeFilter) &&
+            (placeSearch.isEmpty || p.name.localizedCaseInsensitiveContains(placeSearch))
+        }
     }
     private var dailyGem: DailyGem {
         let gem = sourcePlaces.max(by: { $0.rating < $1.rating }) ?? SampleData.places[0]
@@ -47,7 +59,7 @@ struct ExploreView: View {
                 Text("Explore").font(VType.display(38, .bold)).foregroundStyle(Palette.ink)
             }
             Spacer()
-            AvatarCircle(initials: "ME", size: 46, accent: Palette.spruce)
+            UserAvatar(initials: "ME", size: 46, accent: Palette.spruce)
         }
     }
 
@@ -228,16 +240,57 @@ struct ExploreView: View {
         VStack(alignment: .leading, spacing: Spacing.md) {
             ClaySectionHeader(index: "02", kicker: "Around you", title: "Nearby Places",
                               accent: Palette.teal.base)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 14) {
-                    ForEach(sourcePlaces.prefix(6)) { place in
-                        NavigationLink(value: place) {
-                            NearbyCard(place: place, collected: isCollected(place))
-                        }
-                        .buttonStyle(Card3DButtonStyle())
+
+            // Search
+            HStack(spacing: 10) {
+                Image(systemName: "magnifyingglass").font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Palette.inkSoft)
+                TextField("Search nearby places…", text: $placeSearch)
+                    .font(VType.body(14)).foregroundStyle(Palette.ink).autocorrectionDisabled()
+                if !placeSearch.isEmpty {
+                    Button { placeSearch = "" } label: {
+                        Image(systemName: "xmark.circle.fill").foregroundStyle(Palette.inkFaint)
                     }
                 }
-                .padding(.vertical, 4)
+            }
+            .padding(.horizontal, Spacing.md).padding(.vertical, 11)
+            .background(ClayBackground(style: .inset, radius: Radius.md))
+
+            // Filter chips
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    CategoryPill(label: "All", icon: "square.grid.2x2.fill", tint: Palette.teal.base,
+                                 isSelected: placeFilter == nil) { placeFilter = nil }
+                    ForEach(nearbyCategories) { cat in
+                        CategoryPill(label: cat.rawValue, icon: cat.icon, tint: cat.accent.base,
+                                     isSelected: placeFilter == cat) { placeFilter = cat }
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+
+            // Cards (filtered)
+            if filteredPlaces.isEmpty {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass").foregroundStyle(Palette.inkFaint)
+                    Text("No places match.").font(VType.body(14, .medium)).foregroundStyle(Palette.inkSoft)
+                    Spacer()
+                }
+                .padding(Spacing.md)
+                .frame(maxWidth: .infinity)
+                .background(ClayBackground(style: .inset, radius: Radius.md))
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 14) {
+                        ForEach(filteredPlaces.prefix(8)) { place in
+                            NavigationLink(value: place) {
+                                NearbyCard(place: place, collected: isCollected(place))
+                            }
+                            .buttonStyle(Card3DButtonStyle())
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
             }
         }
     }

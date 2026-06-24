@@ -4,6 +4,7 @@ struct CommunityView: View {
     @State private var posts: [CommunityPost] = SampleData.communityPosts
     @State private var newPostText = ""
     @State private var showNewPost = false
+    @State private var selectedProfile: CommunityProfile?
 
     private let storyNames: [(String, String)] = [
         ("MC", "Maya"), ("JE", "Jordan"), ("PS", "Priya"), ("AR", "Alex"), ("TK", "Tomo"), ("LW", "Lena")
@@ -30,6 +31,7 @@ struct CommunityView: View {
             .sheet(isPresented: $showNewPost) {
                 newPostSheet.presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
             }
+            .sheet(item: $selectedProfile) { CommunityProfileSheet(profile: $0) }
         }
     }
 
@@ -60,8 +62,12 @@ struct CommunityView: View {
                 StoryRing(initials: "ME", name: "Your story", accent: Palette.spruce, isYou: true)
                     .onTapGesture { Haptics.tap(); showNewPost = true }
                 ForEach(Array(storyNames.enumerated()), id: \.offset) { i, s in
-                    StoryRing(initials: s.0, name: s.1,
-                              accent: Palette.accentCycle[i % Palette.accentCycle.count], isYou: false)
+                    let accent = Palette.accentCycle[i % Palette.accentCycle.count]
+                    StoryRing(initials: s.0, name: s.1, accent: accent, isYou: false)
+                        .onTapGesture {
+                            Haptics.soft()
+                            selectedProfile = CommunityProfile(name: s.1, initials: s.0, accent: accent)
+                        }
                 }
             }
             .padding(.horizontal, Spacing.md)
@@ -99,7 +105,13 @@ struct CommunityView: View {
             ForEach(Array(posts.enumerated()), id: \.element.id) { i, post in
                 HStack(spacing: 0) {
                     if i % 2 == 1 { Spacer(minLength: 26) }
-                    PostCard(post: post, accent: kind(for: i))
+                    PostCard(post: post, accent: kind(for: i)) {
+                        guard post.authorName != "You" else { return }
+                        Haptics.soft()
+                        selectedProfile = CommunityProfile(name: post.authorName,
+                                                           initials: post.authorInitials,
+                                                           accent: kind(for: i).accent)
+                    }
                         .rotationEffect(.degrees(i % 2 == 0 ? -1.2 : 1.2))
                     if i % 2 == 0 { Spacer(minLength: 26) }
                 }
@@ -234,6 +246,7 @@ private struct StoryRing: View {
 private struct PostCard: View {
     let post: CommunityPost
     let accent: ClayStyle.ClayAccentKind
+    var onProfile: () -> Void = {}
     @State private var liked = false
     @State private var bump = false
     @State private var burst = false
@@ -243,15 +256,24 @@ private struct PostCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
             HStack(spacing: Spacing.sm) {
-                AvatarCircle(initials: post.authorInitials, size: 44, accent: accent.accent)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(post.authorName).font(VType.display(20, .semibold)).foregroundStyle(Palette.ink)
-                    HStack(spacing: 4) {
-                        Image(systemName: "mappin").font(.system(size: 9, weight: .bold))
-                        Text(post.placeName).font(VType.body(12, .semibold))
+                Button(action: onProfile) {
+                    HStack(spacing: Spacing.sm) {
+                        AvatarCircle(initials: post.authorInitials, size: 44, accent: accent.accent)
+                        VStack(alignment: .leading, spacing: 1) {
+                            HStack(spacing: 4) {
+                                Text(post.authorName).font(VType.display(20, .semibold)).foregroundStyle(Palette.ink)
+                                Image(systemName: "chevron.right").font(.system(size: 10, weight: .bold))
+                                    .foregroundStyle(Palette.inkFaint)
+                            }
+                            HStack(spacing: 4) {
+                                Image(systemName: "mappin").font(.system(size: 9, weight: .bold))
+                                Text(post.placeName).font(VType.body(12, .semibold))
+                            }
+                            .foregroundStyle(accent.accent.base)
+                        }
                     }
-                    .foregroundStyle(accent.accent.base)
                 }
+                .buttonStyle(.plain)
                 Spacer()
                 Text(post.timeAgo).font(VType.body(12, .medium)).foregroundStyle(Palette.inkFaint)
             }
@@ -328,4 +350,119 @@ private struct PostCard: View {
 
 #Preview {
     CommunityView()
+}
+
+// MARK: - Community member profile (tap a story / post author)
+
+struct CommunityProfile: Identifiable {
+    let id = UUID()
+    let name: String
+    let initials: String
+    let accent: ClayAccent
+
+    // Deterministic demo stats derived from the name (stable across launches).
+    private var seed: Int { name.unicodeScalars.reduce(0) { $0 + Int($1.value) } }
+    var level: Int { 2 + seed % 18 }
+    var points: Int { 200 + (seed % 36) * 75 }
+    var places: Int { 5 + seed % 45 }
+    var events: Int { 1 + seed % 28 }
+    var streak: Int { seed % 45 }
+    var memberSince: String { ["January", "February", "March", "April", "May"][seed % 5] + " 2026" }
+    var levelProgress: Double { Double((seed * 37) % 100) / 100.0 }
+}
+
+struct CommunityProfileSheet: View {
+    let profile: CommunityProfile
+    @Environment(\.dismiss) private var dismiss
+    @State private var following = false
+
+    var body: some View {
+        NavigationStack {
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: Spacing.lg) {
+                    // Hero
+                    VStack(spacing: Spacing.md) {
+                        ZStack {
+                            PulseHalo(color: profile.accent.base.opacity(0.5), size: 120, lineWidth: 2)
+                            AvatarCircle(initials: profile.initials, size: 96, accent: profile.accent)
+                                .idleFloat(distance: 4, duration: 3)
+                        }
+                        .frame(height: 124).padding(.top, Spacing.sm)
+                        Text(profile.name).font(VType.display(28, .bold)).foregroundStyle(Palette.ink)
+                        HStack(spacing: 8) {
+                            Text("LEVEL \(profile.level)").font(VType.body(12, .bold)).tracking(1)
+                                .foregroundStyle(profile.accent.onColor)
+                                .padding(.horizontal, 10).padding(.vertical, 5)
+                                .background(ClayBackground(style: .accent(.spruce), radius: Radius.chip, elevation: 0.3))
+                            Text("Member since \(profile.memberSince)")
+                                .font(VType.body(12, .medium)).foregroundStyle(Palette.inkSoft)
+                        }
+                    }
+
+                    // Level progress
+                    VStack(spacing: Spacing.sm) {
+                        HStack {
+                            Text("Progress to level \(profile.level + 1)")
+                                .font(VType.body(13, .semibold)).foregroundStyle(Palette.inkSoft)
+                            Spacer()
+                            Text("\(Int(profile.levelProgress * 100))%").font(VType.num(13, .bold))
+                                .foregroundStyle(profile.accent.base)
+                        }
+                        ClayProgressBar(value: profile.levelProgress,
+                                        gradient: [profile.accent.depth, profile.accent.base], height: 14)
+                    }
+                    .padding(Spacing.md).claySurface(.surface, radius: Radius.md)
+
+                    // Stats — color-coded
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                        statTile("\(profile.places)", "Places", "leaf.fill", .teal)
+                        statTile("\(profile.events)", "Events", "calendar.badge.checkmark", .spruce)
+                        statTile("\(profile.streak)", "Day streak", "flame.fill", .terracotta)
+                        statTile("\(profile.points)", "Points", "sparkles", .gold)
+                    }
+
+                    Button { Haptics.tap(); withAnimation(.spring(response: 0.3)) { following.toggle() } } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: following ? "checkmark" : "person.badge.plus")
+                                .font(.system(size: 15, weight: .bold))
+                            Text(following ? "Following" : "Follow")
+                                .font(VType.body(16, .bold))
+                        }
+                        .foregroundStyle(following ? Palette.spruce.base : Palette.spruce.onColor)
+                        .frame(maxWidth: .infinity).padding(.vertical, 15)
+                        .background(ClayBackground(style: following ? .surface : .accent(.spruce), radius: Radius.md))
+                    }
+                    .buttonStyle(.plain)
+
+                    Spacer(minLength: 0)
+                }
+                .padding(Spacing.lg)
+                .padding(.bottom, Spacing.xl)
+            }
+            .background(VerdureBackground())
+            .navigationTitle("Profile").navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark").font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(Palette.inkSoft)
+                    }
+                }
+            }
+        }
+        .presentationDetents([.large])
+    }
+
+    private func statTile(_ value: String, _ label: String, _ icon: String, _ kind: ClayStyle.ClayAccentKind) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Image(systemName: icon).font(.system(size: 18, weight: .bold)).foregroundStyle(kind.accent.base)
+            Text(value).font(VType.num(26, .bold)).foregroundStyle(Palette.ink)
+                .lineLimit(1).minimumScaleFactor(0.5)
+            Text(label).font(VType.body(11, .medium)).foregroundStyle(Palette.inkSoft)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading).padding(Spacing.md)
+        .claySurface(.surface, radius: Radius.md, elevation: 0.8)
+        .overlay(RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
+            .strokeBorder(kind.accent.base.opacity(0.38), lineWidth: 1.5))
+    }
 }

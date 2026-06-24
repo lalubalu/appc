@@ -75,6 +75,7 @@ struct Event: Identifiable, Hashable {
     let pointValue: Int          // points earned for attending
     var description: String?     // optional event description
     var creatorID: String?       // Firebase UID of the event creator
+    var website: String?         // optional organizer / event info URL
 
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
     static func == (lhs: Event, rhs: Event) -> Bool { lhs.id == rhs.id }
@@ -178,4 +179,14 @@ struct Badge: Identifiable {
     var detail: String = ""
     var requirement: String = ""       // how it's unlocked
     var earnedDate: String? = nil      // e.g. "June 12, 2026" — nil if locked
+}
+
+// MARK: - Daily Gem fact
+
+/// A bite-sized fact or fun event revealed when the user taps the daily gem.
+struct GemFact {
+    let kind: String     // kicker label, e.g. "DID YOU KNOW", "FUN EVENT", "NATURE FACT"
+    let icon: String
+    let text: String
+    let accent: ClayStyle.ClayAccentKind
 }

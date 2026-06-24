@@ -7,6 +7,8 @@ struct EventsView: View {
     @Environment(EventsAPIService.self) private var eventsService
     @State private var selectedEvent: Event? = nil
     @State private var showCreateEvent = false
+    @State private var showSaved = false
+    @State private var showCalendar = false
     @State private var selectedCategory: EventCategory? = nil
     @State private var searchText = ""
     @AppStorage("accountType") private var accountTypeRaw = AccountType.visitor.rawValue
@@ -56,6 +58,14 @@ struct EventsView: View {
                 CreateEventSheet().environment(eventsService)
                     .presentationDetents([.large]).presentationDragIndicator(.visible)
             }
+            .sheet(isPresented: $showSaved) {
+                SavedEventsView(allEvents: sourceEvents, dateFormatter: dateFormatter)
+                    .environment(gameState).environment(locationManager)
+            }
+            .sheet(isPresented: $showCalendar) {
+                EventCalendarView(allEvents: sourceEvents, dateFormatter: dateFormatter)
+                    .environment(gameState).environment(locationManager)
+            }
         }
     }
 
@@ -69,16 +79,44 @@ struct EventsView: View {
                     Text("Events").font(VType.display(40, .bold)).foregroundStyle(Palette.ink)
                 }
                 Spacer()
-                // Only organizers can create events.
-                if accountType.canCreateEvents {
-                    Button { Haptics.tap(); showCreateEvent = true } label: {
-                        Image(systemName: "plus").font(.system(size: 19, weight: .bold))
-                            .foregroundStyle(Palette.spruce.onColor)
+                HStack(spacing: 10) {
+                    // Calendar view
+                    Button { Haptics.tap(); showCalendar = true } label: {
+                        Image(systemName: "calendar").font(.system(size: 17, weight: .bold))
+                            .foregroundStyle(Palette.teal.base)
                             .frame(width: 48, height: 48)
-                            .background(ClayBackground(style: .accent(.spruce), radius: Radius.chip, elevation: 0.6))
+                            .background(ClayBackground(style: .surface, radius: Radius.chip, elevation: 0.6))
                     }
                     .buttonStyle(.plain)
-                    .breathing(scale: 1.06, duration: 2.2)
+
+                    // Saved / bookmarked events
+                    Button { Haptics.tap(); showSaved = true } label: {
+                        ZStack(alignment: .topTrailing) {
+                            Image(systemName: "bookmark.fill").font(.system(size: 17, weight: .bold))
+                                .foregroundStyle(Palette.gold.base)
+                                .frame(width: 48, height: 48)
+                                .background(ClayBackground(style: .surface, radius: Radius.chip, elevation: 0.6))
+                            if !gameState.savedEventIDs.isEmpty {
+                                Text("\(gameState.savedEventIDs.count)")
+                                    .font(VType.num(10, .bold)).foregroundStyle(Palette.gold.onColor)
+                                    .padding(4).background(Circle().fill(Palette.gold.base))
+                                    .offset(x: 5, y: -5)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+
+                    // Only organizers can create events.
+                    if accountType.canCreateEvents {
+                        Button { Haptics.tap(); showCreateEvent = true } label: {
+                            Image(systemName: "plus").font(.system(size: 19, weight: .bold))
+                                .foregroundStyle(Palette.spruce.onColor)
+                                .frame(width: 48, height: 48)
+                                .background(ClayBackground(style: .accent(.spruce), radius: Radius.chip, elevation: 0.6))
+                        }
+                        .buttonStyle(.plain)
+                        .breathing(scale: 1.06, duration: 2.2)
+                    }
                 }
             }
 
@@ -512,12 +550,24 @@ private struct EventDetailSheet: View {
     private var isCheckedIn: Bool { gameState.isCheckedIn(event.id) }
     private var kind: ClayStyle.ClayAccentKind { event.category.clayKind }
 
-    /// Open Apple Maps to the event location (search by name — events carry no coordinates).
+    /// Open Apple Maps in turn-by-turn directions mode, routing from the user's
+    /// current location to the event address (daddr = destination, not a search).
     private func openDirections() {
         Haptics.tap()
-        let query = "\(event.title), \(event.locationName)"
+        let dest = event.locationName
             .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        if let url = URL(string: "http://maps.apple.com/?q=\(query)") { openURL(url) }
+        if let url = URL(string: "http://maps.apple.com/?daddr=\(dest)&dirflg=d") { openURL(url) }
+    }
+
+    /// Open the event's website if it has one, else a web search for more info.
+    private func openMoreInfo() {
+        Haptics.tap()
+        if let site = event.website, let url = URL(string: site.hasPrefix("http") ? site : "https://\(site)") {
+            openURL(url); return
+        }
+        let q = "\(event.title) \(event.organizer) \(event.locationName)"
+            .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        if let url = URL(string: "https://www.google.com/search?q=\(q)") { openURL(url) }
     }
 
     var body: some View {
@@ -539,12 +589,28 @@ private struct EventDetailSheet: View {
                             checkInSection
                             ClayButton("Get Directions", systemImage: "arrow.triangle.turn.up.right.diamond.fill",
                                        kind: .teal, fullWidth: true) { openDirections() }
+                            ClayButton(event.website != nil ? "Visit Website" : "More Info",
+                                       systemImage: "safari.fill", kind: .ghost, fullWidth: true) { openMoreInfo() }
                         }
                         .padding(.horizontal, Spacing.md)
                     }
                     .padding(.bottom, Spacing.xl)
                 }
                 .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.6)) {
+                                gameState.toggleSaved(event)
+                            }
+                        } label: {
+                            Image(systemName: gameState.isSaved(event.id) ? "bookmark.fill" : "bookmark")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundStyle(gameState.isSaved(event.id) ? Palette.gold.base : Palette.inkSoft)
+                                .symbolEffect(.bounce, value: gameState.isSaved(event.id))
+                        }
+                    }
+                }
 
                 if showCelebration { checkInCelebration.transition(.opacity) }
             }
@@ -681,4 +747,264 @@ private struct EventDetailSheet: View {
         .environment(GameStateManager())
         .environment(LocationManager())
         .environment(EventsAPIService())
+}
+
+// MARK: - Saved / bookmarked events
+
+private struct SavedEventsView: View {
+    let allEvents: [Event]
+    let dateFormatter: DateFormatter
+    @Environment(GameStateManager.self) private var gameState
+    @Environment(LocationManager.self) private var locationManager
+    @Environment(\.dismiss) private var dismiss
+    @State private var selectedEvent: Event?
+
+    private var savedEvents: [Event] {
+        allEvents.filter { gameState.isSaved($0.id) }.sorted { $0.date < $1.date }
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView(.vertical, showsIndicators: false) {
+                if savedEvents.isEmpty {
+                    emptyState
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(Array(savedEvents.enumerated()), id: \.element.id) { i, event in
+                            TimelineRow(event: event, isCheckedIn: gameState.isCheckedIn(event.id),
+                                        isLast: i == savedEvents.count - 1)
+                                .onTapGesture { Haptics.soft(); selectedEvent = event }
+                        }
+                    }
+                    .padding(Spacing.md)
+                    .padding(.bottom, Spacing.xl)
+                }
+            }
+            .background(VerdureBackground())
+            .navigationTitle("Saved Events")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark").font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(Palette.inkSoft)
+                    }
+                }
+            }
+        }
+        .sheet(item: $selectedEvent) { event in
+            EventDetailSheet(event: event, dateFormatter: dateFormatter)
+                .environment(gameState).environment(locationManager)
+                .presentationDetents([.large]).presentationDragIndicator(.visible)
+        }
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: Spacing.md) {
+            ClayIconTile(systemImage: "bookmark.slash", kind: .gold, size: 66, radius: Radius.md)
+            Text("No saved events yet").font(VType.display(19, .semibold)).foregroundStyle(Palette.ink)
+            Text("Tap the bookmark on any event to save it here for later.")
+                .font(VType.body(14)).foregroundStyle(Palette.inkSoft)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity).padding(.top, 80).padding(.horizontal, Spacing.xl)
+    }
+}
+
+// MARK: - Events calendar (month grid with event dots)
+
+private struct EventCalendarView: View {
+    let allEvents: [Event]
+    let dateFormatter: DateFormatter
+    @Environment(GameStateManager.self) private var gameState
+    @Environment(LocationManager.self) private var locationManager
+    @Environment(\.dismiss) private var dismiss
+    @State private var monthAnchor = Date()
+    @State private var selectedDay: Date?
+    @State private var selectedEvent: Event?
+
+    private let cal = Calendar.current
+    private let weekdaySymbols = ["S", "M", "T", "W", "T", "F", "S"]
+
+    private var eventsByDay: [Date: [Event]] {
+        Dictionary(grouping: allEvents) { cal.startOfDay(for: $0.date) }
+    }
+
+    private var monthTitle: String {
+        let f = DateFormatter(); f.dateFormat = "MMMM yyyy"; return f.string(from: monthAnchor)
+    }
+
+    /// Calendar cells for the anchored month, padded with nils to full weeks.
+    private var monthCells: [Date?] {
+        guard let interval = cal.dateInterval(of: .month, for: monthAnchor),
+              let firstWeekday = cal.dateComponents([.weekday], from: interval.start).weekday else { return [] }
+        let daysInMonth = cal.range(of: .day, in: .month, for: monthAnchor)?.count ?? 30
+        let leading = (firstWeekday - cal.firstWeekday + 7) % 7
+        var cells: [Date?] = Array(repeating: nil, count: leading)
+        for d in 0..<daysInMonth {
+            cells.append(cal.date(byAdding: .day, value: d, to: interval.start))
+        }
+        while cells.count % 7 != 0 { cells.append(nil) }
+        return cells
+    }
+
+    private func events(on day: Date) -> [Event] {
+        eventsByDay[cal.startOfDay(for: day)] ?? []
+    }
+
+    private var selectedDayEvents: [Event] {
+        guard let day = selectedDay else { return [] }
+        return events(on: day).sorted { $0.time < $1.time }
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: Spacing.lg) {
+                    monthHeader
+                    weekdayRow
+                    grid
+                    selectedList
+                }
+                .padding(Spacing.lg)
+                .padding(.bottom, Spacing.xl)
+            }
+            .background(VerdureBackground())
+            .navigationTitle("Calendar").navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark").font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(Palette.inkSoft)
+                    }
+                }
+            }
+        }
+        .sheet(item: $selectedEvent) { event in
+            EventDetailSheet(event: event, dateFormatter: dateFormatter)
+                .environment(gameState).environment(locationManager)
+                .presentationDetents([.large]).presentationDragIndicator(.visible)
+        }
+    }
+
+    private var monthHeader: some View {
+        HStack {
+            Button { stepMonth(-1) } label: {
+                Image(systemName: "chevron.left").font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(Palette.ink).frame(width: 40, height: 40)
+                    .background(ClayBackground(style: .surface, radius: Radius.chip, elevation: 0.5))
+            }.buttonStyle(.plain)
+            Spacer()
+            Text(monthTitle).font(VType.display(22, .semibold)).foregroundStyle(Palette.ink)
+            Spacer()
+            Button { stepMonth(1) } label: {
+                Image(systemName: "chevron.right").font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(Palette.ink).frame(width: 40, height: 40)
+                    .background(ClayBackground(style: .surface, radius: Radius.chip, elevation: 0.5))
+            }.buttonStyle(.plain)
+        }
+    }
+
+    private var weekdayRow: some View {
+        HStack(spacing: 0) {
+            ForEach(Array(weekdaySymbols.enumerated()), id: \.offset) { _, s in
+                Text(s).font(VType.body(11, .bold)).foregroundStyle(Palette.inkFaint)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+    }
+
+    private var grid: some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 7), spacing: 6) {
+            ForEach(Array(monthCells.enumerated()), id: \.offset) { _, cell in
+                if let day = cell { dayCell(day) } else { Color.clear.frame(height: 44) }
+            }
+        }
+    }
+
+    private func dayCell(_ day: Date) -> some View {
+        let dayEvents = events(on: day)
+        let isToday = cal.isDateInToday(day)
+        let isSelected = selectedDay.map { cal.isDate($0, inSameDayAs: day) } ?? false
+        let accent = dayEvents.first?.category.accent.base ?? Palette.teal.base
+        return Button {
+            Haptics.soft()
+            withAnimation(.spring(response: 0.3)) { selectedDay = day }
+        } label: {
+            VStack(spacing: 3) {
+                Text("\(cal.component(.day, from: day))")
+                    .font(VType.num(14, isSelected ? .bold : .medium))
+                    .foregroundStyle(isSelected ? Palette.spruce.onColor : Palette.ink)
+                HStack(spacing: 2) {
+                    ForEach(0..<min(dayEvents.count, 3), id: \.self) { i in
+                        Circle()
+                            .fill(isSelected ? Palette.spruce.onColor : dayEvents[i].category.accent.base)
+                            .frame(width: 4, height: 4)
+                    }
+                }
+                .frame(height: 4)
+            }
+            .frame(maxWidth: .infinity).frame(height: 44)
+            .background(
+                RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
+                    .fill(isSelected ? Palette.spruce.base : (dayEvents.isEmpty ? Color.clear : accent.opacity(0.12)))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
+                    .strokeBorder(isToday && !isSelected ? Palette.gold.base : Color.clear, lineWidth: 1.5)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder private var selectedList: some View {
+        if let day = selectedDay {
+            VStack(alignment: .leading, spacing: Spacing.sm) {
+                Text(longDate(day)).font(VType.display(17, .semibold)).foregroundStyle(Palette.ink)
+                if selectedDayEvents.isEmpty {
+                    Text("No events this day.").font(VType.body(14)).foregroundStyle(Palette.inkSoft)
+                        .padding(.vertical, Spacing.sm)
+                } else {
+                    ForEach(selectedDayEvents) { event in
+                        Button { Haptics.soft(); selectedEvent = event } label: {
+                            calendarEventRow(event)
+                        }.buttonStyle(.plain)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .transition(.opacity)
+        } else {
+            Text("Tap a highlighted day to see its events.")
+                .font(VType.body(14)).foregroundStyle(Palette.inkSoft)
+                .frame(maxWidth: .infinity).padding(.top, Spacing.md)
+        }
+    }
+
+    private func calendarEventRow(_ event: Event) -> some View {
+        HStack(spacing: Spacing.md) {
+            ClayIconTile(systemImage: event.imagePlaceholder, kind: event.category.clayKind, size: 44, radius: Radius.chip)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(event.title).font(VType.display(15, .semibold)).foregroundStyle(Palette.ink).lineLimit(1)
+                Text("\(event.time) · \(event.locationName)")
+                    .font(VType.body(12, .medium)).foregroundStyle(Palette.inkSoft).lineLimit(1)
+            }
+            Spacer(minLength: Spacing.sm)
+            PointsBadge(points: event.pointValue, kind: event.category.clayKind)
+        }
+        .padding(Spacing.md)
+        .frame(maxWidth: .infinity)
+        .claySurface(.surface, radius: Radius.md, elevation: 0.8)
+    }
+
+    private func stepMonth(_ delta: Int) {
+        Haptics.soft()
+        if let d = cal.date(byAdding: .month, value: delta, to: monthAnchor) {
+            withAnimation(.spring(response: 0.35)) { monthAnchor = d; selectedDay = nil }
+        }
+    }
+
+    private func longDate(_ day: Date) -> String {
+        let f = DateFormatter(); f.dateFormat = "EEEE, MMM d"; return f.string(from: day)
+    }
 }
