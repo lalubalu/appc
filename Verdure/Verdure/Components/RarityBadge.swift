@@ -20,6 +20,12 @@ extension PlaceRarity {
 }
 
 extension PlaceCategory {
+    /// Interest categories the user picked during onboarding (empty = no preference yet).
+    static var userInterests: Set<PlaceCategory> {
+        let raw = UserDefaults.standard.string(forKey: "interestCategories") ?? ""
+        return Set(raw.split(separator: ",").compactMap { PlaceCategory(rawValue: String($0)) })
+    }
+
     var clayKind: ClayStyle.ClayAccentKind {
         switch self {
         case .parks: return .spruce

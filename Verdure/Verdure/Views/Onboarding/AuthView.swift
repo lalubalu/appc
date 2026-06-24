@@ -8,7 +8,7 @@ struct AuthView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var onComplete: () -> Void
 
-    @State private var isSignUp = true
+    @State private var isSignUp = false   // default to Sign In
     @State private var name = ""
     @State private var email = ""
     @State private var password = ""
@@ -127,8 +127,8 @@ struct AuthView: View {
 
     private var modeSwitch: some View {
         HStack(spacing: 6) {
-            segment("Sign Up", on: isSignUp) { withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { isSignUp = true; authService.clearError() } }
             segment("Sign In", on: !isSignUp) { withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { isSignUp = false; authService.clearError() } }
+            segment("Sign Up", on: isSignUp) { withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { isSignUp = true; authService.clearError() } }
         }
         .padding(5)
         .background(ClayBackground(style: .inset, radius: Radius.chip + 4))

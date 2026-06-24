@@ -6,18 +6,30 @@ struct ExploreView: View {
     @State private var gemPlace: Place? = nil
     @State private var placeSearch = ""
     @State private var placeFilter: PlaceCategory? = nil
+    @State private var forYou = true
+    @AppStorage("interestCategories") private var interestCategoriesRaw = ""
 
     private var sourcePlaces: [Place] {
         placesService.places.isEmpty ? SampleData.places : placesService.places
     }
+    private var interests: Set<PlaceCategory> {
+        Set(interestCategoriesRaw.split(separator: ",").compactMap { PlaceCategory(rawValue: String($0)) })
+    }
+    private var showForYou: Bool { !interests.isEmpty }
     private var nearbyCategories: [PlaceCategory] {
         let present = Set(sourcePlaces.map(\.category))
         return PlaceCategory.allCases.filter { present.contains($0) }
     }
+    /// "For You" recommends only the user's chosen interest categories; "All" / a category
+    /// chip shows everything. (Per feedback: don't recommend unchosen groups, but still list them.)
     private var filteredPlaces: [Place] {
         sourcePlaces.filter { p in
-            (placeFilter == nil || p.category == placeFilter) &&
-            (placeSearch.isEmpty || p.name.localizedCaseInsensitiveContains(placeSearch))
+            let matchesFilter: Bool
+            if let cat = placeFilter { matchesFilter = p.category == cat }
+            else if forYou && showForYou { matchesFilter = interests.contains(p.category) }
+            else { matchesFilter = true }
+            let matchesSearch = placeSearch.isEmpty || p.name.localizedCaseInsensitiveContains(placeSearch)
+            return matchesFilter && matchesSearch
         }
     }
     private var dailyGem: DailyGem {
@@ -256,14 +268,18 @@ struct ExploreView: View {
             .padding(.horizontal, Spacing.md).padding(.vertical, 11)
             .background(ClayBackground(style: .inset, radius: Radius.md))
 
-            // Filter chips
+            // Filter chips — "For You" (interests) is the default recommendation set.
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
+                    if showForYou {
+                        CategoryPill(label: "For You", icon: "sparkles", tint: Palette.gold.base,
+                                     isSelected: forYou && placeFilter == nil) { forYou = true; placeFilter = nil }
+                    }
                     CategoryPill(label: "All", icon: "square.grid.2x2.fill", tint: Palette.teal.base,
-                                 isSelected: placeFilter == nil) { placeFilter = nil }
+                                 isSelected: placeFilter == nil && (!showForYou || !forYou)) { forYou = false; placeFilter = nil }
                     ForEach(nearbyCategories) { cat in
                         CategoryPill(label: cat.rawValue, icon: cat.icon, tint: cat.accent.base,
-                                     isSelected: placeFilter == cat) { placeFilter = cat }
+                                     isSelected: placeFilter == cat) { forYou = false; placeFilter = cat }
                     }
                 }
                 .padding(.vertical, 2)

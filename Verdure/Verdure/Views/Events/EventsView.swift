@@ -31,6 +31,16 @@ struct EventsView: View {
         }
         return result
     }
+    private var hasActiveSearch: Bool { !searchText.trimmingCharacters(in: .whitespaces).isEmpty }
+    /// Events shown in the deck/timeline. A category filter never blanks the screen —
+    /// it falls back to all events; only an explicit text search can yield a true "no match".
+    private var displayEvents: [Event] {
+        (filteredEvents.isEmpty && !hasActiveSearch) ? sourceEvents : filteredEvents
+    }
+    /// True when the selected category had no events and we fell back to showing all.
+    private var categoryFellBack: Bool {
+        selectedCategory != nil && filteredEvents.isEmpty && !hasActiveSearch
+    }
     private let dateFormatter: DateFormatter = {
         let f = DateFormatter(); f.dateFormat = "EEE, MMM d"; return f
     }()
@@ -184,22 +194,29 @@ struct EventsView: View {
 
     private var posterDeck: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
-            HStack {
-                KickerLabel(text: "Swipe the deck", color: Palette.teal.base)
+            HStack(spacing: 6) {
+                KickerLabel(text: "Featured events", color: Palette.teal.base)
                 Spacer()
-                Image(systemName: "hand.draw.fill").font(.system(size: 13, weight: .semibold))
+                Image(systemName: "bookmark").font(.system(size: 12, weight: .bold))
                     .foregroundStyle(Palette.inkFaint)
+                Text("tap to save").font(VType.body(11, .medium)).foregroundStyle(Palette.inkFaint)
             }
             .padding(.horizontal, Spacing.md)
 
+            if categoryFellBack {
+                Text("No \(selectedCategory?.rawValue ?? "") events right now — showing all.")
+                    .font(VType.body(12, .medium)).foregroundStyle(Palette.inkSoft)
+                    .padding(.horizontal, Spacing.md)
+            }
+
             if eventsService.isLoading && sourceEvents.isEmpty {
                 loadingRow
-            } else if filteredEvents.isEmpty {
+            } else if displayEvents.isEmpty {
                 emptyDeck
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 16) {
-                        ForEach(filteredEvents) { event in
+                        ForEach(displayEvents) { event in
                             EventPoster(event: event, isCheckedIn: gameState.isCheckedIn(event.id))
                                 .containerRelativeFrame(.horizontal, count: 1, span: 1, spacing: 16)
                                 .scrollTransition(.interactive) { content, phase in
@@ -247,15 +264,15 @@ struct EventsView: View {
 
     @ViewBuilder
     private var upcomingTimeline: some View {
-        if !filteredEvents.isEmpty {
+        if !displayEvents.isEmpty {
         VStack(alignment: .leading, spacing: Spacing.md) {
             ClaySectionHeader(index: "↓", kicker: "On the calendar", title: "Upcoming",
                               accent: Palette.gold.base)
                 .padding(.horizontal, Spacing.md)
             VStack(spacing: 0) {
-                ForEach(Array(filteredEvents.prefix(5).enumerated()), id: \.element.id) { i, event in
+                ForEach(Array(displayEvents.prefix(5).enumerated()), id: \.element.id) { i, event in
                     TimelineRow(event: event, isCheckedIn: gameState.isCheckedIn(event.id),
-                                isLast: i == min(5, filteredEvents.count) - 1)
+                                isLast: i == min(5, displayEvents.count) - 1)
                         .onTapGesture { Haptics.soft(); selectedEvent = event }
                 }
             }
@@ -270,6 +287,7 @@ struct EventsView: View {
 private struct EventPoster: View {
     let event: Event
     let isCheckedIn: Bool
+    @Environment(GameStateManager.self) private var gameState
     private var kind: ClayStyle.ClayAccentKind { event.category.clayKind }
     private var on: Color { kind.accent.onColor }
 
@@ -282,6 +300,16 @@ private struct EventPoster: View {
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 8) {
+                    Button {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.6)) { gameState.toggleSaved(event) }
+                    } label: {
+                        Image(systemName: gameState.isSaved(event.id) ? "bookmark.fill" : "bookmark")
+                            .font(.system(size: 14, weight: .bold)).foregroundStyle(on)
+                            .symbolEffect(.bounce, value: gameState.isSaved(event.id))
+                            .frame(width: 34, height: 34)
+                            .background(.ultraThinMaterial, in: Circle())
+                    }
+                    .buttonStyle(.plain)
                     HStack(spacing: 5) {
                         Image(systemName: event.category.icon).font(.system(size: 11, weight: .bold))
                         Text(event.category.rawValue.uppercased()).font(VType.body(10, .bold)).tracking(0.6)

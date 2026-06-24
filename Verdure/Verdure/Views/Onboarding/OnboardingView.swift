@@ -5,6 +5,7 @@ struct OnboardingView: View {
     @Environment(AuthService.self) private var authService
     @State private var currentPage = 0
     @State private var selectedInterests: Set<PlaceCategory> = []
+    @AppStorage("interestCategories") private var interestCategoriesRaw = ""
     @State private var userName = ""
     @State private var userEmail = ""
     @State private var userPassword = ""
@@ -192,6 +193,7 @@ struct OnboardingView: View {
                     ) {
                         if selectedInterests.contains(category) { selectedInterests.remove(category) }
                         else { selectedInterests.insert(category) }
+                        interestCategoriesRaw = selectedInterests.map(\.rawValue).joined(separator: ",")
                     }
                 }
             }
