@@ -23,6 +23,7 @@
 		453783882CF79E54F5C84926 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = E158D05D5E48685B178E12B5 /* FirebaseAuth */; };
 		498CD196CF0BAB44D3AD6C2C /* Fredoka-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 8A0D8B53DB8BA4B8BB311A64 /* Fredoka-Medium.ttf */; };
 		4E2DA6C00098E371236E4BC5 /* SampleData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 968ADEA7FBB0AB7976384091 /* SampleData.swift */; };
+		4F07C28FD1CB8D325EBF45B8 /* EventProviders.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78E3C1045856FE04A699780F /* EventProviders.swift */; };
 		504C05F04D8E14A64ED1DD1D /* kickbacks.vsix in Resources */ = {isa = PBXBuildFile; fileRef = 09050697323C833D9BB2C280 /* kickbacks.vsix */; };
 		558A56E80AD3C17D8F4234F6 /* ClayMotion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29157D7AF46A04CCA52AE9DB /* ClayMotion.swift */; };
 		60E90FF95995A79E1D2B8E65 /* CommunityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEA9F386EB5E937576F7F17A /* CommunityView.swift */; };
@@ -82,6 +83,7 @@
 		7009DBDF066E6A4E973BD540 /* VerdureTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerdureTheme.swift; sourceTree = "<group>"; };
 		719DCF94E40C512549A1CADC /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		7340F1690374C2D0E14E775C /* Fredoka-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Fredoka-Regular.ttf"; sourceTree = "<group>"; };
+		78E3C1045856FE04A699780F /* EventProviders.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventProviders.swift; sourceTree = "<group>"; };
 		7F91EB7C7709DEBD9167F2DC /* ExploreView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExploreView.swift; sourceTree = "<group>"; };
 		8628F2F6B8B8168D599B7772 /* Rubik-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Rubik-Bold.ttf"; sourceTree = "<group>"; };
 		87F07F03961C7624432B9C95 /* Rubik-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Rubik-Regular.ttf"; sourceTree = "<group>"; };
@@ -223,6 +225,7 @@
 				18435643F4C1731E6A07A618 /* AccountType.swift */,
 				FB8F363A9957A893687367F5 /* AuthService.swift */,
 				3EE8DEBB376ECBD578D6F796 /* CollectionModels.swift */,
+				78E3C1045856FE04A699780F /* EventProviders.swift */,
 				ECE60B1AABA084FECD0E731D /* EventsAPIService.swift */,
 				BC6765B53003FF95283C4E70 /* FirestoreService.swift */,
 				A24A71EC76E347E6E0D77601 /* GameStateManager.swift */,
@@ -409,6 +412,7 @@
 				695F7A1DCA2D3432AB1493B9 /* CollectionView.swift in Sources */,
 				60E90FF95995A79E1D2B8E65 /* CommunityView.swift in Sources */,
 				6FFF01A80DDCBB08E1ADE8E3 /* DailyGemView.swift in Sources */,
+				4F07C28FD1CB8D325EBF45B8 /* EventProviders.swift in Sources */,
 				86B284BB9EE5BA5A2AE6CAD3 /* EventsAPIService.swift in Sources */,
 				8BDC1A2E17553BE0B2B42763 /* EventsView.swift in Sources */,
 				E787B0F3D42D15C53C1B9A27 /* ExploreView.swift in Sources */,

@@ -42,6 +42,9 @@ final class EventsAPIService {
     // MARK: - Private
 
     private var db: Firestore { Firestore.firestore() }
+    private let providerHub = EventProviderHub()
+    /// Names of external event providers that are configured and will run.
+    var enabledProviders: [String] { providerHub.enabledNames }
     private var lastFetchDate: Date?
     private var cachedCenter: CLLocationCoordinate2D?
     private let fetchCooldown: TimeInterval = 600 // 10 min — be conservative with 100 free searches
@@ -77,18 +80,22 @@ final class EventsAPIService {
         isLoading = true
         lastError = nil
 
-        // Fetch from both sources in parallel
+        // Fetch from all sources in parallel: SerpApi, Firestore community events,
+        // and every configured external provider (Ticketmaster, Eventbrite, …).
         async let serpEvents = fetchSerpApiEvents(around: center)
         async let communityEvents = fetchFirestoreEvents()
+        async let externalEvents = providerHub.fetchAll(around: center, radiusMiles: searchRadiusMiles)
 
         let realEvents = await serpEvents
         let userEvents = await communityEvents
+        let extEvents = await externalEvents
 
-        // Merge: user-created events first, then real events, deduplicate by title
+        // Merge: user-created events first, then real + external events, dedup by title.
         var merged: [Event] = userEvents
-        let existingTitles = Set(merged.map { $0.title.lowercased() })
-        for event in realEvents where !existingTitles.contains(event.title.lowercased()) {
+        var seenTitles = Set(merged.map { $0.title.lowercased() })
+        for event in (realEvents + extEvents) where !seenTitles.contains(event.title.lowercased()) {
             merged.append(event)
+            seenTitles.insert(event.title.lowercased())
         }
         merged.sort { $0.date < $1.date }
 
