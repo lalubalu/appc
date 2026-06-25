@@ -241,6 +241,9 @@ struct LocalistProvider: EventProvider {
 // Docs: https://developers.google.com/custom-search/v1/overview
 // Returns web results, not structured events — so dates/venues aren't reliable.
 // Used as a best-effort discovery layer that surfaces event *links*.
+// VERIFIED 2026-06: endpoint/fields correct; free tier = 100 queries/day. BUT the
+// Custom Search JSON API is "closed to new customers" and is scheduled to shut down
+// on 2027-01-01 — only existing API consumers can obtain a key. Treat as legacy.
 
 struct GooglePSEProvider: EventProvider {
     let name = "Google Search"
