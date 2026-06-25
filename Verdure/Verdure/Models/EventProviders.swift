@@ -145,8 +145,10 @@ struct TicketmasterProvider: EventProvider {
             guard let day = localDate, let date = EventParse.date("\(day)T\(localTime)") ?? EventParse.date(day) else { return nil }
             let venues = (ev["_embedded"] as? [String: Any])?["venues"] as? [[String: Any]]
             let venueName = venues?.first?["name"] as? String ?? ""
-            let classifications = ev["classifications"] as? [[String: Any]]
-            let genre = (classifications?.first?["segment"] as? [String: Any])?["name"] as? String ?? title
+            let classification = (ev["classifications"] as? [[String: Any]])?.first
+            let segment = (classification?["segment"] as? [String: Any])?["name"] as? String
+            let genreName = (classification?["genre"] as? [String: Any])?["name"] as? String
+            let genre = segment ?? genreName ?? title
             return makeEvent(id: "tm-\(id)", title: title, organizer: venueName, date: date,
                              locationName: venueName, category: .classify(genre),
                              website: ev["url"] as? String)
@@ -208,12 +210,13 @@ struct LocalistProvider: EventProvider {
         guard isEnabled else { return [] }
         let cleanHost = host.replacingOccurrences(of: "https://", with: "").replacingOccurrences(of: "/", with: "")
         var comps = URLComponents(string: "https://\(cleanHost)/api/2/events")!
+        // Localist geo params: near="lat,lng", within=radius, units=mi (verified against docs).
         comps.queryItems = [
             .init(name: "days", value: "60"),
             .init(name: "pp", value: "30"),
-            .init(name: "distance", value: "\(radiusMiles)"),
-            .init(name: "lat", value: "\(center.latitude)"),
-            .init(name: "lon", value: "\(center.longitude)")
+            .init(name: "near", value: "\(center.latitude),\(center.longitude)"),
+            .init(name: "within", value: "\(radiusMiles)"),
+            .init(name: "units", value: "mi")
         ]
         guard let url = comps.url, let data = await fetchJSON(url) else { return [] }
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -273,32 +276,35 @@ struct GooglePSEProvider: EventProvider {
 }
 
 // MARK: - Neighborhood Commons API
-// Listed source: https://api.neighborhood-commons.org/
-// NOTE: This endpoint could not be verified as a real public API. The client below
-// follows a conventional REST/JSON shape and stays DISABLED until both a base URL
-// and key are configured — so it activates cleanly if/when a real service exists.
+// Listed source: https://api.neighborhood-commons.org/  (Schema.org-aligned "open layer")
+// VERIFIED 2026-06: the marketing site exists and documents a no-key /v1/events read API,
+// but api.neighborhood-commons.org currently 308-redirects to the site and /v1/events
+// returns 404 — i.e. the API is NOT live yet. Reads need no key, so this provider enables
+// on a base URL alone (default blank = disabled). Set NEIGHBORHOOD_COMMONS_BASE to
+// https://api.neighborhood-commons.org once the endpoint is serving JSON.
+// The decoder is tolerant of Schema.org field names (name/startDate/location/url).
 
 struct NeighborhoodCommonsProvider: EventProvider {
     let name = "Neighborhood Commons"
     private var base: String { ProviderConfig.value("NeighborhoodCommonsBase", env: "NEIGHBORHOOD_COMMONS_BASE") }
     private var key: String { ProviderConfig.value("NeighborhoodCommonsKey", env: "NEIGHBORHOOD_COMMONS_KEY") }
-    var isEnabled: Bool { !base.isEmpty && !key.isEmpty }
+    var isEnabled: Bool { !base.isEmpty }   // reads are open (no key required)
 
     func fetchEvents(around center: CLLocationCoordinate2D, radiusMiles: Int) async -> [Event] {
         guard isEnabled else { return [] }
         let cleanBase = base.hasSuffix("/") ? String(base.dropLast()) : base
-        var comps = URLComponents(string: "\(cleanBase)/events")!
+        var comps = URLComponents(string: "\(cleanBase)/v1/events")!
         comps.queryItems = [
             .init(name: "lat", value: "\(center.latitude)"),
             .init(name: "lng", value: "\(center.longitude)"),
             .init(name: "radius", value: "\(radiusMiles)")
         ]
-        guard let url = comps.url,
-              let data = await fetchJSON(url, headers: ["Authorization": "Bearer \(key)"]) else { return [] }
-        // Accept either {events:[...]} or a bare [...] array.
+        let headers = key.isEmpty ? [:] : ["Authorization": "Bearer \(key)"]
+        guard let url = comps.url, let data = await fetchJSON(url, headers: headers) else { return [] }
+        // Accept {events:[...]}, {data:[...]}, or a bare [...] array.
         let array: [[String: Any]]
         if let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let events = root["events"] as? [[String: Any]] {
+           let events = (root["events"] as? [[String: Any]]) ?? (root["data"] as? [[String: Any]]) {
             array = events
         } else if let bare = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
             array = bare
@@ -306,10 +312,16 @@ struct NeighborhoodCommonsProvider: EventProvider {
 
         return array.compactMap { ev in
             let id = (ev["id"] as? String) ?? (ev["id"] as? Int).map(String.init) ?? UUID().uuidString
-            guard let title = (ev["title"] as? String) ?? (ev["name"] as? String) else { return nil }
-            guard let date = EventParse.date((ev["start"] as? String) ?? (ev["date"] as? String)) else { return nil }
-            let locationName = (ev["location"] as? String) ?? (ev["venue"] as? String) ?? ""
-            let org = (ev["organization"] as? String) ?? (ev["organizer"] as? String) ?? "Neighborhood Commons"
+            guard let title = (ev["name"] as? String) ?? (ev["title"] as? String) else { return nil }
+            let startRaw = (ev["startDate"] as? String) ?? (ev["start"] as? String) ?? (ev["date"] as? String)
+            guard let date = EventParse.date(startRaw) else { return nil }
+            // Schema.org location can be a string or an object with a name.
+            let locationName = (ev["location"] as? String)
+                ?? ((ev["location"] as? [String: Any])?["name"] as? String)
+                ?? (ev["venue"] as? String) ?? ""
+            let org = (ev["organizer"] as? String)
+                ?? ((ev["organizer"] as? [String: Any])?["name"] as? String)
+                ?? (ev["organization"] as? String) ?? "Neighborhood Commons"
             return makeEvent(id: "nc-\(id)", title: title, organizer: org, date: date,
                              locationName: locationName, category: .classify(title),
                              website: (ev["url"] as? String) ?? (ev["link"] as? String))
