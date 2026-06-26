@@ -124,8 +124,13 @@ final class GameStateManager {
     func isSaved(_ eventID: String) -> Bool { savedEventIDs.contains(eventID) }
 
     func toggleSaved(_ event: Event) {
-        if savedEventIDs.contains(event.id) { savedEventIDs.remove(event.id) }
-        else { savedEventIDs.insert(event.id); Haptics.success() }
+        if savedEventIDs.contains(event.id) {
+            savedEventIDs.remove(event.id)
+            NotificationManager.shared.cancelEventReminder(for: event)
+        } else {
+            savedEventIDs.insert(event.id); Haptics.success()
+            NotificationManager.shared.scheduleEventReminder(for: event)
+        }
     }
 
     // MARK: - Place Collection (secondary, small points)

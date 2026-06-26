@@ -197,18 +197,17 @@ struct VerdureBackground: View {
 
 struct RiseIn: ViewModifier {
     var delay: Double = 0
-    var from: CGFloat = 26
+    var from: CGFloat = 14
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var shown = false
     func body(content: Content) -> some View {
         content
-            .opacity(shown ? 1 : 0)
+            // No animated blur — it's GPU-expensive and janky. Just opacity + a small rise.
+            .opacity(shown || reduceMotion ? 1 : 0)
             .offset(y: shown || reduceMotion ? 0 : from)
-            .scaleEffect(shown || reduceMotion ? 1 : 0.96, anchor: .center)
-            .blur(radius: shown || reduceMotion ? 0 : 6)
             .onAppear {
                 if reduceMotion { shown = true; return }
-                withAnimation(.spring(response: 0.6, dampingFraction: 0.82).delay(delay)) {
+                withAnimation(.spring(response: 0.55, dampingFraction: 0.85).delay(delay)) {
                     shown = true
                 }
             }
@@ -235,14 +234,14 @@ struct DramaticRise: ViewModifier {
     @State private var shown = false
     func body(content: Content) -> some View {
         content
+            // Subtle settle only — no animated blur/rotation/big slide (those read as
+            // choppy "auto-scrolling" when every section replays on tab switch).
             .opacity(shown || reduceMotion ? 1 : 0)
-            .scaleEffect(shown || reduceMotion ? 1 : 0.82, anchor: .center)
-            .offset(y: shown || reduceMotion ? 0 : 46)
-            .rotationEffect(.degrees(shown || reduceMotion ? 0 : -3))
-            .blur(radius: shown || reduceMotion ? 0 : 9)
+            .scaleEffect(shown || reduceMotion ? 1 : 0.96, anchor: .center)
+            .offset(y: shown || reduceMotion ? 0 : 16)
             .onAppear {
                 if reduceMotion { shown = true; return }
-                withAnimation(.spring(response: 0.66, dampingFraction: 0.66).delay(delay)) { shown = true }
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.85).delay(delay)) { shown = true }
             }
     }
 }

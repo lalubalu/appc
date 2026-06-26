@@ -4,6 +4,7 @@ struct ExploreView: View {
     @Environment(GameStateManager.self) private var gameState
     @Environment(PlacesAPIService.self) private var placesService
     @State private var gemPlace: Place? = nil
+    @State private var showNotifications = false
     @State private var placeSearch = ""
     @State private var placeFilter: PlaceCategory? = nil
     @State private var forYou = true
@@ -59,6 +60,7 @@ struct ExploreView: View {
             .background(VerdureBackground())
             .navigationDestination(for: Place.self) { PlaceDetailView(place: $0) }
             .sheet(item: $gemPlace) { PlaceDetailView(place: $0) }
+            .sheet(isPresented: $showNotifications) { NotificationsInboxView() }
         }
     }
 
@@ -71,6 +73,22 @@ struct ExploreView: View {
                 Text("Explore").font(VType.display(38, .bold)).foregroundStyle(Palette.ink)
             }
             Spacer()
+            Button { Haptics.tap(); showNotifications = true } label: {
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: "bell.fill").font(.system(size: 17, weight: .bold))
+                        .foregroundStyle(Palette.spruce.base)
+                        .frame(width: 46, height: 46)
+                        .background(ClayBackground(style: .surface, radius: Radius.chip, elevation: 0.6))
+                    if NotificationManager.shared.unreadCount > 0 {
+                        Text("\(NotificationManager.shared.unreadCount)")
+                            .font(VType.num(10, .bold)).foregroundStyle(Palette.terracotta.onColor)
+                            .padding(.horizontal, 5).padding(.vertical, 2)
+                            .background(Capsule().fill(Palette.terracotta.base))
+                            .offset(x: 6, y: -4)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
             UserAvatar(initials: "ME", size: 46, accent: Palette.spruce)
         }
     }

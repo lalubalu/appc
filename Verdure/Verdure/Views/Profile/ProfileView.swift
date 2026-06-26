@@ -17,6 +17,7 @@ struct ProfileView: View {
     @State private var showAllBadges = false
     @State private var showAllChallenges = false
     @State private var showAbout = false
+    @State private var showNotifSettings = false
     @State private var selectedBadge: Badge?
     @State private var selectedChallenge: Challenge?
     @State private var heroAppeared = false
@@ -53,6 +54,7 @@ struct ProfileView: View {
                 AllChallengesView(challenges: SampleData.challenges)
             }
             .sheet(isPresented: $showAbout) { AboutVerdureView() }
+            .sheet(isPresented: $showNotifSettings) { NotificationSettingsView() }
             .sheet(item: $selectedBadge) { BadgeDetailSheet(badge: $0) }
             .sheet(item: $selectedChallenge) { ChallengeDetailSheet(challenge: $0) }
             .onChange(of: photoItem) { _, item in
@@ -306,7 +308,10 @@ struct ProfileView: View {
                     .buttonStyle(.plain)
                 }
                 rowDivider
-                settingsRow(icon: "bell.fill", label: "Notifications", accent: .gold) { chevron }
+                Button { Haptics.tap(); showNotifSettings = true } label: {
+                    settingsRow(icon: "bell.fill", label: "Notifications", accent: .gold) { chevron }
+                }
+                .buttonStyle(.plain)
                 rowDivider
                 settingsRow(icon: "lock.fill", label: "Privacy", accent: .teal) { chevron }
                 rowDivider

@@ -44,6 +44,9 @@ struct RootView: View {
                         locationManager.requestPermission()
                         connectServicesIfNeeded()
                         checkDailyGem()
+                        if NotificationManager.shared.enabled {
+                            Task { await NotificationManager.shared.requestPermission() }
+                        }
                     }
                     .onChange(of: authService.isAuthenticated) { _, isAuth in
                         if isAuth {

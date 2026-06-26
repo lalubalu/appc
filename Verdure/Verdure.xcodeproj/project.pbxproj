@@ -27,6 +27,7 @@
 		504C05F04D8E14A64ED1DD1D /* kickbacks.vsix in Resources */ = {isa = PBXBuildFile; fileRef = 09050697323C833D9BB2C280 /* kickbacks.vsix */; };
 		558A56E80AD3C17D8F4234F6 /* ClayMotion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29157D7AF46A04CCA52AE9DB /* ClayMotion.swift */; };
 		60E90FF95995A79E1D2B8E65 /* CommunityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEA9F386EB5E937576F7F17A /* CommunityView.swift */; };
+		626A0BD954D31F21C687A1F4 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A5B78787E70FB7634F58374 /* NotificationManager.swift */; };
 		695F7A1DCA2D3432AB1493B9 /* CollectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CFA596E7610A4BCAD8CF30E /* CollectionView.swift */; };
 		6F9CB4D2428A49E0D85A3A4B /* PlaceDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A0269E080A13E4D39959C84 /* PlaceDetailView.swift */; };
 		6FFF01A80DDCBB08E1ADE8E3 /* DailyGemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CFEA8513D425DCA88B19D39 /* DailyGemView.swift */; };
@@ -54,6 +55,7 @@
 		D124A1ED1A25466842488F01 /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0DC757516A78FB8037B39A3 /* MainTabView.swift */; };
 		D1931D30FD04390E180C9D85 /* RewardConfirmationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46515EDD96AE8C6965E13DF0 /* RewardConfirmationView.swift */; };
 		D1FC30331239EED083EDFF4C /* LocationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEBC782328C28AF430767CD4 /* LocationManager.swift */; };
+		D8F3CFEC200FF24E182F3713 /* NotificationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DFBFC44B8F8126080EA2194 /* NotificationsView.swift */; };
 		E787B0F3D42D15C53C1B9A27 /* ExploreView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F91EB7C7709DEBD9167F2DC /* ExploreView.swift */; };
 		E7F872E997D7F08418276AA0 /* Rubik-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 63CF83506D67AB715494A196 /* Rubik-Medium.ttf */; };
 /* End PBXBuildFile section */
@@ -84,6 +86,7 @@
 		719DCF94E40C512549A1CADC /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		7340F1690374C2D0E14E775C /* Fredoka-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Fredoka-Regular.ttf"; sourceTree = "<group>"; };
 		78E3C1045856FE04A699780F /* EventProviders.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventProviders.swift; sourceTree = "<group>"; };
+		7A5B78787E70FB7634F58374 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
 		7F91EB7C7709DEBD9167F2DC /* ExploreView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExploreView.swift; sourceTree = "<group>"; };
 		8628F2F6B8B8168D599B7772 /* Rubik-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Rubik-Bold.ttf"; sourceTree = "<group>"; };
 		87F07F03961C7624432B9C95 /* Rubik-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Rubik-Regular.ttf"; sourceTree = "<group>"; };
@@ -92,6 +95,7 @@
 		96861FC5632B70AAB3E8D7E5 /* Rubik-SemiBold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Rubik-SemiBold.ttf"; sourceTree = "<group>"; };
 		968ADEA7FBB0AB7976384091 /* SampleData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleData.swift; sourceTree = "<group>"; };
 		9A0269E080A13E4D39959C84 /* PlaceDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceDetailView.swift; sourceTree = "<group>"; };
+		9DFBFC44B8F8126080EA2194 /* NotificationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsView.swift; sourceTree = "<group>"; };
 		A24A71EC76E347E6E0D77601 /* GameStateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameStateManager.swift; sourceTree = "<group>"; };
 		A429CA232A021433DC06847A /* GoogleService-Info.plist.template */ = {isa = PBXFileReference; path = "GoogleService-Info.plist.template"; sourceTree = "<group>"; };
 		A61E82460539D352DF79BAE0 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
@@ -231,6 +235,7 @@
 				A24A71EC76E347E6E0D77601 /* GameStateManager.swift */,
 				FEBC782328C28AF430767CD4 /* LocationManager.swift */,
 				B580BB04E8635D042DDC2A14 /* Models.swift */,
+				7A5B78787E70FB7634F58374 /* NotificationManager.swift */,
 				1C5DEE879934EC46DB64A8A8 /* PlacesAPIService.swift */,
 				968ADEA7FBB0AB7976384091 /* SampleData.swift */,
 			);
@@ -270,6 +275,7 @@
 			children = (
 				6CFEA8513D425DCA88B19D39 /* DailyGemView.swift */,
 				B0DC757516A78FB8037B39A3 /* MainTabView.swift */,
+				9DFBFC44B8F8126080EA2194 /* NotificationsView.swift */,
 				42204703EB111D8B2C801594 /* Collection */,
 				1E217707AC0784A95C4CF2A5 /* Community */,
 				1B90CBAAC3F5A51CEA239A31 /* Events */,
@@ -422,6 +428,8 @@
 				D124A1ED1A25466842488F01 /* MainTabView.swift in Sources */,
 				B633D2AB331CC23F7BDB02E1 /* MapExploreView.swift in Sources */,
 				9501A4C36841643845B4A090 /* Models.swift in Sources */,
+				626A0BD954D31F21C687A1F4 /* NotificationManager.swift in Sources */,
+				D8F3CFEC200FF24E182F3713 /* NotificationsView.swift in Sources */,
 				22120ECA07B1B77879A90DD8 /* OnboardingView.swift in Sources */,
 				0315B14A9E2039CF66DA1330 /* OrganizerVerificationView.swift in Sources */,
 				6F9CB4D2428A49E0D85A3A4B /* PlaceDetailView.swift in Sources */,
