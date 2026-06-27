@@ -39,6 +39,52 @@ enum ProviderConfig {
     }
 }
 
+// MARK: - Sanitizer (treat ALL external API data as hostile)
+//
+// Every string that comes back from a third-party API (titles, descriptions, venue
+// names, organizers, URLs) is scrubbed before it touches the app: HTML/markup stripped,
+// control characters removed, whitespace collapsed, length-capped, and only http/https
+// URLs allowed. This neutralises markup/script/prompt-injection payloads regardless of
+// where the text is later shown (SwiftUI Text, a future WebView, a URL, or logs).
+// We only ever READ public location/event data and only send the user's coordinates —
+// nothing from these responses is ever executed or treated as an instruction.
+
+enum Sanitize {
+    private static let htmlTags = try? NSRegularExpression(pattern: "<[^>]+>")
+    private static let multiSpace = try? NSRegularExpression(pattern: "\\s+")
+    private static let entities: [String: String] = [
+        "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": "\"",
+        "&#39;": "'", "&apos;": "'", "&nbsp;": " ", "&rsquo;": "’", "&ndash;": "–"
+    ]
+
+    /// Strip markup + control chars, decode common entities, collapse whitespace, cap length.
+    static func text(_ s: String?, max: Int = 200) -> String {
+        guard var t = s, !t.isEmpty else { return "" }
+        if let re = htmlTags {
+            t = re.stringByReplacingMatches(in: t, range: NSRange(t.startIndex..., in: t), withTemplate: " ")
+        }
+        for (e, r) in entities { t = t.replacingOccurrences(of: e, with: r) }
+        // Drop control characters (incl. newlines/tabs) so nothing hides in them.
+        t = t.components(separatedBy: .controlCharacters).joined(separator: " ")
+        if let re = multiSpace {
+            t = re.stringByReplacingMatches(in: t, range: NSRange(t.startIndex..., in: t), withTemplate: " ")
+        }
+        return String(t.trimmingCharacters(in: .whitespacesAndNewlines).prefix(max))
+    }
+
+    /// Allow ONLY well-formed http/https URLs — blocks javascript:, data:, file:, etc.
+    static func url(_ s: String?) -> String? {
+        guard let raw = s?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty,
+              let u = URLComponents(string: raw), let scheme = u.scheme?.lowercased(),
+              scheme == "http" || scheme == "https", (u.host ?? "").contains(".") else { return nil }
+        return u.string
+    }
+}
+
+extension String {
+    func ifEmpty(_ fallback: String) -> String { isEmpty ? fallback : self }
+}
+
 enum EventParse {
     // DateFormatter/ISO8601DateFormatter are used read-only for parsing; safe to share.
     nonisolated(unsafe) static let ymd: DateFormatter = {
@@ -85,12 +131,16 @@ extension EventCategory {
 
 private func makeEvent(id: String, title: String, organizer: String, date: Date,
                        locationName: String, category: EventCategory, website: String?) -> Event {
-    Event(id: id,
-          title: title,
-          organizer: organizer.isEmpty ? "Community" : organizer,
+    // Scrub every externally-sourced string before it enters the app.
+    let safeTitle = Sanitize.text(title, max: 120)
+    let safeOrganizer = Sanitize.text(organizer, max: 80)
+    let safeLocation = Sanitize.text(locationName, max: 100)
+    return Event(id: id,
+          title: safeTitle.isEmpty ? "Untitled event" : safeTitle,
+          organizer: safeOrganizer.isEmpty ? "Community" : safeOrganizer,
           date: date,
           time: EventParse.timeString(from: date),
-          locationName: locationName.isEmpty ? "See website" : locationName,
+          locationName: safeLocation.isEmpty ? "See website" : safeLocation,
           attendeeCount: 0,
           maxAttendees: nil,
           category: category,
@@ -98,7 +148,7 @@ private func makeEvent(id: String, title: String, organizer: String, date: Date,
           pointValue: category.defaultPoints,
           description: nil,
           creatorID: nil,
-          website: website)
+          website: Sanitize.url(website))
 }
 
 // Ephemeral session (no Alt-Svc cache) so the first request isn't pushed onto HTTP/3.

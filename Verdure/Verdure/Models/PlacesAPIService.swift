@@ -147,7 +147,8 @@ final class PlacesAPIService {
         var results: [Place] = []
 
         for element in elements {
-            guard let name = element.tags?["name"], !name.isEmpty else { continue }
+            let name = Sanitize.text(element.tags?["name"], max: 100)
+            guard !name.isEmpty else { continue }
 
             let normalizedName = name.lowercased()
             guard !seen.contains(normalizedName) else { continue }
@@ -168,7 +169,7 @@ final class PlacesAPIService {
                 id: "osm-\(element.id)",
                 name: name,
                 category: category,
-                shortDescription: Self.buildDescription(tags: element.tags ?? [:], category: category, name: name),
+                shortDescription: Sanitize.text(Self.buildDescription(tags: element.tags ?? [:], category: category, name: name), max: 180),
                 distance: String(format: "%.1f mi", distMiles),
                 distanceValue: distMiles,
                 rating: Self.syntheticRating(tags: element.tags ?? [:]),
@@ -270,14 +271,17 @@ final class PlacesAPIService {
               let rec = root["RECDATA"] as? [[String: Any]] else { return [] }
 
         return rec.compactMap { f -> Place? in
-            guard let name = f["FacilityName"] as? String, !name.isEmpty else { return nil }
+            let name = Sanitize.text(f["FacilityName"] as? String, max: 100)
+            guard !name.isEmpty else { return nil }
             let lat = (f["FacilityLatitude"] as? Double) ?? Double((f["FacilityLatitude"] as? String) ?? "") ?? 0
             let lon = (f["FacilityLongitude"] as? Double) ?? Double((f["FacilityLongitude"] as? String) ?? "") ?? 0
             guard lat != 0, lon != 0 else { return nil }
             let distMiles = Self.haversineDistance(lat1: center.latitude, lon1: center.longitude, lat2: lat, lon2: lon) / 1609.34
             let category = Self.categorizeRecreation((f["FacilityTypeDescription"] as? String ?? "") + " " + name)
-            let id = (f["FacilityID"] as? String) ?? (f["FacilityID"] as? Int).map(String.init) ?? UUID().uuidString
-            let desc = Self.cleanText(f["FacilityDescription"] as? String ?? "")
+            // FacilityID is numeric/opaque — keep only safe URL/ID characters.
+            let rawID = (f["FacilityID"] as? String) ?? (f["FacilityID"] as? Int).map(String.init) ?? UUID().uuidString
+            let id = String(rawID.unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) || $0 == "-" })
+            let desc = Sanitize.text(f["FacilityDescription"] as? String, max: 180)
             return Place(
                 id: "rec-\(id)", name: name, category: category,
                 shortDescription: desc.isEmpty ? "A federal recreation area — explore it to add it to your collection." : desc,
@@ -304,12 +308,14 @@ final class PlacesAPIService {
               let parks = root["data"] as? [[String: Any]] else { return [] }
 
         return parks.compactMap { p -> Place? in
-            guard let name = p["fullName"] as? String, !name.isEmpty else { return nil }
+            let name = Sanitize.text(p["fullName"] as? String, max: 100)
+            guard !name.isEmpty else { return nil }
             let (lat, lon) = Self.parseLatLong(p["latLong"] as? String)
             guard lat != 0 else { return nil }
             let distMiles = Self.haversineDistance(lat1: center.latitude, lon1: center.longitude, lat2: lat, lon2: lon) / 1609.34
-            let id = (p["id"] as? String) ?? UUID().uuidString
-            let desc = Self.cleanText(p["description"] as? String ?? "")
+            let rawID = (p["id"] as? String) ?? UUID().uuidString
+            let id = String(rawID.unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) || $0 == "-" })
+            let desc = Sanitize.text(p["description"] as? String, max: 180)
             return Place(
                 id: "nps-\(id)", name: name, category: .scenic,
                 shortDescription: desc.isEmpty ? "A national park site — a rare find for your collection." : desc,
@@ -328,15 +334,6 @@ final class PlacesAPIService {
         if t.contains("visitor") || t.contains("center") || t.contains("centre") { return .community }
         if t.contains("camp") || t.contains("overlook") || t.contains("scenic") { return .scenic }
         return .parks
-    }
-
-    private static func cleanText(_ s: String) -> String {
-        let stripped = s.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
-        let collapsed = stripped
-            .replacingOccurrences(of: "&amp;", with: "&")
-            .replacingOccurrences(of: "\n", with: " ")
-            .replacingOccurrences(of: "  ", with: " ")
-        return String(collapsed.trimmingCharacters(in: .whitespacesAndNewlines).prefix(180))
     }
 
     /// Parse NPS "latLong" string: "lat:37.8651, long:-119.5383" → (37.8651, -119.5383)

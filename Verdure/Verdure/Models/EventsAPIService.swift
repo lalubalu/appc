@@ -249,26 +249,20 @@ final class EventsAPIService {
             // Skip paid events
             if isPaidEvent(serpEvent) { return nil }
 
-            let title = serpEvent.title
-            let id = "serp-\(title.hashValue)"
-
-            // Parse date from SerpApi
-            let date = parseSerpDate(serpEvent.date) ?? Date()
-
-            // Build time string
-            let time = serpEvent.date?.when ?? "Time TBA"
-
-            // Venue / location
-            let locationName = serpEvent.venue?.name
-                ?? serpEvent.address?.first
-                ?? "Location TBA"
-
-            // Categorize
-            let category = categorizeSerpEvent(title: title, description: serpEvent.description)
+            // Categorize from the RAW text first, then sanitize for display.
+            let category = categorizeSerpEvent(title: serpEvent.title, description: serpEvent.description)
             let pointValue = category.defaultPoints
 
-            // Organizer from venue or address
-            let organizer = serpEvent.venue?.name ?? "Community"
+            // Scrub every externally-sourced string (Google results are untrusted).
+            let title = Sanitize.text(serpEvent.title, max: 120)
+            guard !title.isEmpty else { return nil }
+            let id = "serp-\(title.hashValue)"
+            let date = parseSerpDate(serpEvent.date) ?? Date()
+            let time = Sanitize.text(serpEvent.date?.when, max: 60).ifEmpty("Time TBA")
+            let locationName = Sanitize.text(serpEvent.venue?.name ?? serpEvent.address?.first, max: 100)
+                .ifEmpty("Location TBA")
+            let organizer = Sanitize.text(serpEvent.venue?.name, max: 80).ifEmpty("Community")
+            let description = Sanitize.text(serpEvent.description, max: 300)
 
             return Event(
                 id: id,
@@ -282,7 +276,7 @@ final class EventsAPIService {
                 category: category,
                 imagePlaceholder: category.icon,
                 pointValue: pointValue,
-                description: serpEvent.description
+                description: description.isEmpty ? nil : description
             )
         }
     }
@@ -444,19 +438,21 @@ final class EventsAPIService {
 
         let category = EventCategory(rawValue: categoryRaw) ?? .social
 
+        // Community events are user-generated → scrub them like any other external data.
+        let safeDescription = Sanitize.text(data["description"] as? String, max: 500)
         return Event(
             id: doc.documentID,
-            title: title,
-            organizer: organizer,
+            title: Sanitize.text(title, max: 120).ifEmpty("Untitled event"),
+            organizer: Sanitize.text(organizer, max: 80).ifEmpty("Community"),
             date: timestamp.dateValue(),
-            time: time,
-            locationName: locationName,
+            time: Sanitize.text(time, max: 60).ifEmpty("Time TBA"),
+            locationName: Sanitize.text(locationName, max: 100).ifEmpty("Location TBA"),
             attendeeCount: data["attendeeCount"] as? Int ?? 0,
             maxAttendees: data["maxAttendees"] as? Int,
             category: category,
-            imagePlaceholder: data["imagePlaceholder"] as? String ?? category.icon,
+            imagePlaceholder: category.icon,   // never trust a remote SF Symbol name
             pointValue: data["pointValue"] as? Int ?? category.defaultPoints,
-            description: data["description"] as? String,
+            description: safeDescription.isEmpty ? nil : safeDescription,
             creatorID: data["creatorID"] as? String
         )
     }
