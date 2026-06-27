@@ -226,8 +226,10 @@ final class EventsAPIService {
 
             var request = URLRequest(url: url)
             request.timeoutInterval = 15
+            // Avoid the iOS Simulator's HTTP/3/QUIC hang (same fix as the other providers).
+            request.assumesHTTP3Capable = false
 
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await providerSession.data(for: request)
 
             guard let httpResponse = response as? HTTPURLResponse,
                   (200...299).contains(httpResponse.statusCode) else {
