@@ -87,8 +87,10 @@ final class LocationManager: NSObject {
         return miles < radius
     }
 
+    /// Live GPS when available; otherwise fall back to Cupertino (a sensible default
+    /// for the simulator, where a real fix isn't always delivered).
     var userCoordinate: CLLocationCoordinate2D {
-        userLocation?.coordinate ?? CLLocationCoordinate2D(latitude: 44.9778, longitude: -93.2650)
+        userLocation?.coordinate ?? CLLocationCoordinate2D(latitude: 37.3230, longitude: -122.0322)
     }
 }
 

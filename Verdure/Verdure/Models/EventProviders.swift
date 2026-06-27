@@ -177,11 +177,21 @@ struct TicketmasterProvider: EventProvider {
 struct EventbriteProvider: EventProvider {
     let name = "Eventbrite"
     private var token: String { ProviderConfig.value("EventbriteToken", env: "EVENTBRITE_TOKEN") }
-    private var orgID: String { ProviderConfig.value("EventbriteOrgId", env: "EVENTBRITE_ORG_ID") }
-    var isEnabled: Bool { !token.isEmpty && !orgID.isEmpty }
+    private var configuredOrgID: String { ProviderConfig.value("EventbriteOrgId", env: "EVENTBRITE_ORG_ID") }
+    var isEnabled: Bool { !token.isEmpty }   // org id is auto-discovered from the token
+
+    /// The token's first organization (Eventbrite only lets you list your own org's events).
+    private func resolveOrgID() async -> String? {
+        if !configuredOrgID.isEmpty { return configuredOrgID }
+        let url = URL(string: "https://www.eventbriteapi.com/v3/users/me/organizations/")!
+        guard let data = await fetchJSON(url, headers: ["Authorization": "Bearer \(token)"]),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let orgs = root["organizations"] as? [[String: Any]] else { return nil }
+        return orgs.first?["id"] as? String
+    }
 
     func fetchEvents(around center: CLLocationCoordinate2D, radiusMiles: Int) async -> [Event] {
-        guard isEnabled else { return [] }
+        guard isEnabled, let orgID = await resolveOrgID() else { return [] }
         var comps = URLComponents(string: "https://www.eventbriteapi.com/v3/organizations/\(orgID)/events/")!
         comps.queryItems = [
             .init(name: "status", value: "live"),

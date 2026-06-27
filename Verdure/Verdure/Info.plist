@@ -20,10 +20,26 @@
 	<string>1.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>EventbriteOrgId</key>
+	<string>$(EVENTBRITE_ORG_ID)</string>
+	<key>EventbriteToken</key>
+	<string>$(EVENTBRITE_TOKEN)</string>
+	<key>GooglePSECx</key>
+	<string>$(GOOGLE_PSE_CX)</string>
+	<key>GooglePSEKey</key>
+	<string>$(GOOGLE_PSE_KEY)</string>
+	<key>LocalistHost</key>
+	<string>$(LOCALIST_HOST)</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Verdure uses your location to find nearby events and outdoor places you can check in to.</string>
+	<key>NeighborhoodCommonsBase</key>
+	<string>$(NEIGHBORHOOD_COMMONS_BASE)</string>
+	<key>NeighborhoodCommonsKey</key>
+	<string>$(NEIGHBORHOOD_COMMONS_KEY)</string>
 	<key>SerpApiKey</key>
 	<string>$(SERPAPI_KEY)</string>
+	<key>TicketmasterKey</key>
+	<string>$(TICKETMASTER_KEY)</string>
 	<key>UIAppFonts</key>
 	<array>
 		<string>Fredoka-Regular.ttf</string>

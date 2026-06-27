@@ -43,6 +43,14 @@ targets:
           - Rubik-SemiBold.ttf
           - Rubik-Bold.ttf
         SerpApiKey: $(SERPAPI_KEY)
+        TicketmasterKey: $(TICKETMASTER_KEY)
+        EventbriteToken: $(EVENTBRITE_TOKEN)
+        EventbriteOrgId: $(EVENTBRITE_ORG_ID)
+        LocalistHost: $(LOCALIST_HOST)
+        GooglePSEKey: $(GOOGLE_PSE_KEY)
+        GooglePSECx: $(GOOGLE_PSE_CX)
+        NeighborhoodCommonsBase: $(NEIGHBORHOOD_COMMONS_BASE)
+        NeighborhoodCommonsKey: $(NEIGHBORHOOD_COMMONS_KEY)
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: com.vaiybhav.verdure
       ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
