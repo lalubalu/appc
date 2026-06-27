@@ -77,40 +77,42 @@ final class EventsAPIService {
             return
         }
 
-        isLoading = true
-        lastError = nil
+        // Run the network work in an UNSTRUCTURED task so it survives even if the
+        // calling SwiftUI `.task` is cancelled by view-lifecycle churn at launch.
+        await Task { @MainActor in
+            self.isLoading = true
+            self.lastError = nil
 
-        // Fetch from all sources in parallel: SerpApi, Firestore community events,
-        // and every configured external provider (Ticketmaster, Eventbrite, …).
-        async let serpEvents = fetchSerpApiEvents(around: center)
-        async let communityEvents = fetchFirestoreEvents()
-        async let externalEvents = providerHub.fetchAll(around: center, radiusMiles: searchRadiusMiles)
+            // Fetch from all sources in parallel: SerpApi, Firestore community events,
+            // and every configured external provider (Ticketmaster, Neighborhood Commons, …).
+            async let serpEvents = self.fetchSerpApiEvents(around: center)
+            async let communityEvents = self.fetchFirestoreEvents()
+            async let externalEvents = self.providerHub.fetchAll(around: center, radiusMiles: self.searchRadiusMiles)
 
-        let realEvents = await serpEvents
-        let userEvents = await communityEvents
-        let extEvents = await externalEvents
+            let realEvents = await serpEvents
+            let userEvents = await communityEvents
+            let extEvents = await externalEvents
 
-        // Merge: user-created events first, then real + external events, dedup by title.
-        var merged: [Event] = userEvents
-        var seenTitles = Set(merged.map { $0.title.lowercased() })
-        for event in (realEvents + extEvents) where !seenTitles.contains(event.title.lowercased()) {
-            merged.append(event)
-            seenTitles.insert(event.title.lowercased())
-        }
-        merged.sort { $0.date < $1.date }
-
-        if merged.isEmpty {
-            if self.events.isEmpty {
-                self.useSampleFallback()
+            // Merge: user-created events first, then real + external events, dedup by title.
+            var merged: [Event] = userEvents
+            var seenTitles = Set(merged.map { $0.title.lowercased() })
+            for event in (realEvents + extEvents) where !seenTitles.contains(event.title.lowercased()) {
+                merged.append(event)
+                seenTitles.insert(event.title.lowercased())
             }
-        } else {
-            self.events = merged
-            self.cachedCenter = center
-            self.persistCache(center: center)
-        }
+            merged.sort { $0.date < $1.date }
 
-        self.lastFetchDate = Date()
-        self.isLoading = false
+            if merged.isEmpty {
+                if self.events.isEmpty { self.useSampleFallback() }
+            } else {
+                self.events = merged
+                self.cachedCenter = center
+                self.persistCache(center: center)
+            }
+
+            self.lastFetchDate = Date()
+            self.isLoading = false
+        }.value
     }
 
     /// Force refresh, ignoring cooldown

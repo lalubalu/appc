@@ -101,13 +101,25 @@ private func makeEvent(id: String, title: String, organizer: String, date: Date,
           website: website)
 }
 
+// Ephemeral session (no Alt-Svc cache) so the first request isn't pushed onto HTTP/3.
+private let providerSession: URLSession = {
+    let config = URLSessionConfiguration.ephemeral
+    config.timeoutIntervalForRequest = 15
+    config.waitsForConnectivity = true
+    return URLSession(configuration: config)
+}()
+
 private func fetchJSON(_ url: URL, headers: [String: String] = [:]) async -> Data? {
     var req = URLRequest(url: url)
-    req.timeoutInterval = 12
+    req.timeoutInterval = 15
+    // Don't proactively use HTTP/3 — the iOS Simulator's QUIC stack hangs on some
+    // Cloudflare-fronted hosts (e.g. Neighborhood Commons), causing -1001 timeouts.
+    req.assumesHTTP3Capable = false
     for (k, v) in headers { req.setValue(v, forHTTPHeaderField: k) }
     do {
-        let (data, resp) = try await URLSession.shared.data(for: req)
-        guard let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { return nil }
+        let (data, resp) = try await providerSession.data(for: req)
+        let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
+        guard (200..<300).contains(code) else { return nil }
         return data
     } catch { return nil }
 }
@@ -279,55 +291,49 @@ struct GooglePSEProvider: EventProvider {
 }
 
 // MARK: - Neighborhood Commons API
-// Listed source: https://api.neighborhood-commons.org/  (Schema.org-aligned "open layer")
-// VERIFIED 2026-06: the marketing site exists and documents a no-key /v1/events read API,
-// but api.neighborhood-commons.org currently 308-redirects to the site and /v1/events
-// returns 404 — i.e. the API is NOT live yet. Reads need no key, so this provider enables
-// on a base URL alone (default blank = disabled). Set NEIGHBORHOOD_COMMONS_BASE to
-// https://api.neighborhood-commons.org once the endpoint is serving JSON.
-// The decoder is tolerant of Schema.org field names (name/startDate/location/url).
+// Docs: https://neighborhood-commons.org  (open, Schema.org-aligned neighborhood data)
+// VERIFIED 2026-06 LIVE: GET https://neighborhood-commons.org/api/v1/events?near=lat,lng&radius_km=N
+// returns {meta, events:[…]} with NO auth required. Currently serves Philadelphia only, so it
+// returns [] elsewhere (harmless). Enabled by default — override the base via
+// NEIGHBORHOOD_COMMONS_BASE, or set it to "off" to disable.
 
 struct NeighborhoodCommonsProvider: EventProvider {
     let name = "Neighborhood Commons"
-    private var base: String { ProviderConfig.value("NeighborhoodCommonsBase", env: "NEIGHBORHOOD_COMMONS_BASE") }
-    private var key: String { ProviderConfig.value("NeighborhoodCommonsKey", env: "NEIGHBORHOOD_COMMONS_KEY") }
-    var isEnabled: Bool { !base.isEmpty }   // reads are open (no key required)
+    private var base: String {
+        let configured = ProviderConfig.value("NeighborhoodCommonsBase", env: "NEIGHBORHOOD_COMMONS_BASE")
+        return configured.isEmpty ? "https://neighborhood-commons.org/api/v1" : configured
+    }
+    // Free public reads — on by default. Set the base to "off" to opt out.
+    var isEnabled: Bool { base.lowercased() != "off" }
 
     func fetchEvents(around center: CLLocationCoordinate2D, radiusMiles: Int) async -> [Event] {
         guard isEnabled else { return [] }
         let cleanBase = base.hasSuffix("/") ? String(base.dropLast()) : base
-        var comps = URLComponents(string: "\(cleanBase)/v1/events")!
+        let radiusKm = max(1, Int((Double(radiusMiles) * 1.60934).rounded()))
+        var comps = URLComponents(string: "\(cleanBase)/events")!
         comps.queryItems = [
-            .init(name: "lat", value: "\(center.latitude)"),
-            .init(name: "lng", value: "\(center.longitude)"),
-            .init(name: "radius", value: "\(radiusMiles)")
+            .init(name: "near", value: "\(center.latitude),\(center.longitude)"),
+            .init(name: "radius_km", value: "\(radiusKm)"),
+            .init(name: "collapse_series", value: "true"),
+            .init(name: "limit", value: "30")
         ]
-        let headers = key.isEmpty ? [:] : ["Authorization": "Bearer \(key)"]
-        guard let url = comps.url, let data = await fetchJSON(url, headers: headers) else { return [] }
-        // Accept {events:[...]}, {data:[...]}, or a bare [...] array.
-        let array: [[String: Any]]
-        if let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let events = (root["events"] as? [[String: Any]]) ?? (root["data"] as? [[String: Any]]) {
-            array = events
-        } else if let bare = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
-            array = bare
-        } else { return [] }
+        guard let url = comps.url, let data = await fetchJSON(url) else { return [] }
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let events = root["events"] as? [[String: Any]] else { return [] }
 
-        return array.compactMap { ev in
-            let id = (ev["id"] as? String) ?? (ev["id"] as? Int).map(String.init) ?? UUID().uuidString
-            guard let title = (ev["name"] as? String) ?? (ev["title"] as? String) else { return nil }
-            let startRaw = (ev["startDate"] as? String) ?? (ev["start"] as? String) ?? (ev["date"] as? String)
-            guard let date = EventParse.date(startRaw) else { return nil }
-            // Schema.org location can be a string or an object with a name.
-            let locationName = (ev["location"] as? String)
-                ?? ((ev["location"] as? [String: Any])?["name"] as? String)
-                ?? (ev["venue"] as? String) ?? ""
-            let org = (ev["organizer"] as? String)
-                ?? ((ev["organizer"] as? [String: Any])?["name"] as? String)
-                ?? (ev["organization"] as? String) ?? "Neighborhood Commons"
+        return events.compactMap { ev in
+            guard let id = ev["id"] as? String, let title = ev["name"] as? String,
+                  let date = EventParse.date(ev["start"] as? String) else { return nil }
+            let location = ev["location"] as? [String: Any]
+            let locationName = (location?["name"] as? String) ?? (location?["address"] as? String) ?? ""
+            let org = (ev["organizer"] as? [String: Any])?["name"] as? String ?? "Local"
+            // category is an array of slugs (e.g. ["happy-hour"]).
+            let cats = (ev["category"] as? [String])?.joined(separator: " ") ?? ""
+            let desc = ev["description"] as? String ?? ""
             return makeEvent(id: "nc-\(id)", title: title, organizer: org, date: date,
-                             locationName: locationName, category: .classify(title),
-                             website: (ev["url"] as? String) ?? (ev["link"] as? String))
+                             locationName: locationName,
+                             category: .classify("\(cats) \(title) \(desc)"),
+                             website: ev["url"] as? String)
         }
     }
 }
