@@ -20,3 +20,6 @@ build/
 Connectify/Secrets.xcconfig
 Connectify/Connectify/GoogleService-Info.plist
 Connectify/Connectify/Info.plist
+
+# Secrets (Verdure path) — API keys, never commit
+Verdure/Secrets.xcconfig
