@@ -48,23 +48,39 @@ final class PlacesAPIService {
         isLoading = true
         lastError = nil
 
-        do {
-            let osmElements = try await queryOverpass(center: center)
-            let mapped = mapToPlaces(osmElements, center: center)
-
-            self.places = mapped
-            self.collectiblePlaces = Self.buildCollectibles(from: mapped, center: center)
-            self.cachedCenter = center
-            self.isLoading = false
-            self.persistCache(center: center)
-        } catch {
-            self.lastError = error.localizedDescription
-            self.isLoading = false
-            // Keep existing data if we have it, otherwise fall back
-            if self.places.isEmpty {
-                self.useSampleFallback()
+        // Unstructured task so a cancelled SwiftUI .task can't kill the fetch.
+        await Task { @MainActor in
+            // Primary source: OpenStreetMap / Overpass (free, no key, global).
+            var merged: [Place] = []
+            do {
+                let osmElements = try await self.queryOverpass(center: center)
+                merged = self.mapToPlaces(osmElements, center: center)
+            } catch {
+                self.lastError = error.localizedDescription
             }
-        }
+
+            // Additional free sources — no-ops unless their keys are configured.
+            async let recreation = self.fetchRecreationFacilities(center: center)
+            async let nationalParks = self.fetchNPSParks(center: center)
+            let extra = await recreation + (await nationalParks)
+
+            var seen = Set(merged.map { $0.name.lowercased() })
+            for place in extra where !seen.contains(place.name.lowercased()) {
+                merged.append(place)
+                seen.insert(place.name.lowercased())
+            }
+            merged.sort { $0.distanceValue < $1.distanceValue }
+
+            if merged.isEmpty {
+                if self.places.isEmpty { self.useSampleFallback() }
+            } else {
+                self.places = Array(merged.prefix(self.maxPlaces + 15))
+                self.collectiblePlaces = Self.buildCollectibles(from: self.places, center: center)
+                self.cachedCenter = center
+                self.persistCache(center: center)
+            }
+            self.isLoading = false
+        }.value
     }
 
     /// Find the CollectiblePlace wrapper for a given Place
@@ -234,6 +250,130 @@ final class PlacesAPIService {
         if tags["website"] != nil { base += 0.1 }
         return min(base + Double.random(in: -0.3...0.3), 5.0)
     }
+
+    // MARK: - Additional free place sources (Recreation.gov + NPS)
+
+    /// Recreation.gov RIDB facilities near a point (free key, true geo-radius search).
+    /// Docs: https://ridb.recreation.gov/docs
+    private func fetchRecreationFacilities(center: CLLocationCoordinate2D) async -> [Place] {
+        let key = ProviderConfig.value("RecreationGovKey", env: "RECREATION_GOV_KEY")
+        guard !key.isEmpty else { return [] }
+        var comps = URLComponents(string: "https://ridb.recreation.gov/api/v1/facilities")!
+        comps.queryItems = [
+            .init(name: "latitude", value: "\(center.latitude)"),
+            .init(name: "longitude", value: "\(center.longitude)"),
+            .init(name: "radius", value: "25"),
+            .init(name: "limit", value: "20")
+        ]
+        guard let url = comps.url, let data = await fetchJSON(url, headers: ["apikey": key]) else { return [] }
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let rec = root["RECDATA"] as? [[String: Any]] else { return [] }
+
+        return rec.compactMap { f -> Place? in
+            guard let name = f["FacilityName"] as? String, !name.isEmpty else { return nil }
+            let lat = (f["FacilityLatitude"] as? Double) ?? Double((f["FacilityLatitude"] as? String) ?? "") ?? 0
+            let lon = (f["FacilityLongitude"] as? Double) ?? Double((f["FacilityLongitude"] as? String) ?? "") ?? 0
+            guard lat != 0, lon != 0 else { return nil }
+            let distMiles = Self.haversineDistance(lat1: center.latitude, lon1: center.longitude, lat2: lat, lon2: lon) / 1609.34
+            let category = Self.categorizeRecreation((f["FacilityTypeDescription"] as? String ?? "") + " " + name)
+            let id = (f["FacilityID"] as? String) ?? (f["FacilityID"] as? Int).map(String.init) ?? UUID().uuidString
+            let desc = Self.cleanText(f["FacilityDescription"] as? String ?? "")
+            return Place(
+                id: "rec-\(id)", name: name, category: category,
+                shortDescription: desc.isEmpty ? "A federal recreation area — explore it to add it to your collection." : desc,
+                distance: String(format: "%.1f mi", distMiles), distanceValue: distMiles,
+                rating: 4.4, reviewCount: Int.random(in: 20...300),
+                imagePlaceholder: category.icon, accentColor: category.tint, isFeatured: distMiles < 1.0
+            )
+        }
+    }
+
+    /// National Park Service sites in the user's state (free key; filtered by stateCode).
+    /// Docs: https://www.nps.gov/subjects/developer/api-documentation.htm
+    private func fetchNPSParks(center: CLLocationCoordinate2D) async -> [Place] {
+        let key = ProviderConfig.value("NpsApiKey", env: "NPS_API_KEY")
+        guard !key.isEmpty, let state = await Self.reverseStateCode(center) else { return [] }
+        var comps = URLComponents(string: "https://developer.nps.gov/api/v1/parks")!
+        comps.queryItems = [
+            .init(name: "stateCode", value: state),
+            .init(name: "limit", value: "15"),
+            .init(name: "api_key", value: key)
+        ]
+        guard let url = comps.url, let data = await fetchJSON(url) else { return [] }
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let parks = root["data"] as? [[String: Any]] else { return [] }
+
+        return parks.compactMap { p -> Place? in
+            guard let name = p["fullName"] as? String, !name.isEmpty else { return nil }
+            let (lat, lon) = Self.parseLatLong(p["latLong"] as? String)
+            guard lat != 0 else { return nil }
+            let distMiles = Self.haversineDistance(lat1: center.latitude, lon1: center.longitude, lat2: lat, lon2: lon) / 1609.34
+            let id = (p["id"] as? String) ?? UUID().uuidString
+            let desc = Self.cleanText(p["description"] as? String ?? "")
+            return Place(
+                id: "nps-\(id)", name: name, category: .scenic,
+                shortDescription: desc.isEmpty ? "A national park site — a rare find for your collection." : desc,
+                distance: String(format: "%.0f mi", distMiles), distanceValue: distMiles,
+                rating: 4.8, reviewCount: Int.random(in: 200...2000),
+                imagePlaceholder: PlaceCategory.scenic.icon, accentColor: PlaceCategory.scenic.tint, isFeatured: false
+            )
+        }
+    }
+
+    private static func categorizeRecreation(_ text: String) -> PlaceCategory {
+        let t = text.lowercased()
+        if t.contains("trail") { return .trails }
+        if t.contains("water") || t.contains("lake") || t.contains("beach") || t.contains("marina") || t.contains("river") { return .waterfront }
+        if t.contains("garden") || t.contains("botanic") { return .gardens }
+        if t.contains("visitor") || t.contains("center") || t.contains("centre") { return .community }
+        if t.contains("camp") || t.contains("overlook") || t.contains("scenic") { return .scenic }
+        return .parks
+    }
+
+    private static func cleanText(_ s: String) -> String {
+        let stripped = s.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+        let collapsed = stripped
+            .replacingOccurrences(of: "&amp;", with: "&")
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "  ", with: " ")
+        return String(collapsed.trimmingCharacters(in: .whitespacesAndNewlines).prefix(180))
+    }
+
+    /// Parse NPS "latLong" string: "lat:37.8651, long:-119.5383" → (37.8651, -119.5383)
+    private static func parseLatLong(_ s: String?) -> (Double, Double) {
+        guard let s else { return (0, 0) }
+        var lat = 0.0, lon = 0.0
+        for part in s.split(separator: ",") {
+            let kv = part.split(separator: ":")
+            guard kv.count == 2 else { continue }
+            let k = kv[0].trimmingCharacters(in: .whitespaces).lowercased()
+            let v = Double(kv[1].trimmingCharacters(in: .whitespaces)) ?? 0
+            if k == "lat" { lat = v } else if k == "long" || k == "lon" || k == "lng" { lon = v }
+        }
+        return (lat, lon)
+    }
+
+    /// Reverse-geocode a coordinate to a 2-letter US state code for the NPS query.
+    private static func reverseStateCode(_ c: CLLocationCoordinate2D) async -> String? {
+        let placemarks = try? await CLGeocoder().reverseGeocodeLocation(
+            CLLocation(latitude: c.latitude, longitude: c.longitude))
+        guard let area = placemarks?.first?.administrativeArea else { return nil }
+        if area.count == 2 { return area.uppercased() }
+        return usStateCodes[area.lowercased()]
+    }
+
+    private static let usStateCodes: [String: String] = [
+        "alabama": "AL", "alaska": "AK", "arizona": "AZ", "arkansas": "AR", "california": "CA",
+        "colorado": "CO", "connecticut": "CT", "delaware": "DE", "florida": "FL", "georgia": "GA",
+        "hawaii": "HI", "idaho": "ID", "illinois": "IL", "indiana": "IN", "iowa": "IA",
+        "kansas": "KS", "kentucky": "KY", "louisiana": "LA", "maine": "ME", "maryland": "MD",
+        "massachusetts": "MA", "michigan": "MI", "minnesota": "MN", "mississippi": "MS", "missouri": "MO",
+        "montana": "MT", "nebraska": "NE", "nevada": "NV", "new hampshire": "NH", "new jersey": "NJ",
+        "new mexico": "NM", "new york": "NY", "north carolina": "NC", "north dakota": "ND", "ohio": "OH",
+        "oklahoma": "OK", "oregon": "OR", "pennsylvania": "PA", "rhode island": "RI", "south carolina": "SC",
+        "south dakota": "SD", "tennessee": "TN", "texas": "TX", "utah": "UT", "vermont": "VT",
+        "virginia": "VA", "washington": "WA", "west virginia": "WV", "wisconsin": "WI", "wyoming": "WY"
+    ]
 
     // MARK: - Collectible Building
 

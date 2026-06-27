@@ -102,14 +102,16 @@ private func makeEvent(id: String, title: String, organizer: String, date: Date,
 }
 
 // Ephemeral session (no Alt-Svc cache) so the first request isn't pushed onto HTTP/3.
-private let providerSession: URLSession = {
+let providerSession: URLSession = {
     let config = URLSessionConfiguration.ephemeral
     config.timeoutIntervalForRequest = 15
     config.waitsForConnectivity = true
     return URLSession(configuration: config)
 }()
 
-private func fetchJSON(_ url: URL, headers: [String: String] = [:]) async -> Data? {
+/// Shared GET-JSON helper used by every provider (events + places). Disables HTTP/3 to
+/// dodge the iOS Simulator's QUIC hang.
+func fetchJSON(_ url: URL, headers: [String: String] = [:]) async -> Data? {
     var req = URLRequest(url: url)
     req.timeoutInterval = 15
     // Don't proactively use HTTP/3 — the iOS Simulator's QUIC stack hangs on some
@@ -163,6 +165,44 @@ struct TicketmasterProvider: EventProvider {
             let genre = segment ?? genreName ?? title
             return makeEvent(id: "tm-\(id)", title: title, organizer: venueName, date: date,
                              locationName: venueName, category: .classify(genre),
+                             website: ev["url"] as? String)
+        }
+    }
+}
+
+// MARK: - SeatGeek API
+// Docs: https://platform.seatgeek.com — free client_id, full geo search.
+// GET https://api.seatgeek.com/2/events?lat=&lon=&range=30mi&client_id=…
+
+struct SeatGeekProvider: EventProvider {
+    let name = "SeatGeek"
+    private var clientID: String { ProviderConfig.value("SeatGeekClientId", env: "SEATGEEK_CLIENT_ID") }
+    var isEnabled: Bool { !clientID.isEmpty }
+
+    func fetchEvents(around center: CLLocationCoordinate2D, radiusMiles: Int) async -> [Event] {
+        guard isEnabled else { return [] }
+        var comps = URLComponents(string: "https://api.seatgeek.com/2/events")!
+        comps.queryItems = [
+            .init(name: "client_id", value: clientID),
+            .init(name: "lat", value: "\(center.latitude)"),
+            .init(name: "lon", value: "\(center.longitude)"),
+            .init(name: "range", value: "\(radiusMiles)mi"),
+            .init(name: "per_page", value: "30"),
+            .init(name: "sort", value: "datetime_local.asc")
+        ]
+        guard let url = comps.url, let data = await fetchJSON(url) else { return [] }
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let events = root["events"] as? [[String: Any]] else { return [] }
+
+        return events.compactMap { ev in
+            let id = (ev["id"] as? Int).map(String.init) ?? (ev["id"] as? String) ?? UUID().uuidString
+            guard let title = ev["title"] as? String,
+                  let date = EventParse.date(ev["datetime_local"] as? String) else { return nil }
+            let venue = ev["venue"] as? [String: Any]
+            let venueName = venue?["name"] as? String ?? ""
+            let type = ev["type"] as? String ?? ""
+            return makeEvent(id: "sg-\(id)", title: title, organizer: venueName, date: date,
+                             locationName: venueName, category: .classify("\(type) \(title)"),
                              website: ev["url"] as? String)
         }
     }
@@ -354,6 +394,7 @@ struct NeighborhoodCommonsProvider: EventProvider {
 final class EventProviderHub {
     let providers: [EventProvider] = [
         TicketmasterProvider(),
+        SeatGeekProvider(),
         EventbriteProvider(),
         LocalistProvider(),
         GooglePSEProvider(),

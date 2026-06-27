@@ -36,6 +36,12 @@
 	<string>$(NEIGHBORHOOD_COMMONS_BASE)</string>
 	<key>NeighborhoodCommonsKey</key>
 	<string>$(NEIGHBORHOOD_COMMONS_KEY)</string>
+	<key>NpsApiKey</key>
+	<string>$(NPS_API_KEY)</string>
+	<key>RecreationGovKey</key>
+	<string>$(RECREATION_GOV_KEY)</string>
+	<key>SeatGeekClientId</key>
+	<string>$(SEATGEEK_CLIENT_ID)</string>
 	<key>SerpApiKey</key>
 	<string>$(SERPAPI_KEY)</string>
 	<key>TicketmasterKey</key>

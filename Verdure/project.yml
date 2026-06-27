@@ -44,6 +44,9 @@ targets:
           - Rubik-Bold.ttf
         SerpApiKey: $(SERPAPI_KEY)
         TicketmasterKey: $(TICKETMASTER_KEY)
+        SeatGeekClientId: $(SEATGEEK_CLIENT_ID)
+        NpsApiKey: $(NPS_API_KEY)
+        RecreationGovKey: $(RECREATION_GOV_KEY)
         EventbriteToken: $(EVENTBRITE_TOKEN)
         EventbriteOrgId: $(EVENTBRITE_ORG_ID)
         LocalistHost: $(LOCALIST_HOST)
