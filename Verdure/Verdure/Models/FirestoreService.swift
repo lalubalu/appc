@@ -150,6 +150,67 @@ final class FirestoreService {
         }
     }
 
+    // MARK: - Community Posts
+
+    /// Create a community post (requires a signed-in author). Returns success.
+    func createPost(authorID: String, authorName: String, authorInitials: String,
+                    placeName: String, content: String) async -> Bool {
+        let body = sanitizeString(content, maxLength: 1000)
+        guard !body.isEmpty, !authorID.isEmpty else { return false }
+        do {
+            try await db.collection("posts").addDocument(data: [
+                "authorID": authorID,
+                "authorName": sanitizeString(authorName, maxLength: 100),
+                "authorInitials": sanitizeString(authorInitials, maxLength: 4),
+                "placeName": sanitizeString(placeName, maxLength: 200),
+                "content": body,
+                "likeCount": 0,
+                "createdAt": FieldValue.serverTimestamp()
+            ])
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    /// Fetch the most recent community posts (newest first). All fields are re-sanitized
+    /// on read since other users' content is untrusted.
+    func fetchRecentPosts(limit: Int = 30) async -> [CommunityPost] {
+        do {
+            let snap = try await db.collection("posts")
+                .order(by: "createdAt", descending: true)
+                .limit(to: limit)
+                .getDocuments()
+            return snap.documents.compactMap { doc in
+                let d = doc.data()
+                let content = Sanitize.text(d["content"] as? String, max: 1000)
+                let author = Sanitize.text(d["authorName"] as? String, max: 100)
+                guard !content.isEmpty, !author.isEmpty else { return nil }
+                let when = (d["createdAt"] as? Timestamp)?.dateValue()
+                return CommunityPost(
+                    authorName: author,
+                    authorInitials: Sanitize.text(d["authorInitials"] as? String, max: 4)
+                        .ifEmpty(String(author.prefix(2)).uppercased()),
+                    placeName: Sanitize.text(d["placeName"] as? String, max: 200).ifEmpty("Nearby"),
+                    content: content,
+                    timeAgo: Self.relativeTime(when),
+                    likeCount: (d["likeCount"] as? Int) ?? 0,
+                    commentCount: 0,
+                    imagePlaceholder: nil
+                )
+            }
+        } catch {
+            return []
+        }
+    }
+
+    private static func relativeTime(_ date: Date?) -> String {
+        guard let date else { return "now" }
+        if Date().timeIntervalSince(date) < 60 { return "now" }
+        let f = RelativeDateTimeFormatter(); f.unitsStyle = .abbreviated
+        return f.localizedString(for: date, relativeTo: Date())
+    }
+
     // MARK: - Sanitization Helpers
 
     /// Remove control characters, trim whitespace, and enforce max length.

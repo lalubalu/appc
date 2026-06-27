@@ -1,10 +1,19 @@
 import SwiftUI
 
 struct CommunityView: View {
+    @Environment(FirestoreService.self) private var firestore
+    @Environment(AuthService.self) private var authService
     @State private var posts: [CommunityPost] = SampleData.communityPosts
     @State private var newPostText = ""
     @State private var showNewPost = false
     @State private var selectedProfile: CommunityProfile?
+
+    /// Load real community posts from Firestore; fall back to sample data when there
+    /// are none yet (or the user isn't signed in, since the feed requires auth).
+    private func loadPosts() async {
+        let remote = await firestore.fetchRecentPosts()
+        if !remote.isEmpty { posts = remote + SampleData.communityPosts.prefix(2) }
+    }
 
     private let storyNames: [(String, String)] = [
         ("MC", "Maya"), ("JE", "Jordan"), ("PS", "Priya"), ("AR", "Alex"), ("TK", "Tomo"), ("LW", "Lena")
@@ -32,6 +41,8 @@ struct CommunityView: View {
                 newPostSheet.presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
             }
             .sheet(item: $selectedProfile) { CommunityProfileSheet(profile: $0) }
+            .task { await loadPosts() }
+            .refreshable { await loadPosts() }
         }
     }
 
@@ -185,13 +196,22 @@ struct CommunityView: View {
     private func post() {
         let text = newPostText.trimmingCharacters(in: .whitespaces)
         guard !text.isEmpty else { return }
-        let new = CommunityPost(authorName: "You", authorInitials: "ME",
+        let name = authService.currentUser?.displayName ?? "You"
+        let initials = authService.currentUser?.initials ?? "ME"
+        let new = CommunityPost(authorName: name, authorInitials: initials,
                                 placeName: "Your neighborhood", content: text,
                                 timeAgo: "now", likeCount: 0, commentCount: 0, imagePlaceholder: nil)
+        // Optimistic local insert for instant UI…
         withAnimation(.spring(response: 0.5, dampingFraction: 0.78)) { posts.insert(new, at: 0) }
         newPostText = ""
         Haptics.success()
         showNewPost = false
+        // …then persist to Firestore so it's shared (when signed in).
+        if let uid = authService.currentUser?.uid {
+            Task { _ = await firestore.createPost(authorID: uid, authorName: name,
+                                                  authorInitials: initials,
+                                                  placeName: "Your neighborhood", content: text) }
+        }
     }
 
     private func attachmentButton(icon: String, label: String, kind: ClayStyle.ClayAccentKind) -> some View {
@@ -350,6 +370,8 @@ private struct PostCard: View {
 
 #Preview {
     CommunityView()
+        .environment(FirestoreService())
+        .environment(AuthService())
 }
 
 // MARK: - Community member profile (tap a story / post author)
