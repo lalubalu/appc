@@ -10,6 +10,15 @@ rules_version = '2';
 //   - Points are clamped to sane ranges to prevent client-side manipulation
 //   - Array fields (IDs) are capped to prevent storage abuse
 //   - No wildcard collection access — only explicitly defined paths
+//
+// PRODUCTION LOCKDOWN (after deploying Cloud Functions):
+//   Points are currently client-written but CLAMPED to sane ranges below. For true
+//   anti-cheat, deploy the checkInToEvent / redeemReward callables (functions/) and
+//   then DENY the client direct writes to these server-owned fields by adding to the
+//   users update rule:
+//     && !request.resource.data.diff(resource.data).affectedKeys()
+//          .hasAny(['pointsBalance','lifetimePoints','checkedInEventIDs','redeemedRewardIDs'])
+//   The Functions (Admin SDK) bypass these rules, so only the server can change points.
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -67,8 +76,36 @@ service cloud.firestore {
     }
 
     // ──────────────────────────────────────────────
+    // COMMUNITY POSTS: /posts/{postId}
+    // ──────────────────────────────────────────────
+    match /posts/{postId} {
+      // Any authenticated user can read the feed.
+      allow read: if request.auth != null;
+
+      // Authors can create their own posts (must stamp their UID).
+      allow create: if request.auth != null
+                    && request.resource.data.authorID == request.auth.uid
+                    && validPostDocument(request.resource.data);
+
+      // Posts are immutable; only the author can delete.
+      allow update: if false;
+      allow delete: if request.auth != null
+                    && resource.data.authorID == request.auth.uid;
+    }
+
+    // ──────────────────────────────────────────────
     // HELPER FUNCTIONS
     // ──────────────────────────────────────────────
+
+    // Validate a community post.
+    function validPostDocument(data) {
+      let validContent = data.content is string && data.content.size() >= 1 && data.content.size() <= 1000;
+      let validAuthor = data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 100;
+      let validPlace = !('placeName' in data) || (data.placeName is string && data.placeName.size() <= 200);
+      let allowed = ['authorID', 'authorName', 'authorInitials', 'placeName', 'content', 'createdAt', 'likeCount'];
+      return validContent && validAuthor && validPlace && data.keys().hasOnly(allowed);
+    }
+
 
     // Verify the request comes from the document owner
     function isOwner(userId) {
