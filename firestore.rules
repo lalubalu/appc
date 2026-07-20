@@ -11,14 +11,13 @@ rules_version = '2';
 //   - Array fields (IDs) are capped to prevent storage abuse
 //   - No wildcard collection access — only explicitly defined paths
 //
-// PRODUCTION LOCKDOWN (after deploying Cloud Functions):
-//   Points are currently client-written but CLAMPED to sane ranges below. For true
-//   anti-cheat, deploy the checkInToEvent / redeemReward callables (functions/) and
-//   then DENY the client direct writes to these server-owned fields by adding to the
-//   users update rule:
-//     && !request.resource.data.diff(resource.data).affectedKeys()
-//          .hasAny(['pointsBalance','lifetimePoints','checkedInEventIDs','redeemedRewardIDs'])
-//   The Functions (Admin SDK) bypass these rules, so only the server can change points.
+// PRODUCTION LOCKDOWN — ACTIVE:
+//   pointsBalance / lifetimePoints / checkedInEventIDs / redeemedRewardIDs are
+//   SERVER-OWNED. Clients cannot change them on update (diff check below) and must
+//   create documents with them absent or zero/empty. Only the Cloud Functions
+//   callables (checkInToEvent / collectPlace / redeemReward — Admin SDK, which
+//   bypasses these rules) can write them. collectedPlaceIDs stays client-writable
+//   for offline merge, but direct writes to it award NO points.
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -38,14 +37,18 @@ service cloud.firestore {
       // Only the authenticated owner can read their own document
       allow read: if isOwner(userId);
 
-      // Only the authenticated owner can create their document
+      // Only the authenticated owner can create their document.
+      // Server-owned fields must start absent or zero/empty — the Functions award them.
       allow create: if isOwner(userId)
-                    && validUserDocument(request.resource.data);
+                    && validUserDocument(request.resource.data)
+                    && serverOwnedFieldsAtZero(request.resource.data);
 
-      // Only the authenticated owner can update their document
+      // Only the authenticated owner can update their document — and never the
+      // server-owned game fields (points / check-ins / redemptions).
       allow update: if isOwner(userId)
                     && validUserDocument(request.resource.data)
-                    && noForbiddenFieldChanges();
+                    && noForbiddenFieldChanges()
+                    && noServerOwnedFieldChanges();
 
       // Users cannot delete their own document (admin-only operation)
       allow delete: if false;
@@ -167,8 +170,13 @@ service cloud.firestore {
           && validPointsBalance && validLifetimePoints;
     }
 
-    // Validate event document schema
+    // Validate event document schema (split into two helpers — the rules
+    // compiler allows at most 10 let-bindings per function).
     function validEventDocument(data) {
+      return validEventCoreFields(data) && validEventMetaFields(data);
+    }
+
+    function validEventCoreFields(data) {
       let validTitle = data.title is string && data.title.size() >= 1 && data.title.size() <= 200;
       let validDescription = !('description' in data) ||
         (data.description is string && data.description.size() <= 2000);
@@ -176,6 +184,12 @@ service cloud.firestore {
       let validDate = data.date is timestamp;
       let validTime = data.time is string && data.time.size() >= 1 && data.time.size() <= 50;
       let validLocation = data.locationName is string && data.locationName.size() >= 1 && data.locationName.size() <= 300;
+
+      return validTitle && validDescription && validOrganizer && validDate
+          && validTime && validLocation;
+    }
+
+    function validEventMetaFields(data) {
       let validAttendees = data.attendeeCount is int && data.attendeeCount >= 0 && data.attendeeCount <= 100000;
       let validMaxAttendees = !('maxAttendees' in data) || data.maxAttendees == null ||
         (data.maxAttendees is int && data.maxAttendees >= 1 && data.maxAttendees <= 100000);
@@ -191,9 +205,23 @@ service cloud.firestore {
       ];
       let noExtraFields = data.keys().hasOnly(allowedFields);
 
-      return validTitle && validDescription && validOrganizer && validDate
-          && validTime && validLocation && validAttendees && validMaxAttendees
-          && validCategory && validPoints && validCreator && noExtraFields;
+      return validAttendees && validMaxAttendees && validCategory
+          && validPoints && validCreator && noExtraFields;
+    }
+
+    // SERVER-OWNED game fields: only Cloud Functions (Admin SDK) may change these.
+    function noServerOwnedFieldChanges() {
+      return !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['pointsBalance', 'lifetimePoints', 'checkedInEventIDs', 'redeemedRewardIDs']);
+    }
+
+    // On create, server-owned fields must be absent or zero/empty — a fresh client
+    // can't mint itself points or attendance history.
+    function serverOwnedFieldsAtZero(data) {
+      return (!('pointsBalance' in data) || data.pointsBalance == 0)
+          && (!('lifetimePoints' in data) || data.lifetimePoints == 0)
+          && (!('checkedInEventIDs' in data) || (data.checkedInEventIDs is list && data.checkedInEventIDs.size() == 0))
+          && (!('redeemedRewardIDs' in data) || (data.redeemedRewardIDs is list && data.redeemedRewardIDs.size() == 0));
     }
 
     // Prevent changing fields that should be immutable after creation

@@ -32,7 +32,19 @@ const CATEGORY_MAX_POINTS: Record<string, number> = {
 
 // Reward catalog (server-trusted). Mirror RewardsStore / SampleData rewards.
 const REWARD_COSTS: Record<string, number> = {
-  // "<rewardId>": <pointCost>  — fill from your real rewards list
+  // Bronze (1000 pts)
+  "starbucks-5": 1000,
+  "dunkin-5": 1000,
+  // Silver (2500 pts)
+  "amazon-10": 2500,
+  "target-10": 2500,
+  "chipotle-10": 2500,
+  // Gold (7500 pts)
+  "amazon-25": 7500,
+  "nike-25": 7500,
+  // Platinum (20000 pts)
+  "apple-50": 20000,
+  "rei-50": 20000,
 };
 
 /**
@@ -62,18 +74,65 @@ export const checkInToEvent = onCall(async (req) => {
     const snap = await tx.get(userRef);
     const data = snap.data() ?? {};
     const checkedIn: string[] = data.checkedInEventIDs ?? [];
-    if (checkedIn.includes(eventId)) return { alreadyCheckedIn: true, awarded: 0 };
+    const balance = Number(data.pointsBalance) || 0;
+    const lifetime = Number(data.lifetimePoints) || 0;
+    if (checkedIn.includes(eventId)) {
+      return { alreadyCheckedIn: true, awarded: 0, newBalance: balance, newLifetime: lifetime };
+    }
 
     tx.set(userRef, {
       checkedInEventIDs: FieldValue.arrayUnion(eventId),
-      pointsBalance: (Number(data.pointsBalance) || 0) + award,
-      lifetimePoints: (Number(data.lifetimePoints) || 0) + award,
+      pointsBalance: balance + award,
+      lifetimePoints: lifetime + award,
       lastUpdated: FieldValue.serverTimestamp(),
     }, { merge: true });
-    return { alreadyCheckedIn: false, awarded: award };
+    return {
+      alreadyCheckedIn: false, awarded: award,
+      newBalance: balance + award, newLifetime: lifetime + award,
+    };
   });
 
   return result;
+});
+
+/**
+ * collectPlace — record a place collection and award its (small) points, server-side
+ * & idempotent. Place points are capped at the Legendary ceiling (50 — see
+ * PlaceRarity.pointValue in the app), so a spoofed client can't inflate them.
+ */
+const PLACE_MAX_POINTS = 50;
+
+export const collectPlace = onCall(async (req) => {
+  const uid = req.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "Sign in to collect.");
+
+  const placeId = String(req.data?.placeId ?? "").slice(0, 200);
+  const claimed = Math.max(0, Math.floor(Number(req.data?.claimedPoints ?? 0)));
+  if (!placeId) throw new HttpsError("invalid-argument", "Missing placeId.");
+  const award = Math.min(claimed, PLACE_MAX_POINTS);
+
+  const userRef = db.collection("users").doc(uid);
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(userRef);
+    const data = snap.data() ?? {};
+    const collected: string[] = data.collectedPlaceIDs ?? [];
+    const balance = Number(data.pointsBalance) || 0;
+    const lifetime = Number(data.lifetimePoints) || 0;
+    if (collected.includes(placeId)) {
+      return { alreadyCollected: true, awarded: 0, newBalance: balance, newLifetime: lifetime };
+    }
+
+    tx.set(userRef, {
+      collectedPlaceIDs: FieldValue.arrayUnion(placeId),
+      pointsBalance: balance + award,
+      lifetimePoints: lifetime + award,
+      lastUpdated: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    return {
+      alreadyCollected: false, awarded: award,
+      newBalance: balance + award, newLifetime: lifetime + award,
+    };
+  });
 });
 
 /**

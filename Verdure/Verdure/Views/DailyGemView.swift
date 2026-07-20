@@ -1,18 +1,19 @@
 import SwiftUI
 
-// MARK: - Daily Gem (tap the gem → reveal today's fact with a burst)
+// MARK: - Daily Gem (tap the gem → reveal today's fun fact with a burst)
+//
+// Shown automatically once per day on the first open (see RootView + DailyGemStore),
+// and re-viewable from the Explore tile. The fact itself is a daily nugget about
+// nature, community, events, or the environment.
 
 struct DailyGemView: View {
-    let featuredPlace: Place
+    let fact: GemFact
     let onDismiss: () -> Void
 
     @State private var showContent = false
     @State private var revealed = false
     @State private var burst = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    private let fact = SampleData.todaysFact()
-    private var kind: ClayStyle.ClayAccentKind { featuredPlace.category.clayKind }
 
     var body: some View {
         ZStack {
@@ -46,6 +47,10 @@ struct DailyGemView: View {
                 .onTapGesture { revealed ? dismiss() : reveal() }
                 .scaleEffect(showContent && !revealed ? 1 : (revealed ? 1 : 0.95))
                 .breathing(scale: revealed ? 1 : 1.04, duration: 2.4)
+                .accessibilityElement()
+                .accessibilityLabel(revealed ? "Daily Gem revealed" : "Daily Gem")
+                .accessibilityHint(revealed ? "Double tap to close." : "Double tap to reveal today's fun fact.")
+                .accessibilityAddTraits(.isButton)
 
                 // Title
                 VStack(spacing: Spacing.sm) {
@@ -53,8 +58,9 @@ struct DailyGemView: View {
                     Text("Daily Gem")
                         .font(VType.display(44, .bold))
                         .foregroundStyle(Palette.ink)
+                        .accessibilityAddTraits(.isHeader)
                     if !revealed {
-                        Text("Tap the gem to reveal something new\nabout your neighborhood.")
+                        Text("Tap the gem to reveal today's\nfun fact about your world.")
                             .font(VType.body(15)).foregroundStyle(Palette.inkSoft)
                             .multilineTextAlignment(.center).lineSpacing(3)
                             .transition(.opacity)
@@ -63,12 +69,10 @@ struct DailyGemView: View {
                 .opacity(showContent ? 1 : 0)
                 .offset(y: showContent ? 0 : 16)
 
-                // Revealed: the fact + the featured place
+                // Revealed: the fact card
                 if revealed {
                     factCard
                         .transition(.scale(scale: 0.82).combined(with: .opacity))
-                    placeCard
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
 
                 Spacer(minLength: 0)
@@ -96,6 +100,7 @@ struct DailyGemView: View {
         if !reduceMotion {
             withAnimation(.easeOut(duration: 0.8)) { burst = true }
         }
+        AccessibilityNotification.Announcement("\(fact.kind). \(fact.text)").post()
     }
 
     private func dismiss() { Haptics.tap(); onDismiss() }
@@ -121,23 +126,8 @@ struct DailyGemView: View {
         .claySurface(.surface, radius: Radius.lg, elevation: 1.1)
         .overlay(RoundedRectangle(cornerRadius: Radius.lg, style: .continuous)
             .strokeBorder(fact.accent.accent.base.opacity(0.4), lineWidth: 1.5))
-    }
-
-    private var placeCard: some View {
-        HStack(spacing: Spacing.md) {
-            ClayIconTile(systemImage: featuredPlace.imagePlaceholder, kind: kind, size: 46, radius: Radius.chip)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("DISCOVER TODAY").font(VType.body(9, .bold)).tracking(0.8)
-                    .foregroundStyle(Palette.inkSoft)
-                Text(featuredPlace.name)
-                    .font(VType.display(17, .semibold)).foregroundStyle(Palette.ink).lineLimit(1)
-            }
-            Spacer()
-            Image(systemName: "arrow.right").font(.system(size: 14, weight: .bold))
-                .foregroundStyle(Palette.spruce.base)
-        }
-        .padding(Spacing.md)
-        .claySurface(.surface, radius: Radius.md, elevation: 0.9)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(fact.kind). \(fact.text)")
     }
 
     // MARK: Sparkles
@@ -150,6 +140,7 @@ struct DailyGemView: View {
             .opacity(showContent ? 0.9 : 0)
             .scaleEffect(showContent ? 1 : 0.4)
             .animation(.spring(response: 0.6, dampingFraction: 0.6).delay(delay), value: showContent)
+            .accessibilityHidden(true)
     }
 
     /// A sparkle that flies outward from the gem center when revealed.
@@ -162,9 +153,10 @@ struct DailyGemView: View {
             .offset(x: cos(angle) * dist, y: sin(angle) * dist)
             .opacity(burst ? 0 : (revealed ? 0.9 : 0))
             .scaleEffect(burst ? 0.4 : 1)
+            .accessibilityHidden(true)
     }
 }
 
 #Preview {
-    DailyGemView(featuredPlace: SampleData.places[0], onDismiss: {})
+    DailyGemView(fact: SampleData.gemFacts[0], onDismiss: {})
 }

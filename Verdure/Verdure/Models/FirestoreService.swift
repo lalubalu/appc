@@ -31,15 +31,13 @@ final class FirestoreService {
 
     // MARK: - Sync Game State to Cloud
 
-    /// Upload current game state to Firestore for the given user.
-    /// Validates auth + data integrity before writing.
+    /// Upload the CLIENT-OWNED slice of game state to Firestore for the given user.
+    /// Points, check-ins, and redemptions are server-owned — the Cloud Functions
+    /// write them and the security rules deny direct client writes, so they are
+    /// deliberately absent here (including them would reject the whole write).
     func syncGameState(
         userID: String,
-        collectedPlaceIDs: Set<String>,
-        checkedInEventIDs: Set<String>,
-        pointsBalance: Int,
-        lifetimePoints: Int,
-        redeemedRewardIDs: Set<String>
+        collectedPlaceIDs: Set<String>
     ) async {
         // Verify the authenticated user matches the target document
         guard let currentUID = Auth.auth().currentUser?.uid, currentUID == userID else {
@@ -47,12 +45,7 @@ final class FirestoreService {
             return
         }
 
-        // Clamp and sanitize before writing
         let sanitizedCollected = sanitizeIDArray(Array(collectedPlaceIDs), limit: Limits.maxArraySize)
-        let sanitizedEvents = sanitizeIDArray(Array(checkedInEventIDs), limit: Limits.maxArraySize)
-        let sanitizedRewards = sanitizeIDArray(Array(redeemedRewardIDs), limit: Limits.maxArraySize)
-        let clampedPoints = clamp(pointsBalance, min: 0, max: Limits.maxPoints)
-        let clampedLifetime = clamp(lifetimePoints, min: 0, max: Limits.maxLifetimePoints)
 
         isSyncing = true
 
@@ -60,10 +53,6 @@ final class FirestoreService {
             let docRef = db.collection("users").document(userID)
             try await docRef.setData([
                 "collectedPlaceIDs": sanitizedCollected,
-                "checkedInEventIDs": sanitizedEvents,
-                "pointsBalance": clampedPoints,
-                "lifetimePoints": clampedLifetime,
-                "redeemedRewardIDs": sanitizedRewards,
                 "lastUpdated": FieldValue.serverTimestamp()
             ], merge: true)
         } catch {

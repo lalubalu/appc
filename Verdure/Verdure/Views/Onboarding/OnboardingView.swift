@@ -108,6 +108,8 @@ struct OnboardingView: View {
                         }
                     }
                     .padding(.bottom, Spacing.sm)
+                    .accessibilityElement()
+                    .accessibilityLabel("Step \(currentPage + 1) of \(totalPages)")
 
                     if let error = authService.errorMessage {
                         Text(error)
@@ -116,6 +118,7 @@ struct OnboardingView: View {
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, Spacing.lg)
                             .transition(.opacity.combined(with: .move(edge: .top)))
+                            .onAppear { AccessibilityNotification.Announcement(error).post() }
                     }
 
                     ClayButton(buttonTitle,
@@ -152,6 +155,7 @@ struct OnboardingView: View {
             }
             .frame(height: 270)
             .animation(.spring(response: 0.8, dampingFraction: 0.6), value: animateIn)
+            .accessibilityHidden(true)   // decorative hero — the title below carries the meaning
 
             VStack(spacing: Spacing.md) {
                 KickerLabel(text: page.kicker, color: page.kind.accent.base, dot: Palette.gold.base)
@@ -160,6 +164,7 @@ struct OnboardingView: View {
                     .multilineTextAlignment(.center)
                     .foregroundStyle(Palette.ink)
                     .lineSpacing(2)
+                    .accessibilityAddTraits(.isHeader)
                 Text(page.subtitle)
                     .font(VType.body(16))
                     .multilineTextAlignment(.center)
@@ -355,6 +360,9 @@ private struct InterestTile: View {
             style: isSelected ? .accent(category.clayKind) : .surface,
             radius: Radius.md, elevation: 0.7))
         .sensoryFeedback(.selection, trigger: isSelected)
+        .accessibilityLabel("\(category.rawValue) interest")
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+        .accessibilityHint(isSelected ? "Double tap to remove from your interests." : "Double tap to add to your interests.")
     }
 }
 

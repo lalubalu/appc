@@ -19,14 +19,6 @@ enum SampleData {
         Place(id: "the-commons", name: "The Commons", category: .community, shortDescription: "Outdoor gathering space hosting weekly farmers markets.", distance: "0.2 mi", distanceValue: 0.2, rating: 4.5, reviewCount: 98, imagePlaceholder: "person.3.fill", accentColor: .accentMint, isFeatured: false),
     ]
 
-    // MARK: Daily Gem
-
-    static let dailyGem = DailyGem(
-        place: places[2],
-        headline: "Spring Blooms at Botanica",
-        reason: "The cherry blossoms are at peak bloom this week — a must-visit."
-    )
-
     // MARK: Events (primary points source)
 
     static let events: [Event] = [
@@ -89,58 +81,68 @@ enum SampleData {
         ]
     )
 
-    // MARK: - Daily Gem facts (rotate by day; can repeat older facts)
+    // MARK: - Daily Gem facts
+    //
+    // Generic, true fun facts about nature, community, events, and the environment.
+    // Selection/rotation lives in DailyGemStore (once per day, no repeats until the
+    // pool is exhausted). Keep these place-agnostic — they must hold anywhere.
 
     static let gemFacts: [GemFact] = [
-        GemFact(kind: "Did you know", icon: "leaf.fill",
-                text: "The parks in your neighborhood absorb over 2 tons of CO₂ every year — just by being green.",
-                accent: .spruce),
-        GemFact(kind: "Fun event", icon: "music.note",
-                text: "Free outdoor jazz returns to The Commons every Friday evening this summer.",
-                accent: .gold),
-        GemFact(kind: "Nature fact", icon: "bird.fill",
-                text: "Over 40 species of birds have been spotted along Hawk Ridge Trail this spring.",
-                accent: .teal),
-        GemFact(kind: "Community", icon: "person.3.fill",
-                text: "Local volunteers have logged more than 1,200 hours cleaning up the riverbank this year.",
-                accent: .terracotta),
-        GemFact(kind: "Did you know", icon: "drop.fill",
-                text: "Marina Point's wetlands filter rainwater for the whole district before it reaches the bay.",
-                accent: .sky),
-        GemFact(kind: "Fun event", icon: "basket.fill",
-                text: "The Weekend Farmers Market now hosts 30+ local growers — go early for the good tomatoes.",
-                accent: .gold),
-        GemFact(kind: "Nature fact", icon: "tree.fill",
-                text: "Some of the oak trees in Riverside Park are over 150 years old.",
-                accent: .spruce),
-        GemFact(kind: "Community", icon: "heart.fill",
-                text: "Neighbors planted 500 native wildflowers at Botanica Gardens last month.",
-                accent: .teal),
-        GemFact(kind: "Did you know", icon: "moon.stars.fill",
-                text: "Overlook Bluff is one of the best low-light spots in the city for stargazing.",
-                accent: .sky),
-        GemFact(kind: "Fun event", icon: "figure.run",
-                text: "A community 5K loops through three parks on the last Saturday of every month.",
-                accent: .terracotta),
-        GemFact(kind: "Nature fact", icon: "ant.fill",
-                text: "Pollinator gardens nearby support honeybees that travel up to 3 miles to forage.",
-                accent: .gold),
-        GemFact(kind: "Community", icon: "hands.sparkles.fill",
-                text: "Cedar Court's little free library has swapped over 800 books since it opened.",
+        GemFact(kind: "Nature fact", icon: "leaf.fill",
+                text: "A single mature oak can host over 500 caterpillar species — the food that raises almost every songbird chick nearby.",
                 accent: .spruce),
         GemFact(kind: "Did you know", icon: "sun.max.fill",
-                text: "Tree canopy in your area keeps summer streets up to 10°F cooler than bare pavement.",
+                text: "Tree-shaded streets can stay up to 10°F cooler on summer days than bare pavement.",
                 accent: .gold),
-        GemFact(kind: "Fun event", icon: "paintpalette.fill",
-                text: "A free outdoor mural festival takes over the waterfront walls this season.",
+        GemFact(kind: "Environment", icon: "drop.fill",
+                text: "Urban wetlands work like natural filters, cleaning rainwater before it ever reaches rivers and bays.",
+                accent: .sky),
+        GemFact(kind: "Community", icon: "person.3.fill",
+                text: "People who regularly show up to local events report feeling far more connected to their neighbors.",
+                accent: .terracotta),
+        GemFact(kind: "Nature fact", icon: "bird.fill",
+                text: "The dawn chorus is real — birds sing loudest at first light, when still air carries their songs farthest.",
                 accent: .teal),
+        GemFact(kind: "Did you know", icon: "figure.walk",
+                text: "Just two hours a week outside in green space is linked to noticeably better health and well-being.",
+                accent: .spruce),
+        GemFact(kind: "Community", icon: "basket.fill",
+                text: "Money spent at a farmers market keeps roughly twice as much value circulating in the local economy.",
+                accent: .gold),
+        GemFact(kind: "Nature fact", icon: "ant.fill",
+                text: "Honeybees will fly up to 3 miles from their hive to reach the flowers they love.",
+                accent: .gold),
+        GemFact(kind: "Environment", icon: "arrow.3.trianglepath",
+                text: "City parks quietly absorb tons of CO₂ every year — green space is working infrastructure.",
+                accent: .spruce),
+        GemFact(kind: "Community", icon: "hands.sparkles.fill",
+                text: "Volunteering isn't just generous — studies link it to lower stress and even longer lives.",
+                accent: .teal),
+        GemFact(kind: "Nature fact", icon: "moon.stars.fill",
+                text: "On a truly dark night you can see around 2,500 stars — light pollution hides most of them from city streets.",
+                accent: .sky),
+        GemFact(kind: "Did you know", icon: "brain.head.profile",
+                text: "Walking can boost creative thinking by around 60% compared to sitting — take your next idea outside.",
+                accent: .terracotta),
+        GemFact(kind: "Nature fact", icon: "sparkles",
+                text: "Fireflies aren't flashing at random — each species blinks its own light pattern, like a signature in the dark.",
+                accent: .gold),
+        GemFact(kind: "Community", icon: "house.fill",
+                text: "Sociologists call parks, markets, and cafés 'third places' — the spots where communities actually form.",
+                accent: .spruce),
+        GemFact(kind: "Environment", icon: "tree.fill",
+                text: "Two mature trees produce roughly the oxygen a family of four breathes in a year.",
+                accent: .teal),
+        GemFact(kind: "Fun event", icon: "party.popper.fill",
+                text: "Neighborhoods that throw regular block parties consistently report higher trust between neighbors.",
+                accent: .terracotta),
+        GemFact(kind: "Nature fact", icon: "ladybug.fill",
+                text: "Monarch butterflies navigate up to 3,000 miles to forests they've never seen — guided by the sun.",
+                accent: .gold),
+        GemFact(kind: "Did you know", icon: "figure.mind.and.body",
+                text: "'Forest bathing' — simply spending quiet time among trees — measurably lowers stress hormones and blood pressure.",
+                accent: .spruce),
     ]
-
-    /// Today's gem fact — deterministic by day of year, so it changes daily and can repeat older facts.
-    static func todaysFact(for date: Date = Date()) -> GemFact {
-        let day = Calendar.current.ordinality(of: .day, in: .year, for: date) ?? 1
-        return gemFacts[day % gemFacts.count]
-    }
 
     // MARK: - Collectible Places
 

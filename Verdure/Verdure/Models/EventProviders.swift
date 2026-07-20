@@ -296,6 +296,8 @@ struct EventbriteProvider: EventProvider {
         return events.compactMap { ev in
             guard let id = ev["id"] as? String,
                   let title = (ev["name"] as? [String: Any])?["text"] as? String else { return nil }
+            // Paid events are excluded for now — only keep events Eventbrite marks free.
+            guard ev["is_free"] as? Bool == true else { return nil }
             let startLocal = (ev["start"] as? [String: Any])?["local"] as? String
             guard let date = EventParse.date(startLocal) else { return nil }
             let venue = ev["venue"] as? [String: Any]
@@ -337,6 +339,12 @@ struct LocalistProvider: EventProvider {
         return wrappers.compactMap { wrapper in
             guard let ev = wrapper["event"] as? [String: Any],
                   let id = ev["id"], let title = ev["title"] as? String else { return nil }
+            // Paid events are excluded for now — drop anything Localist marks non-free
+            // or that lists a ticket cost. (Absent fields → assume free; most campus
+            // calendar events are.)
+            if ev["free"] as? Bool == false { return nil }
+            if let cost = ev["ticket_cost"] as? String,
+               !cost.isEmpty, cost.lowercased() != "free" { return nil }
             let instances = ev["event_instances"] as? [[String: Any]]
             let firstStart = (instances?.first?["event_instance"] as? [String: Any])?["start"] as? String
             guard let date = EventParse.date(firstStart) else { return nil }
@@ -442,9 +450,11 @@ struct NeighborhoodCommonsProvider: EventProvider {
 
 @MainActor
 final class EventProviderHub {
+    // PAID EVENTS REMOVED (for now): Ticketmaster + SeatGeek are ticket
+    // marketplaces — nearly everything they return is paid, so they're excluded
+    // from the hub entirely. Re-add TicketmasterProvider() / SeatGeekProvider()
+    // here when paid events come back.
     let providers: [EventProvider] = [
-        TicketmasterProvider(),
-        SeatGeekProvider(),
         EventbriteProvider(),
         LocalistProvider(),
         GooglePSEProvider(),

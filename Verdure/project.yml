@@ -63,3 +63,23 @@ targets:
         product: FirebaseAuth
       - package: Firebase
         product: FirebaseFirestore
+      - package: Firebase
+        product: FirebaseFunctions
+schemes:
+  Verdure:
+    build:
+      targets:
+        Verdure: all
+    run:
+      config: Debug
+      # Local StoreKit testing for Verdure+ subscriptions (no App Store Connect needed
+      # in the simulator). Remove this line to test against real ASC products.
+      storeKitConfiguration: Verdure.storekit
+    test:
+      config: Debug
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release

@@ -109,14 +109,19 @@ The app's visual system mirrors the Verdure website: **claymorphism** with a sag
 
 ## What Needs to Be Done (Backend & Beyond)
 
+- [ ] **Upgrade Firebase project to Blaze**, then `npx firebase-tools deploy --only functions` (rules are deployed; functions blocked on billing)
+- [ ] **Enable Storage in console** (Get Started), then `npx firebase-tools deploy --only storage`
+- [ ] Create the two Verdure+ subscriptions in App Store Connect (`com.vaiybhav.verdure.plus.monthly` / `.yearly` — local testing uses `Verdure/Verdure.storekit` via the Verdure scheme)
+- [ ] Server-side subscription check (App Store Server API) so redeemReward enforces Plus-only tiers
 - [ ] Re-register Firebase app under `com.vaiybhav.verdure`
-- [ ] Backend API to replace SampleData/UserDefaults
-- [ ] Server-side proof-of-attendance verification
+- [ ] Server-side proof-of-attendance verification (manual spot-check for now)
 - [ ] Real gift-card fulfillment (Tango/Tremendous)
 - [ ] Real photos (AsyncImage + CDN) to replace clay icon placeholders
-- [ ] Push notifications, real social features, server-side gamification
-- [ ] Accessibility (VoiceOver, Dynamic Type) and XCTest target
+- [ ] Push notifications, real social features
+- [ ] Dynamic Type + XCTest target
 
 ## Changelog
+
+- **2026-07-19** — **Server-authoritative points + personalization + Verdure+.** Points/check-ins/redemptions now go through Cloud Functions callables (`checkInToEvent`, new `collectPlace`, `redeemReward` w/ real REWARD_COSTS); GameStateManager applies earns optimistically and reconciles via a persisted pending-op queue (offline-safe, idempotent replays, legacy backfill on first connect). Firestore rules deployed with production lockdown (client writes to points/checked-in/redeemed denied; zero-on-create). FirebaseFunctions added to SwiftPM. Daily Gem reworked into a once-per-day fun-fact splash (generic nature/community/environment facts, no repeats until pool exhausts — `DailyGemStore`). New "For You" personalized events section (interest→event-category mapping + in-app interest picker). Paid events removed (Ticketmaster/SeatGeek providers off; Eventbrite/Localist filtered to free). Verdure+ subscription via StoreKit 2 (`StoreService`, clay `PaywallView`, `Verdure.storekit` scheme config; Gold/Platinum reward tiers gated). VoiceOver pass on check-in, redeem, and onboarding flows.
 
 - **2026-06-17** — **Verdure rebrand + full visual overhaul.** Complete rename Connectify → Verdure (project, target, scheme, bundle id `com.vaiybhav.verdure`, source folder, all symbols/strings). New "Warm Forest" claymorphism design system (`VerdureTheme` + `ClayKit` + `ClayMotion`), Fredoka/Rubik bundled fonts, real SceneKit 3D compass-leaf medallion, clay floating tab bar, and every screen rebuilt in clay (light + dark). New app icon from the compass-leaf logo. Old neon/"Bio" component library removed.

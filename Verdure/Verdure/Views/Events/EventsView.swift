@@ -9,13 +9,36 @@ struct EventsView: View {
     @State private var showCreateEvent = false
     @State private var showSaved = false
     @State private var showCalendar = false
+    @State private var showInterestPicker = false
     @State private var selectedCategory: EventCategory? = nil
     @State private var searchText = ""
     @AppStorage("accountType") private var accountTypeRaw = AccountType.visitor.rawValue
+    @AppStorage("interestCategories") private var interestCategoriesRaw = ""
     private var accountType: AccountType { AccountType(rawValue: accountTypeRaw) ?? .visitor }
 
     private var sourceEvents: [Event] {
         eventsService.events.isEmpty ? SampleData.events : eventsService.events
+    }
+
+    // MARK: Personalization ("For You")
+
+    /// The user's chosen interests (set in onboarding, editable here).
+    private var interests: Set<PlaceCategory> {
+        Set(interestCategoriesRaw.split(separator: ",").compactMap { PlaceCategory(rawValue: String($0)) })
+    }
+    /// Event categories those interests map to (see PlaceCategory.relatedEventCategories).
+    private var preferredEventCategories: Set<EventCategory> {
+        Set(interests.flatMap(\.relatedEventCategories))
+    }
+    /// Upcoming events matching the user's interests — soonest first, not yet attended.
+    private var forYouEvents: [Event] {
+        guard !preferredEventCategories.isEmpty else { return [] }
+        let cutoff = Date().addingTimeInterval(-3600)
+        return sourceEvents
+            .filter { $0.date > cutoff && preferredEventCategories.contains($0.category) && !gameState.isCheckedIn($0.id) }
+            .sorted { $0.date < $1.date }
+            .prefix(6)
+            .map { $0 }
     }
     private var filteredEvents: [Event] {
         var result = sourceEvents
@@ -50,8 +73,9 @@ struct EventsView: View {
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: Spacing.xl) {
                     kineticHero.dramaticRise(index: 0)
-                    posterDeck.dramaticRise(index: 1)
-                    upcomingTimeline.dramaticRise(index: 2)
+                    forYouSection.dramaticRise(index: 1)
+                    posterDeck.dramaticRise(index: 2)
+                    upcomingTimeline.dramaticRise(index: 3)
                 }
                 .padding(.top, Spacing.sm)
                 .padding(.bottom, 110)
@@ -75,6 +99,76 @@ struct EventsView: View {
             .sheet(isPresented: $showCalendar) {
                 EventCalendarView(allEvents: sourceEvents, dateFormatter: dateFormatter)
                     .environment(gameState).environment(locationManager)
+            }
+            .sheet(isPresented: $showInterestPicker) {
+                InterestPickerSheet()
+                    .presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
+            }
+        }
+    }
+
+    // MARK: - For You (personalized recommendations)
+
+    @ViewBuilder
+    private var forYouSection: some View {
+        if interests.isEmpty {
+            // No interests picked yet → invite personalization.
+            Button { Haptics.tap(); showInterestPicker = true } label: {
+                HStack(spacing: Spacing.md) {
+                    ClayIconTile(systemImage: "sparkles", kind: .gold, size: 46, radius: Radius.chip)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Get event picks for you")
+                            .font(VType.display(16, .semibold)).foregroundStyle(Palette.ink)
+                        Text("Tell us what you love and we'll surface matching events.")
+                            .font(VType.body(12.5)).foregroundStyle(Palette.inkSoft)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer()
+                    Image(systemName: "arrow.right").font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(Palette.spruce.base)
+                }
+                .padding(Spacing.md)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .claySurface(.surface, radius: Radius.lg, elevation: 1.0)
+            }
+            .buttonStyle(Card3DButtonStyle())
+            .padding(.horizontal, Spacing.md)
+            .accessibilityLabel("Get event picks for you")
+            .accessibilityHint("Opens interest selection to personalize event recommendations.")
+        } else if !forYouEvents.isEmpty {
+            VStack(alignment: .leading, spacing: Spacing.sm) {
+                HStack(spacing: 6) {
+                    KickerLabel(text: "For you", color: Palette.gold.base, dot: Palette.gold.base)
+                    Spacer()
+                    Button { Haptics.tap(); showInterestPicker = true } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: "slider.horizontal.3").font(.system(size: 11, weight: .bold))
+                            Text("Tune").font(VType.body(12, .bold))
+                        }
+                        .foregroundStyle(Palette.spruce.base)
+                        .padding(.horizontal, 11).padding(.vertical, 7)
+                        .background(ClayBackground(style: .surface, radius: Radius.chip, elevation: 0.5))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Tune recommendations")
+                    .accessibilityHint("Edit the interests used for your event picks.")
+                }
+                .padding(.horizontal, Spacing.md)
+
+                Text("Picked from your interests")
+                    .font(VType.body(12, .medium)).foregroundStyle(Palette.inkFaint)
+                    .padding(.horizontal, Spacing.md)
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 14) {
+                        ForEach(forYouEvents) { event in
+                            ForYouEventCard(event: event, dateFormatter: dateFormatter)
+                                .onTapGesture { Haptics.soft(); selectedEvent = event }
+                        }
+                    }
+                    .padding(.horizontal, Spacing.md)
+                    .padding(.vertical, 4)
+                }
             }
         }
     }
@@ -696,6 +790,8 @@ private struct EventDetailSheet: View {
                 Text("\(event.pointValue) pts earned").font(VType.num(13, .bold)).foregroundStyle(Palette.teal.base)
             }
             .padding(Spacing.md).claySurface(.surface, radius: Radius.md)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Checked in. \(event.pointValue) points earned.")
         } else {
             VStack(spacing: Spacing.sm) {
                 HStack(spacing: 8) {
@@ -705,6 +801,7 @@ private struct EventDetailSheet: View {
                 }
                 .padding(Spacing.md).frame(maxWidth: .infinity, alignment: .leading)
                 .background(ClayBackground(style: .inset, radius: Radius.sm))
+                .accessibilityElement(children: .combine)
 
                 if proofPhotoData != nil {
                     HStack(spacing: 8) {
@@ -713,6 +810,7 @@ private struct EventDetailSheet: View {
                         Spacer()
                         Button("Change") { showPhotoPicker = true }
                             .font(VType.body(12, .bold)).foregroundStyle(Palette.spruce.base)
+                            .accessibilityLabel("Change proof photo")
                     }
                     .padding(Spacing.md).background(ClayBackground(style: .inset, radius: Radius.sm))
 
@@ -721,15 +819,21 @@ private struct EventDetailSheet: View {
                         earnedPoints = gameState.checkInEvent(event)
                         if earnedPoints > 0 {
                             Haptics.success()
+                            AccessibilityNotification.Announcement(
+                                "Checked in to \(event.title). Earned \(earnedPoints) points."
+                            ).post()
                             withAnimation(.spring(response: 0.4)) { showCelebration = true }
                             DispatchQueue.main.asyncAfter(deadline: .now() + 2.6) {
                                 withAnimation { showCelebration = false }
                             }
                         }
                     }
+                    .accessibilityLabel("Check in to \(event.title)")
+                    .accessibilityHint("Earns \(event.pointValue) points. Requires being at the event.")
                 } else {
                     ClayButton("Upload Proof of Attendance", systemImage: "camera.viewfinder",
                                kind: .spruce, fullWidth: true) { showPhotoPicker = true }
+                        .accessibilityHint("Opens your photo library to attach a photo taken at the event.")
                 }
             }
             .photosPicker(isPresented: $showPhotoPicker, selection: $selectedPhotoItem, matching: .images)
@@ -758,6 +862,9 @@ private struct EventDetailSheet: View {
             }
         }
         .onTapGesture { withAnimation { showCelebration = false } }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Checked in to \(event.title). Earned \(earnedPoints) points.")
+        .accessibilityHint("Double tap to dismiss.")
     }
 
     private func detailRow(_ icon: String, _ label: String, _ value: String) -> some View {
@@ -766,6 +873,121 @@ private struct EventDetailSheet: View {
             Text(label).font(VType.body(13, .medium)).foregroundStyle(Palette.inkSoft).frame(width: 72, alignment: .leading)
             Text(value).font(VType.body(14, .medium)).foregroundStyle(Palette.ink)
             Spacer()
+        }
+    }
+}
+
+// MARK: - For You event card (compact clay poster)
+
+private struct ForYouEventCard: View {
+    let event: Event
+    let dateFormatter: DateFormatter
+    private var kind: ClayStyle.ClayAccentKind { event.category.clayKind }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top) {
+                ClayIconTile(systemImage: event.imagePlaceholder, kind: kind, size: 44, radius: Radius.chip)
+                Spacer()
+                HStack(spacing: 4) {
+                    Image(systemName: "leaf.circle.fill").font(.system(size: 10, weight: .bold))
+                    Text("+\(event.pointValue)").font(VType.num(11, .bold))
+                }
+                .foregroundStyle(Palette.gold.base)
+                .padding(.horizontal, 8).padding(.vertical, 5)
+                .background(ClayBackground(style: .inset, radius: Radius.chip))
+            }
+            Text(event.title)
+                .font(VType.display(15, .semibold)).foregroundStyle(Palette.ink)
+                .lineLimit(2).fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Spacer(minLength: 0)
+            VStack(alignment: .leading, spacing: 3) {
+                Label(dateFormatter.string(from: event.date), systemImage: "calendar")
+                Label(event.locationName, systemImage: "mappin.circle.fill").lineLimit(1)
+            }
+            .font(VType.num(11, .semibold)).foregroundStyle(Palette.inkSoft)
+            HStack(spacing: 5) {
+                Circle().fill(kind.accent.base).frame(width: 6, height: 6)
+                Text(event.category.rawValue).font(VType.body(10, .bold))
+                    .foregroundStyle(kind.accent.base)
+            }
+        }
+        .padding(Spacing.md)
+        .frame(width: 210, height: 190, alignment: .topLeading)
+        .claySurface(.surface, radius: Radius.md, elevation: 0.9)
+        .overlay(alignment: .top) {
+            Capsule().fill(kind.accent.faceGradient).frame(height: 5)
+                .padding(.horizontal, 22).offset(y: 2)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(event.title), \(event.category.rawValue), \(dateFormatter.string(from: event.date)) at \(event.locationName), earns \(event.pointValue) points")
+        .accessibilityHint("Opens event details.")
+        .accessibilityAddTraits(.isButton)
+    }
+}
+
+// MARK: - Interest picker (personalizes the For You section)
+
+private struct InterestPickerSheet: View {
+    @AppStorage("interestCategories") private var interestCategoriesRaw = ""
+    @Environment(\.dismiss) private var dismiss
+
+    private var selected: Set<PlaceCategory> {
+        Set(interestCategoriesRaw.split(separator: ",").compactMap { PlaceCategory(rawValue: String($0)) })
+    }
+
+    private func toggle(_ category: PlaceCategory) {
+        var current = selected
+        if current.contains(category) { current.remove(category) } else { current.insert(category) }
+        interestCategoriesRaw = current.map(\.rawValue).joined(separator: ",")
+        Haptics.tap()
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(alignment: .leading, spacing: Spacing.lg) {
+                    Text("Pick what draws you outdoors — your event recommendations follow.")
+                        .font(VType.body(14)).foregroundStyle(Palette.inkSoft)
+                        .padding(.horizontal, Spacing.md)
+
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                        ForEach(PlaceCategory.allCases) { category in
+                            let isSelected = selected.contains(category)
+                            Button { toggle(category) } label: {
+                                VStack(spacing: 10) {
+                                    ClayIconTile(systemImage: category.icon, kind: category.clayKind,
+                                                 size: 44, radius: Radius.chip)
+                                    Text(category.rawValue)
+                                        .font(VType.body(13, .semibold))
+                                        .foregroundStyle(isSelected ? category.accent.onColor : Palette.ink)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 16)
+                            }
+                            .buttonStyle(ClayPressButtonStyle(
+                                style: isSelected ? .accent(category.clayKind) : .surface,
+                                radius: Radius.md, elevation: 0.7))
+                            .accessibilityLabel(category.rawValue)
+                            .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+                            .accessibilityHint(isSelected ? "Double tap to remove from your interests." : "Double tap to add to your interests.")
+                        }
+                    }
+                    .padding(.horizontal, Spacing.md)
+                }
+                .padding(.top, Spacing.sm)
+                .padding(.bottom, Spacing.xl)
+            }
+            .background(VerdureBackground())
+            .navigationTitle("Your Interests")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                        .font(VType.body(15, .semibold)).foregroundStyle(Palette.spruce.base)
+                }
+            }
         }
     }
 }

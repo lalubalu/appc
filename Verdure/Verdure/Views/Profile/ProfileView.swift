@@ -11,7 +11,9 @@ struct ProfileView: View {
     @AppStorage("accountType") private var accountTypeRaw = AccountType.visitor.rawValue
     @Environment(GameStateManager.self) private var gameState
     @Environment(AuthService.self) private var authService
+    @Environment(StoreService.self) private var store
     @State private var showRewardsStore = false
+    @State private var showPaywall = false
     @State private var showSignOutConfirm = false
     @State private var showOrganizerVerify = false
     @State private var showAllBadges = false
@@ -293,6 +295,22 @@ struct ProfileView: View {
         VStack(alignment: .leading, spacing: Spacing.md) {
             SectionHeader(title: "Settings")
             VStack(spacing: 0) {
+                Button { Haptics.tap(); showPaywall = true } label: {
+                    settingsRow(icon: "sparkles", label: "Verdure+", accent: .gold) {
+                        if store.isPlus {
+                            Text("Active").font(VType.body(12, .bold)).foregroundStyle(Palette.spruce.base)
+                        } else {
+                            HStack(spacing: 6) {
+                                Text("Upgrade").font(VType.body(12, .bold)).foregroundStyle(Palette.gold.base)
+                                chevron
+                            }
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(store.isPlus ? "Verdure Plus, active" : "Verdure Plus, upgrade")
+                .accessibilityHint("Opens the Verdure Plus subscription page.")
+                rowDivider
                 settingsRow(icon: "moon.fill", label: "Dark Mode", accent: .spruce) {
                     Toggle("", isOn: $prefersDarkMode).tint(Palette.spruce.base).labelsHidden()
                 }
@@ -345,6 +363,10 @@ struct ProfileView: View {
                 Button("Cancel", role: .cancel) {}
             }
             .sheet(isPresented: $showOrganizerVerify) { OrganizerVerificationView() }
+            .sheet(isPresented: $showPaywall) {
+                PaywallView()
+                    .presentationDetents([.large]).presentationDragIndicator(.visible)
+            }
         }
     }
 
@@ -374,4 +396,5 @@ struct ProfileView: View {
     ProfileView()
         .environment(GameStateManager())
         .environment(AuthService())
+        .environment(StoreService())
 }

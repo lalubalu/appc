@@ -20,15 +20,17 @@ struct VerdureApp: App {
 struct RootView: View {
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
     @AppStorage("prefersDarkMode") private var prefersDarkMode = false
-    @AppStorage("lastDailyGemDate") private var lastDailyGemDate: String = ""
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var gameState = GameStateManager()
     @State private var locationManager = LocationManager()
     @State private var authService = AuthService()
     @State private var firestoreService = FirestoreService()
+    @State private var functionsService = FunctionsService()
     @State private var placesService = PlacesAPIService()
     @State private var eventsService = EventsAPIService()
-    @State private var dailyGemPlace: Place?
+    @State private var storeService = StoreService()
+    @State private var dailyGemFact: GemFact?
 
     var body: some View {
         Group {
@@ -40,6 +42,7 @@ struct RootView: View {
                     .environment(firestoreService)
                     .environment(placesService)
                     .environment(eventsService)
+                    .environment(storeService)
                     .onAppear {
                         locationManager.requestPermission()
                         connectServicesIfNeeded()
@@ -52,10 +55,19 @@ struct RootView: View {
                         if isAuth {
                             connectServicesIfNeeded()
                             checkDailyGem()
+                        } else {
+                            gameState.disconnectCloud()
                         }
                     }
-                    .fullScreenCover(item: $dailyGemPlace) { place in
-                        DailyGemView(featuredPlace: place) { dailyGemPlace = nil }
+                    .onChange(of: scenePhase) { _, phase in
+                        guard phase == .active else { return }
+                        // First foreground of a new day → show the Daily Gem.
+                        checkDailyGem()
+                        // Retry any earn-ops queued while offline.
+                        Task { await gameState.flushPendingOps() }
+                    }
+                    .fullScreenCover(item: $dailyGemFact) { fact in
+                        DailyGemView(fact: fact) { dailyGemFact = nil }
                     }
             } else {
                 OnboardingView(hasCompletedOnboarding: $hasCompletedOnboarding)
@@ -65,10 +77,10 @@ struct RootView: View {
         .preferredColorScheme(prefersDarkMode ? .dark : .light)
     }
 
-    /// Wire up Firestore sync and trigger initial places fetch after auth.
+    /// Wire up Firestore sync + server callables and trigger initial fetches after auth.
     private func connectServicesIfNeeded() {
         if let user = authService.currentUser {
-            gameState.connectCloud(firestore: firestoreService, userID: user.uid)
+            gameState.connectCloud(firestore: firestoreService, functions: functionsService, userID: user.uid)
             Task {
                 let center = locationManager.userCoordinate
                 await placesService.fetchNearbyPlaces(around: center)
@@ -77,19 +89,10 @@ struct RootView: View {
         }
     }
 
-    /// Show the Daily Gem splash on first login and once per calendar day.
+    /// Show the Daily Gem fun fact once per calendar day, on the first open of the day.
     private func checkDailyGem() {
-        let today = dailyGemDateString()
-        guard lastDailyGemDate != today else { return }
-        let gemPlace = placesService.places.max(by: { $0.rating < $1.rating })
-            ?? SampleData.places.first!
-        lastDailyGemDate = today
-        dailyGemPlace = gemPlace
-    }
-
-    private func dailyGemDateString() -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter.string(from: Date())
+        guard DailyGemStore.shouldShowSplash else { return }
+        DailyGemStore.markSplashShown()
+        dailyGemFact = DailyGemStore.todaysFact
     }
 }

@@ -124,13 +124,23 @@ enum EventCategory: String, CaseIterable, Identifiable, Codable {
     }
 }
 
-// MARK: - Daily Gem
+// MARK: - Interest → event affinity
 
-struct DailyGem: Identifiable {
-    let id = UUID()
-    let place: Place
-    let headline: String
-    let reason: String
+extension PlaceCategory {
+    /// Event categories that align with this place interest — powers the
+    /// "For You" event recommendations on the Events tab.
+    var relatedEventCategories: [EventCategory] {
+        switch self {
+        case .parks: return [.cleanup, .volunteer, .festival]
+        case .trails: return [.sports, .meetup]
+        case .gardens: return [.workshop, .volunteer, .market]
+        case .playgrounds: return [.social, .volunteer]
+        case .waterfront: return [.cleanup, .festival]
+        case .sports: return [.sports, .meetup]
+        case .scenic: return [.meetup, .workshop]
+        case .community: return [.social, .meetup, .market, .festival, .hackathon]
+        }
+    }
 }
 
 // MARK: - Challenge
@@ -183,10 +193,13 @@ struct Badge: Identifiable {
 
 // MARK: - Daily Gem fact
 
-/// A bite-sized fact or fun event revealed when the user taps the daily gem.
-struct GemFact {
-    let kind: String     // kicker label, e.g. "DID YOU KNOW", "FUN EVENT", "NATURE FACT"
+/// A bite-sized daily fun fact about nature, community, events, or the environment,
+/// revealed when the user taps the daily gem.
+struct GemFact: Identifiable {
+    let kind: String     // kicker label, e.g. "DID YOU KNOW", "NATURE FACT", "COMMUNITY"
     let icon: String
     let text: String
     let accent: ClayStyle.ClayAccentKind
+
+    var id: String { text }   // facts are unique by text; stable across launches
 }

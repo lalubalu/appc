@@ -10,6 +10,7 @@
 		0315B14A9E2039CF66DA1330 /* OrganizerVerificationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C3F67EDF9828ADE46D44C8E /* OrganizerVerificationView.swift */; };
 		07526A4C6F0E4742B5C51163 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E052E70BACF86711D3588EC5 /* Assets.xcassets */; };
 		0FD1FF38CDD070F3F43072FE /* Fredoka-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 7340F1690374C2D0E14E775C /* Fredoka-Regular.ttf */; };
+		15F1D2FBA27BA06AF8AC5B74 /* StoreService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 786310F264DB5643723C30F3 /* StoreService.swift */; };
 		1880A39FB396F2170D37D781 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 90080ED01EE002D32C04C263 /* FirebaseFirestore */; };
 		22120ECA07B1B77879A90DD8 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 719DCF94E40C512549A1CADC /* OnboardingView.swift */; };
 		237324EFC606CFFE6E57ABAC /* VerdureTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7009DBDF066E6A4E973BD540 /* VerdureTheme.swift */; };
@@ -33,6 +34,7 @@
 		6FFF01A80DDCBB08E1ADE8E3 /* DailyGemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CFEA8513D425DCA88B19D39 /* DailyGemView.swift */; };
 		729EAD63A9C02607077E853E /* Rubik-SemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 96861FC5632B70AAB3E8D7E5 /* Rubik-SemiBold.ttf */; };
 		78DCF9627935F77ECFA04501 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = A61E82460539D352DF79BAE0 /* GoogleService-Info.plist */; };
+		797C9789F6EAECDEEDBCA807 /* FunctionsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 046EBA7E822D16C7DA6FF62B /* FunctionsService.swift */; };
 		802EFD37E82F221417E485B9 /* Rubik-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 87F07F03961C7624432B9C95 /* Rubik-Regular.ttf */; };
 		8382CD7BF30156541B90731F /* ProfileDetailViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8E8418A5C7A73270C491DFB /* ProfileDetailViews.swift */; };
 		86B284BB9EE5BA5A2AE6CAD3 /* EventsAPIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECE60B1AABA084FECD0E731D /* EventsAPIService.swift */; };
@@ -47,7 +49,10 @@
 		9E2AEA9CB69AFE314F5A14BD /* RarityBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18D37ABD5658791FD46C6AA8 /* RarityBadge.swift */; };
 		A4696D91E23BC564E0480440 /* AccountType.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18435643F4C1731E6A07A618 /* AccountType.swift */; };
 		A4B66D902F329F667601EFA1 /* VerdureApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08A121BFF1D3812CED51AE6A /* VerdureApp.swift */; };
+		A68257C600ACE00EA9AD0168 /* PaywallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 103DF226E6A366528B80137C /* PaywallView.swift */; };
+		AC1A092DB58224A7EA13AB21 /* DailyGemStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B79380560DB9D61F2161CD8 /* DailyGemStore.swift */; };
 		B633D2AB331CC23F7BDB02E1 /* MapExploreView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B487AF1D2AC933DA4DDF2B30 /* MapExploreView.swift */; };
+		BA1F349BA9BF44634D5F47CB /* FirebaseFunctions in Frameworks */ = {isa = PBXBuildFile; productRef = 9599CF5F1C78D28BF7DB6D7B /* FirebaseFunctions */; };
 		BBFD9809C22B0F0C7C2F9F33 /* SharedComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 341DA15FA2B7C4910C824D7F /* SharedComponents.swift */; };
 		C08AF95A9985DFD800CCC54E /* VerdureMedallion3D.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4980C285D25D44340DD6DB8E /* VerdureMedallion3D.swift */; };
 		C91DBD7CF231CD726DAD3290 /* AuthView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20CB77B69D321A7C73C16B98 /* AuthView.swift */; };
@@ -61,10 +66,12 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		046EBA7E822D16C7DA6FF62B /* FunctionsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FunctionsService.swift; sourceTree = "<group>"; };
 		08A121BFF1D3812CED51AE6A /* VerdureApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerdureApp.swift; sourceTree = "<group>"; };
 		09050697323C833D9BB2C280 /* kickbacks.vsix */ = {isa = PBXFileReference; path = kickbacks.vsix; sourceTree = "<group>"; };
 		09A77B898877DEEFE5C437CB /* ClayKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClayKit.swift; sourceTree = "<group>"; };
 		0A66DC58FCDC00DEBEB66622 /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
+		103DF226E6A366528B80137C /* PaywallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallView.swift; sourceTree = "<group>"; };
 		18435643F4C1731E6A07A618 /* AccountType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountType.swift; sourceTree = "<group>"; };
 		18D37ABD5658791FD46C6AA8 /* RarityBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RarityBadge.swift; sourceTree = "<group>"; };
 		1C5DEE879934EC46DB64A8A8 /* PlacesAPIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacesAPIService.swift; sourceTree = "<group>"; };
@@ -85,12 +92,14 @@
 		7009DBDF066E6A4E973BD540 /* VerdureTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerdureTheme.swift; sourceTree = "<group>"; };
 		719DCF94E40C512549A1CADC /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		7340F1690374C2D0E14E775C /* Fredoka-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Fredoka-Regular.ttf"; sourceTree = "<group>"; };
+		786310F264DB5643723C30F3 /* StoreService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreService.swift; sourceTree = "<group>"; };
 		78E3C1045856FE04A699780F /* EventProviders.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventProviders.swift; sourceTree = "<group>"; };
 		7A5B78787E70FB7634F58374 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
 		7F91EB7C7709DEBD9167F2DC /* ExploreView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExploreView.swift; sourceTree = "<group>"; };
 		8628F2F6B8B8168D599B7772 /* Rubik-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Rubik-Bold.ttf"; sourceTree = "<group>"; };
 		87F07F03961C7624432B9C95 /* Rubik-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Rubik-Regular.ttf"; sourceTree = "<group>"; };
 		8A0D8B53DB8BA4B8BB311A64 /* Fredoka-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Fredoka-Medium.ttf"; sourceTree = "<group>"; };
+		8B79380560DB9D61F2161CD8 /* DailyGemStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyGemStore.swift; sourceTree = "<group>"; };
 		91A91F77E549D1CF8E3998DF /* EventsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventsView.swift; sourceTree = "<group>"; };
 		96861FC5632B70AAB3E8D7E5 /* Rubik-SemiBold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Rubik-SemiBold.ttf"; sourceTree = "<group>"; };
 		968ADEA7FBB0AB7976384091 /* SampleData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleData.swift; sourceTree = "<group>"; };
@@ -122,6 +131,7 @@
 			files = (
 				453783882CF79E54F5C84926 /* FirebaseAuth in Frameworks */,
 				1880A39FB396F2170D37D781 /* FirebaseFirestore in Frameworks */,
+				BA1F349BA9BF44634D5F47CB /* FirebaseFunctions in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -223,21 +233,32 @@
 			path = Map;
 			sourceTree = "<group>";
 		};
+		7C9B60D65D7BD1E224EA0174 /* Paywall */ = {
+			isa = PBXGroup;
+			children = (
+				103DF226E6A366528B80137C /* PaywallView.swift */,
+			);
+			path = Paywall;
+			sourceTree = "<group>";
+		};
 		A8B9AD7C940C4E2BC4AAEAE0 /* Models */ = {
 			isa = PBXGroup;
 			children = (
 				18435643F4C1731E6A07A618 /* AccountType.swift */,
 				FB8F363A9957A893687367F5 /* AuthService.swift */,
 				3EE8DEBB376ECBD578D6F796 /* CollectionModels.swift */,
+				8B79380560DB9D61F2161CD8 /* DailyGemStore.swift */,
 				78E3C1045856FE04A699780F /* EventProviders.swift */,
 				ECE60B1AABA084FECD0E731D /* EventsAPIService.swift */,
 				BC6765B53003FF95283C4E70 /* FirestoreService.swift */,
+				046EBA7E822D16C7DA6FF62B /* FunctionsService.swift */,
 				A24A71EC76E347E6E0D77601 /* GameStateManager.swift */,
 				FEBC782328C28AF430767CD4 /* LocationManager.swift */,
 				B580BB04E8635D042DDC2A14 /* Models.swift */,
 				7A5B78787E70FB7634F58374 /* NotificationManager.swift */,
 				1C5DEE879934EC46DB64A8A8 /* PlacesAPIService.swift */,
 				968ADEA7FBB0AB7976384091 /* SampleData.swift */,
+				786310F264DB5643723C30F3 /* StoreService.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -282,6 +303,7 @@
 				D6583E09D09E0D9328BB6526 /* Explore */,
 				72E5CE97BD759B6AC36160F5 /* Map */,
 				AA72C715BB78205D5555252F /* Onboarding */,
+				7C9B60D65D7BD1E224EA0174 /* Paywall */,
 				573C4490E913F7DA2C2CE590 /* Profile */,
 				AD0D03A78680BC5724DBAC8E /* Rewards */,
 			);
@@ -342,6 +364,7 @@
 			packageProductDependencies = (
 				E158D05D5E48685B178E12B5 /* FirebaseAuth */,
 				90080ED01EE002D32C04C263 /* FirebaseFirestore */,
+				9599CF5F1C78D28BF7DB6D7B /* FirebaseFunctions */,
 			);
 			productName = Verdure;
 			productReference = 2BAFC0E298A26E3D3994F854 /* Verdure.app */;
@@ -417,12 +440,14 @@
 				97E11B7A78A59D2202B9173A /* CollectionModels.swift in Sources */,
 				695F7A1DCA2D3432AB1493B9 /* CollectionView.swift in Sources */,
 				60E90FF95995A79E1D2B8E65 /* CommunityView.swift in Sources */,
+				AC1A092DB58224A7EA13AB21 /* DailyGemStore.swift in Sources */,
 				6FFF01A80DDCBB08E1ADE8E3 /* DailyGemView.swift in Sources */,
 				4F07C28FD1CB8D325EBF45B8 /* EventProviders.swift in Sources */,
 				86B284BB9EE5BA5A2AE6CAD3 /* EventsAPIService.swift in Sources */,
 				8BDC1A2E17553BE0B2B42763 /* EventsView.swift in Sources */,
 				E787B0F3D42D15C53C1B9A27 /* ExploreView.swift in Sources */,
 				303F0CA473AA2ADD463B4C32 /* FirestoreService.swift in Sources */,
+				797C9789F6EAECDEEDBCA807 /* FunctionsService.swift in Sources */,
 				89D687423521880D5FDF845A /* GameStateManager.swift in Sources */,
 				D1FC30331239EED083EDFF4C /* LocationManager.swift in Sources */,
 				D124A1ED1A25466842488F01 /* MainTabView.swift in Sources */,
@@ -432,6 +457,7 @@
 				D8F3CFEC200FF24E182F3713 /* NotificationsView.swift in Sources */,
 				22120ECA07B1B77879A90DD8 /* OnboardingView.swift in Sources */,
 				0315B14A9E2039CF66DA1330 /* OrganizerVerificationView.swift in Sources */,
+				A68257C600ACE00EA9AD0168 /* PaywallView.swift in Sources */,
 				6F9CB4D2428A49E0D85A3A4B /* PlaceDetailView.swift in Sources */,
 				9CDC1698E197C0C5F6D0A415 /* PlacesAPIService.swift in Sources */,
 				8382CD7BF30156541B90731F /* ProfileDetailViews.swift in Sources */,
@@ -441,6 +467,7 @@
 				8AD0116FB14C40E39BB45880 /* RewardsStoreView.swift in Sources */,
 				4E2DA6C00098E371236E4BC5 /* SampleData.swift in Sources */,
 				BBFD9809C22B0F0C7C2F9F33 /* SharedComponents.swift in Sources */,
+				15F1D2FBA27BA06AF8AC5B74 /* StoreService.swift in Sources */,
 				A4B66D902F329F667601EFA1 /* VerdureApp.swift in Sources */,
 				C08AF95A9985DFD800CCC54E /* VerdureMedallion3D.swift in Sources */,
 				237324EFC606CFFE6E57ABAC /* VerdureTheme.swift in Sources */,
@@ -648,6 +675,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 02023A4EC18E5AA3F536D99A /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseFirestore;
+		};
+		9599CF5F1C78D28BF7DB6D7B /* FirebaseFunctions */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 02023A4EC18E5AA3F536D99A /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFunctions;
 		};
 		E158D05D5E48685B178E12B5 /* FirebaseAuth */ = {
 			isa = XCSwiftPackageProductDependency;

@@ -3,7 +3,7 @@ import SwiftUI
 struct ExploreView: View {
     @Environment(GameStateManager.self) private var gameState
     @Environment(PlacesAPIService.self) private var placesService
-    @State private var gemPlace: Place? = nil
+    @State private var showGem = false
     @State private var showNotifications = false
     @State private var placeSearch = ""
     @State private var placeFilter: PlaceCategory? = nil
@@ -33,11 +33,6 @@ struct ExploreView: View {
             return matchesFilter && matchesSearch
         }
     }
-    private var dailyGem: DailyGem {
-        let gem = sourcePlaces.max(by: { $0.rating < $1.rating }) ?? SampleData.places[0]
-        return DailyGem(place: gem, headline: gem.name,
-                        reason: "One of the highest-rated spots near you — go discover it today.")
-    }
     private var level: Int { max(1, gameState.lifetimePoints / 500 + 1) }
     private var xpInLevel: Int { gameState.lifetimePoints % 500 }
     private var levelProgress: Double { Double(xpInLevel) / 500.0 }
@@ -59,7 +54,9 @@ struct ExploreView: View {
             }
             .background(VerdureBackground())
             .navigationDestination(for: Place.self) { PlaceDetailView(place: $0) }
-            .sheet(item: $gemPlace) { PlaceDetailView(place: $0) }
+            .fullScreenCover(isPresented: $showGem) {
+                DailyGemView(fact: DailyGemStore.todaysFact) { showGem = false }
+            }
             .sheet(isPresented: $showNotifications) { NotificationsInboxView() }
         }
     }
@@ -162,12 +159,12 @@ struct ExploreView: View {
             .strokeBorder(kind.accent.base.opacity(0.38), lineWidth: 1.5))
     }
 
-    // MARK: - Daily Gem (wide immersive)
+    // MARK: - Daily Gem (wide immersive — today's fun fact)
 
     private var dailyGemTile: some View {
-        let gem = dailyGem
-        let kind = gem.place.category.clayKind
-        return Button(action: { Haptics.tap(); gemPlace = gem.place }) {
+        let fact = DailyGemStore.todaysFact
+        let kind = fact.accent
+        return Button(action: { Haptics.tap(); showGem = true }) {
             VStack(alignment: .leading, spacing: 0) {
                 HStack {
                     HStack(spacing: 5) {
@@ -178,24 +175,20 @@ struct ExploreView: View {
                     .padding(.horizontal, 11).padding(.vertical, 6)
                     .background(ClayBackground(style: .accent(.gold), radius: Radius.chip, elevation: 0.4))
                     Spacer()
-                    Image(systemName: gem.place.category.icon).font(.system(size: 16, weight: .bold))
+                    Image(systemName: fact.icon).font(.system(size: 16, weight: .bold))
                         .foregroundStyle(kind.accent.base)
                 }
                 .padding(.bottom, Spacing.md)
-                Text(gem.headline).font(VType.display(26, .semibold)).foregroundStyle(Palette.ink)
+                Text(fact.kind).font(VType.display(24, .semibold)).foregroundStyle(Palette.ink)
                     .lineLimit(1)
-                Text(gem.reason).font(VType.body(14)).foregroundStyle(Palette.inkSoft)
-                    .lineLimit(2).fixedSize(horizontal: false, vertical: true).padding(.top, 4)
-                HStack(spacing: 10) {
-                    miniStat("location.fill", gem.place.distance)
-                    miniStat("star.fill", String(format: "%.1f", gem.place.rating))
+                Text(fact.text).font(VType.body(14)).foregroundStyle(Palette.inkSoft)
+                    .lineLimit(3).fixedSize(horizontal: false, vertical: true).padding(.top, 4)
+                HStack(spacing: 6) {
                     Spacer()
-                    HStack(spacing: 6) {
-                        Text("Discover").font(VType.body(14, .bold))
-                        Image(systemName: "arrow.right").font(.system(size: 12, weight: .bold))
-                    }
-                    .foregroundStyle(Palette.spruce.base)
+                    Text("Reveal").font(VType.body(14, .bold))
+                    Image(systemName: "arrow.right").font(.system(size: 12, weight: .bold))
                 }
+                .foregroundStyle(Palette.spruce.base)
                 .padding(.top, Spacing.md)
             }
             .padding(Spacing.lg)
@@ -212,16 +205,8 @@ struct ExploreView: View {
             }
         }
         .buttonStyle(Card3DButtonStyle())
-    }
-
-    private func miniStat(_ icon: String, _ text: String) -> some View {
-        HStack(spacing: 5) {
-            Image(systemName: icon).font(.system(size: 11, weight: .bold))
-            Text(text).font(VType.num(13, .semibold))
-        }
-        .foregroundStyle(Palette.inkSoft)
-        .padding(.horizontal, 10).padding(.vertical, 6)
-        .background(ClayBackground(style: .inset, radius: Radius.chip))
+        .accessibilityLabel("Today's Gem: \(fact.kind)")
+        .accessibilityHint("Opens today's fun fact.")
     }
 
     // MARK: - Stats strip
