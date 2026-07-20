@@ -170,6 +170,31 @@ struct EventsView: View {
                     .padding(.vertical, 4)
                 }
             }
+        } else {
+            // Interests are set but nothing nearby matches right now — say so
+            // instead of silently vanishing (and keep the tune entry point).
+            Button { Haptics.tap(); showInterestPicker = true } label: {
+                HStack(spacing: Spacing.md) {
+                    ClayIconTile(systemImage: "sparkles", kind: .gold, size: 40, radius: Radius.chip)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("No picks for your interests yet")
+                            .font(VType.display(14, .semibold)).foregroundStyle(Palette.ink)
+                        Text("We'll surface matches as new events appear — or tune your interests.")
+                            .font(VType.body(12)).foregroundStyle(Palette.inkSoft)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer()
+                    Image(systemName: "slider.horizontal.3").font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(Palette.spruce.base)
+                }
+                .padding(Spacing.md)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(ClayBackground(style: .inset, radius: Radius.md))
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, Spacing.md)
+            .accessibilityLabel("No event picks for your interests yet")
+            .accessibilityHint("Opens interest selection.")
         }
     }
 
