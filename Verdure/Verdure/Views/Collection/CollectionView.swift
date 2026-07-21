@@ -263,6 +263,7 @@ private struct CategoryCollectionCard: View {
 private struct CollectibleDetailSheet: View {
     let collectible: CollectiblePlace
     @Environment(GameStateManager.self) private var gameState
+    @Environment(LocationManager.self) private var locationManager
     @Environment(\.dismiss) private var dismiss
     @State private var justCollected = false
     @State private var animatedPoints = 0
@@ -337,7 +338,7 @@ private struct CollectibleDetailSheet: View {
     }
 
     private func collect() {
-        let pts = gameState.collectPlace(collectible)
+        let pts = gameState.collectPlace(collectible, userCoordinate: locationManager.userLocation?.coordinate)
         Haptics.success()
         withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) { justCollected = true }
         withAnimation(.easeOut(duration: 0.8)) { animatedPoints = pts }

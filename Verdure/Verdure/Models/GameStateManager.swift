@@ -61,6 +61,11 @@ final class GameStateManager {
         let id: String        // event ID or place ID
         let category: String  // event category rawValue ("" for places)
         let points: Int       // points claimed at earn time (server clamps)
+        // Attendance evidence (check-ins) — all optional so v1 queued ops still decode.
+        var lat: Double? = nil        // user GPS at earn time
+        var lon: Double? = nil
+        var proofFile: String? = nil  // local JPEG filename awaiting upload
+        var proofPath: String? = nil  // storage path once uploaded (upload is resumable)
     }
 
     private(set) var pendingOps: [PendingOp] {
@@ -119,14 +124,40 @@ final class GameStateManager {
         var lastBalance: Int?
         var lastLifetime: Int?
 
-        while let op = pendingOps.first {
+        while var op = pendingOps.first {
+            // Stage 1 for check-ins: get the proof photo into Cloud Storage first.
+            // The upload is resumable — proofPath persists on the op, so a retry
+            // after upload success skips straight to the callable.
+            if op.kind == .checkIn, let file = op.proofFile, op.proofPath == nil {
+                let fileURL = Self.proofsDirectory.appendingPathComponent(file)
+                guard let jpeg = try? Data(contentsOf: fileURL) else {
+                    // Proof photo vanished from disk — the server will never accept
+                    // this op, so drop it rather than wedge the queue.
+                    print("[GameState] dropping check-in \(op.id) — proof photo missing")
+                    pendingOps.removeFirst()
+                    continue
+                }
+                do {
+                    op.proofPath = try await StorageService.uploadProof(eventId: op.id, jpeg: jpeg)
+                    pendingOps[0] = op   // persist upload progress
+                } catch {
+                    break   // Storage unreachable (offline / not yet enabled) — retry later
+                }
+            }
+
             do {
                 let result: ServerAwardResult
                 switch op.kind {
                 case .checkIn:
-                    result = try await fx.checkInToEvent(eventId: op.id, category: op.category, claimedPoints: op.points)
+                    result = try await fx.checkInToEvent(
+                        eventId: op.id, category: op.category, claimedPoints: op.points,
+                        proofPath: op.proofPath, lat: op.lat, lon: op.lon)
                 case .collect:
-                    result = try await fx.collectPlace(placeId: op.id, claimedPoints: op.points)
+                    result = try await fx.collectPlace(
+                        placeId: op.id, claimedPoints: op.points, lat: op.lat, lon: op.lon)
+                }
+                if op.kind == .checkIn, let file = op.proofFile {
+                    try? FileManager.default.removeItem(at: Self.proofsDirectory.appendingPathComponent(file))
                 }
                 pendingOps.removeFirst()
                 if let b = result.newBalance { lastBalance = b }
@@ -136,7 +167,9 @@ final class GameStateManager {
             } catch ServerCallError.notSignedIn {
                 break   // auth hiccup — keep queued, retry after re-auth
             } catch {
-                // Permanently rejected op (bad ID etc.) — drop it so the queue can't wedge.
+                // Permanently rejected op (bad ID, failed proximity, etc.) — drop it
+                // so the queue can't wedge. The optimistic local points for it get
+                // corrected the next time a server balance is adopted.
                 print("[GameState] dropping rejected op \(op.kind.rawValue):\(op.id) — \(error.localizedDescription)")
                 pendingOps.removeFirst()
             }
@@ -150,20 +183,28 @@ final class GameStateManager {
         }
     }
 
-    /// Queue server credit for locally-earned items the cloud doesn't know about.
-    /// Claims are conservative (server clamps to category/rarity ceilings anyway).
+    /// Queue server credit for locally-collected PLACES the cloud doesn't know about.
+    /// Claims are conservative (server clamps to the rarity ceiling anyway).
+    ///
+    /// Event check-ins are deliberately NOT backfilled: the server now requires a
+    /// proof photo + GPS coords, which legacy local check-ins never captured — so
+    /// there is nothing honest to submit for them. Their IDs stay in the local
+    /// collection (badges/history), they just never mint server points.
     private func enqueueBackfill(cloud: CloudGameState?) {
-        let cloudEvents = cloud?.checkedInEventIDs ?? []
         let cloudPlaces = cloud?.collectedPlaceIDs ?? []
         let queuedIDs = Set(pendingOps.map(\.id))
 
-        for id in checkedInEventIDs where !cloudEvents.contains(id) && !queuedIDs.contains(id) {
-            pendingOps.append(PendingOp(kind: .checkIn, id: id,
-                                        category: EventCategory.social.rawValue, points: 100))
-        }
         for id in collectedPlaceIDs where !cloudPlaces.contains(id) && !queuedIDs.contains(id) {
             pendingOps.append(PendingOp(kind: .collect, id: id, category: "", points: 5))
         }
+    }
+
+    /// Local spool for proof photos awaiting upload (Application Support/proofs).
+    static var proofsDirectory: URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("proofs", isDirectory: true)
+        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        return base
     }
 
     private func enqueue(_ op: PendingOp) {
@@ -209,15 +250,33 @@ final class GameStateManager {
     /// Check in to an event. Applies instantly (optimistic + offline-friendly) and
     /// queues the server call — the server is the final authority on points and
     /// silently no-ops double check-ins.
+    ///
+    /// `proofPhoto` (JPEG) is spooled to disk and uploaded to Cloud Storage during
+    /// flush; `userCoordinate` is the GPS fix at the moment of check-in. The server
+    /// REJECTS check-ins without both, so callers must gate on them (see
+    /// EventDetailSheet's proximity + photo requirements).
     @discardableResult
-    func checkInEvent(_ event: Event) -> Int {
+    func checkInEvent(_ event: Event, proofPhoto: Data? = nil,
+                      userCoordinate: CLLocationCoordinate2D? = nil) -> Int {
         guard !isCheckedIn(event.id) else { return 0 }
         checkedInEventIDs.insert(event.id)
         let pts = event.pointValue
         pointsBalance += pts
         lifetimePoints += pts
+
+        // Spool the proof photo locally so offline check-ins survive relaunches.
+        var proofFile: String? = nil
+        if let proofPhoto {
+            let name = StorageService.proofFileName(for: event.id)
+            if (try? proofPhoto.write(to: Self.proofsDirectory.appendingPathComponent(name))) != nil {
+                proofFile = name
+            }
+        }
+
         enqueue(PendingOp(kind: .checkIn, id: event.id,
-                          category: event.category.rawValue, points: pts))
+                          category: event.category.rawValue, points: pts,
+                          lat: userCoordinate?.latitude, lon: userCoordinate?.longitude,
+                          proofFile: proofFile))
         return pts
     }
 
@@ -242,14 +301,18 @@ final class GameStateManager {
     // MARK: - Place Collection (secondary, small points)
 
     /// Collect a place. Same optimistic-then-server pattern as event check-in.
+    /// The user's GPS fix is recorded server-side for spot-checking (places have
+    /// no server registry to hard-validate against).
     @discardableResult
-    func collectPlace(_ collectible: CollectiblePlace) -> Int {
+    func collectPlace(_ collectible: CollectiblePlace,
+                      userCoordinate: CLLocationCoordinate2D? = nil) -> Int {
         guard !isCollected(collectible.id) else { return 0 }
         collectedPlaceIDs.insert(collectible.id)
         let pts = collectible.pointValue
         pointsBalance += pts
         lifetimePoints += pts
-        enqueue(PendingOp(kind: .collect, id: collectible.id, category: "", points: pts))
+        enqueue(PendingOp(kind: .collect, id: collectible.id, category: "", points: pts,
+                          lat: userCoordinate?.latitude, lon: userCoordinate?.longitude))
         return pts
     }
 
@@ -420,6 +483,7 @@ final class GameStateManager {
         lifetimePoints = 0
         redeemedRewardIDs = []
         pendingOps = []
+        try? FileManager.default.removeItem(at: Self.proofsDirectory)   // clear spooled proof photos
         UserDefaults.standard.removeObject(forKey: "gameStateSeeded_v2")
     }
 }

@@ -1,5 +1,6 @@
 import SwiftUI
 import PhotosUI
+import CoreLocation
 
 struct EventsView: View {
     @Environment(GameStateManager.self) private var gameState
@@ -693,9 +694,27 @@ private struct EventDetailSheet: View {
     @State private var proofPhotoData: Data? = nil
     @State private var showCelebration = false
     @State private var earnedPoints = 0
+    /// Venue coordinate: from the event when its source provided one, else a
+    /// best-effort geocode of the location name (nil → proximity can't be verified).
+    @State private var venueCoordinate: CLLocationCoordinate2D? = nil
+    @State private var geocodeFinished = false
 
     private var isCheckedIn: Bool { gameState.isCheckedIn(event.id) }
     private var kind: ClayStyle.ClayAccentKind { event.category.clayKind }
+
+    // MARK: GPS proximity gate (500 ft, same radius as place collection)
+
+    /// nil while we genuinely can't judge (no GPS fix yet, or venue unknown).
+    private var isWithinRange: Bool? {
+        guard locationManager.userLocation != nil else { return nil }
+        guard let venueCoordinate else { return nil }
+        return locationManager.isNearby(venueCoordinate)
+    }
+
+    private var distanceLabel: String {
+        guard let venueCoordinate else { return "—" }
+        return locationManager.formattedDistance(to: venueCoordinate)
+    }
 
     /// Open Apple Maps in turn-by-turn directions mode, routing from the user's
     /// current location to the event address (daddr = destination, not a search).
@@ -761,6 +780,17 @@ private struct EventDetailSheet: View {
 
                 if showCelebration { checkInCelebration.transition(.opacity) }
             }
+            .task {
+                // Resolve the venue coordinate once: prefer source-provided coords,
+                // else geocode the venue string so the proximity gate has teeth.
+                if let coord = event.coordinate {
+                    venueCoordinate = coord
+                } else {
+                    venueCoordinate = await EventsAPIService.geocode(event.locationName)
+                }
+                geocodeFinished = true
+                locationManager.startUpdating()
+            }
         }
     }
 
@@ -822,7 +852,8 @@ private struct EventDetailSheet: View {
                 HStack(spacing: 8) {
                     Image(systemName: "info.circle.fill").foregroundStyle(Palette.gold.base)
                     Text("Be within 500 ft and upload proof of attendance to check in.")
-                        .font(VType.body(12.5, .medium)).foregroundStyle(Palette.inkSoft)
+                        .font(VType.scaledBody(12.5, .medium, relativeTo: .footnote)).foregroundStyle(Palette.inkSoft)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(Spacing.md).frame(maxWidth: .infinity, alignment: .leading)
                 .background(ClayBackground(style: .inset, radius: Radius.sm))
@@ -831,30 +862,37 @@ private struct EventDetailSheet: View {
                 if proofPhotoData != nil {
                     HStack(spacing: 8) {
                         Image(systemName: "checkmark.seal.fill").foregroundStyle(Palette.teal.base)
-                        Text("Proof photo attached").font(VType.body(13, .medium)).foregroundStyle(Palette.ink)
+                        Text("Proof photo attached").font(VType.scaledBody(13, .medium, relativeTo: .footnote)).foregroundStyle(Palette.ink)
                         Spacer()
                         Button("Change") { showPhotoPicker = true }
-                            .font(VType.body(12, .bold)).foregroundStyle(Palette.spruce.base)
+                            .font(VType.scaledBody(12, .bold, relativeTo: .caption)).foregroundStyle(Palette.spruce.base)
                             .accessibilityLabel("Change proof photo")
                     }
                     .padding(Spacing.md).background(ClayBackground(style: .inset, radius: Radius.sm))
 
-                    ClayButton("Check In  ·  +\(event.pointValue) pts", systemImage: "checkmark.circle.fill",
-                               kind: .spruce, fullWidth: true) {
-                        earnedPoints = gameState.checkInEvent(event)
-                        if earnedPoints > 0 {
-                            Haptics.success()
-                            AccessibilityNotification.Announcement(
-                                "Checked in to \(event.title). Earned \(earnedPoints) points."
-                            ).post()
-                            withAnimation(.spring(response: 0.4)) { showCelebration = true }
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 2.6) {
-                                withAnimation { showCelebration = false }
-                            }
+                    // The proximity gate is REAL now: GPS fix + venue coordinate
+                    // compared via CoreLocation, and the server re-checks distance
+                    // for events with stored coordinates.
+                    switch isWithinRange {
+                    case .some(true):
+                        checkInButton
+                    case .some(false):
+                        gateRow(icon: "location.slash.fill",
+                                text: "Too far to check in — you're \(distanceLabel) away. Get within 500 ft of \(event.locationName).")
+                    case .none:
+                        if locationManager.userLocation == nil {
+                            gateRow(icon: locationManager.isAuthorized ? "location.viewfinder" : "location.slash.fill",
+                                    text: locationManager.isAuthorized
+                                        ? "Waiting for a GPS fix — check-in unlocks once your location is found."
+                                        : "Location access is required to check in. Enable it in Settings.")
+                        } else if !geocodeFinished {
+                            gateRow(icon: "location.viewfinder", text: "Locating the venue…")
+                        } else {
+                            // Venue has no resolvable coordinate — allow, but the
+                            // check-in still records the user's GPS for spot-checks.
+                            checkInButton
                         }
                     }
-                    .accessibilityLabel("Check in to \(event.title)")
-                    .accessibilityHint("Earns \(event.pointValue) points. Requires being at the event.")
                 } else {
                     ClayButton("Upload Proof of Attendance", systemImage: "camera.viewfinder",
                                kind: .spruce, fullWidth: true) { showPhotoPicker = true }
@@ -868,6 +906,45 @@ private struct EventDetailSheet: View {
                 }
             }
         }
+    }
+
+    /// The actual check-in: captures the proof photo + GPS fix into the pending-op
+    /// queue (instant optimistic UI; upload + server credit happen on flush).
+    private var checkInButton: some View {
+        ClayButton("Check In  ·  +\(event.pointValue) pts", systemImage: "checkmark.circle.fill",
+                   kind: .spruce, fullWidth: true) {
+            guard let coordinate = locationManager.userLocation?.coordinate else { return }
+            earnedPoints = gameState.checkInEvent(event, proofPhoto: proofPhotoData,
+                                                  userCoordinate: coordinate)
+            if earnedPoints > 0 {
+                Haptics.success()
+                AccessibilityNotification.Announcement(
+                    "Checked in to \(event.title). Earned \(earnedPoints) points."
+                ).post()
+                withAnimation(.spring(response: 0.4)) { showCelebration = true }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.6) {
+                    withAnimation { showCelebration = false }
+                }
+            }
+        }
+        .accessibilityLabel("Check in to \(event.title)")
+        .accessibilityHint("Earns \(event.pointValue) points. Uses your location and proof photo to verify attendance.")
+    }
+
+    /// Inset row explaining why check-in is currently locked.
+    private func gateRow(icon: String, text: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon).foregroundStyle(Palette.inkFaint)
+            Text(text)
+                .font(VType.scaledBody(13, .semibold, relativeTo: .footnote))
+                .foregroundStyle(Palette.inkSoft)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .padding(Spacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(ClayBackground(style: .inset, radius: Radius.md))
+        .accessibilityElement(children: .combine)
     }
 
     private var checkInCelebration: some View {

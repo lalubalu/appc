@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import CoreLocation
 
 // MARK: - Place
 
@@ -76,6 +77,14 @@ struct Event: Identifiable, Hashable {
     var description: String?     // optional event description
     var creatorID: String?       // Firebase UID of the event creator
     var website: String?         // optional organizer / event info URL
+    var latitude: Double? = nil  // venue coordinates when the source provides them —
+    var longitude: Double? = nil //   used for the GPS proximity gate at check-in
+
+    /// Venue coordinate when both components are known.
+    var coordinate: CLLocationCoordinate2D? {
+        guard let latitude, let longitude else { return nil }
+        return CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    }
 
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
     static func == (lhs: Event, rhs: Event) -> Bool { lhs.id == rhs.id }

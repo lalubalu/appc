@@ -104,8 +104,21 @@ struct ProfileView: View {
                         Text("PLAYER CARD").font(VType.body(12, .bold)).tracking(2.5)
                             .foregroundStyle(Palette.gold.base)
                             .shadow(color: .black.opacity(0.35), radius: 3, x: 0, y: 1)
-                        Text(displayName).font(VType.display(26, .bold))
-                            .foregroundStyle(Palette.evergreen.onColor).lineLimit(1).minimumScaleFactor(0.7)
+                        HStack(spacing: 7) {
+                            Text(displayName).font(VType.display(26, .bold))
+                                .foregroundStyle(Palette.evergreen.onColor).lineLimit(1).minimumScaleFactor(0.7)
+                            if store.isPlus {
+                                // Verdure+ member badge — a live subscriber perk.
+                                HStack(spacing: 3) {
+                                    Image(systemName: "medal.fill").font(.system(size: 9, weight: .bold))
+                                    Text("PLUS").font(VType.body(9, .bold)).tracking(0.8)
+                                }
+                                .foregroundStyle(Palette.gold.onColor)
+                                .padding(.horizontal, 7).padding(.vertical, 4)
+                                .background(ClayBackground(style: .accent(.gold), radius: Radius.chip, elevation: 0.35))
+                                .accessibilityLabel("Verdure Plus member")
+                            }
+                        }
                         Text("Member since \(joinDate)")
                             .font(VType.body(12, .medium))
                             .foregroundStyle(Palette.evergreen.onColor.opacity(0.6))

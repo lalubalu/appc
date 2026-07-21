@@ -184,6 +184,25 @@ enum VType {
     static func num(_ size: CGFloat = 16, _ w: RubikWeight = .bold) -> Font {
         .custom(w.rawValue, size: size)
     }
+
+    // MARK: Dynamic Type–aware variants
+    //
+    // Same faces, but they scale with the user's text-size setting. Adopted
+    // incrementally, starting with the flows touched most recently (check-in,
+    // paywall). Prefer these over the fixed variants in new/updated UI.
+
+    static func scaledDisplay(_ size: CGFloat, _ w: FredokaWeight = .semibold,
+                              relativeTo style: Font.TextStyle = .title3) -> Font {
+        .custom(w.rawValue, size: size, relativeTo: style)
+    }
+    static func scaledBody(_ size: CGFloat = 16, _ w: RubikWeight = .regular,
+                           relativeTo style: Font.TextStyle = .body) -> Font {
+        .custom(w.rawValue, size: size, relativeTo: style)
+    }
+    static func scaledNum(_ size: CGFloat = 16, _ w: RubikWeight = .bold,
+                          relativeTo style: Font.TextStyle = .body) -> Font {
+        .custom(w.rawValue, size: size, relativeTo: style)
+    }
 }
 
 /// Back-compat façade for the old `CFont` call sites — rerouted to Verdure

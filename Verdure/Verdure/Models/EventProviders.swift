@@ -79,6 +79,24 @@ enum Sanitize {
               scheme == "http" || scheme == "https", (u.host ?? "").contains(".") else { return nil }
         return u.string
     }
+
+    /// Clamp externally-sourced coordinates to valid ranges (nil if absent/invalid).
+    static func latitude(_ v: Double?) -> Double? {
+        guard let v, v.isFinite, abs(v) <= 90, v != 0 else { return nil }
+        return v
+    }
+    static func longitude(_ v: Double?) -> Double? {
+        guard let v, v.isFinite, abs(v) <= 180, v != 0 else { return nil }
+        return v
+    }
+
+    /// Parse a coordinate that APIs may return as a number OR a string.
+    static func coord(_ any: Any?) -> Double? {
+        if let d = any as? Double { return d }
+        if let s = any as? String { return Double(s) }
+        if let n = any as? NSNumber { return n.doubleValue }
+        return nil
+    }
 }
 
 extension String {
@@ -130,7 +148,8 @@ extension EventCategory {
 }
 
 private func makeEvent(id: String, title: String, organizer: String, date: Date,
-                       locationName: String, category: EventCategory, website: String?) -> Event {
+                       locationName: String, category: EventCategory, website: String?,
+                       latitude: Double? = nil, longitude: Double? = nil) -> Event {
     // Scrub every externally-sourced string before it enters the app.
     let safeTitle = Sanitize.text(title, max: 120)
     let safeOrganizer = Sanitize.text(organizer, max: 80)
@@ -148,7 +167,9 @@ private func makeEvent(id: String, title: String, organizer: String, date: Date,
           pointValue: category.defaultPoints,
           description: nil,
           creatorID: nil,
-          website: Sanitize.url(website))
+          website: Sanitize.url(website),
+          latitude: Sanitize.latitude(latitude),
+          longitude: Sanitize.longitude(longitude))
 }
 
 // Ephemeral session (no Alt-Svc cache) so the first request isn't pushed onto HTTP/3.
@@ -305,7 +326,9 @@ struct EventbriteProvider: EventProvider {
             let summary = (ev["summary"] as? String) ?? title
             return makeEvent(id: "eb-\(id)", title: title, organizer: "Eventbrite", date: date,
                              locationName: venueName, category: .classify("\(title) \(summary)"),
-                             website: ev["url"] as? String)
+                             website: ev["url"] as? String,
+                             latitude: Sanitize.coord(venue?["latitude"]),
+                             longitude: Sanitize.coord(venue?["longitude"]))
         }
     }
 }
@@ -350,9 +373,12 @@ struct LocalistProvider: EventProvider {
             guard let date = EventParse.date(firstStart) else { return nil }
             let locationName = (ev["location_name"] as? String) ?? (ev["location"] as? String) ?? ""
             let desc = (ev["description_text"] as? String) ?? title
+            let geo = ev["geo"] as? [String: Any]
             return makeEvent(id: "lo-\(id)", title: title, organizer: cleanHost, date: date,
                              locationName: locationName, category: .classify("\(title) \(desc)"),
-                             website: ev["localist_url"] as? String)
+                             website: ev["localist_url"] as? String,
+                             latitude: Sanitize.coord(geo?["latitude"]),
+                             longitude: Sanitize.coord(geo?["longitude"]))
         }
     }
 }
@@ -438,10 +464,16 @@ struct NeighborhoodCommonsProvider: EventProvider {
             // category is an array of slugs (e.g. ["happy-hour"]).
             let cats = (ev["category"] as? [String])?.joined(separator: " ") ?? ""
             let desc = ev["description"] as? String ?? ""
+            // Schema.org-style geo: {location: {geo: {latitude, longitude}}} with
+            // flat lat/lng fallbacks seen in the wild.
+            let geo = location?["geo"] as? [String: Any]
+            let lat = Sanitize.coord(geo?["latitude"]) ?? Sanitize.coord(location?["lat"]) ?? Sanitize.coord(location?["latitude"])
+            let lon = Sanitize.coord(geo?["longitude"]) ?? Sanitize.coord(location?["lng"]) ?? Sanitize.coord(location?["longitude"])
             return makeEvent(id: "nc-\(id)", title: title, organizer: org, date: date,
                              locationName: locationName,
                              category: .classify("\(cats) \(title) \(desc)"),
-                             website: ev["url"] as? String)
+                             website: ev["url"] as? String,
+                             latitude: lat, longitude: lon)
         }
     }
 }

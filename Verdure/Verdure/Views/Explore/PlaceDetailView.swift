@@ -8,6 +8,7 @@ struct PlaceDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(GameStateManager.self) private var gameState
     @Environment(PlacesAPIService.self) private var placesService
+    @Environment(LocationManager.self) private var locationManager
 
     private var collectible: CollectiblePlace? {
         placesService.collectible(for: place) ?? SampleData.collectible(for: place)
@@ -213,7 +214,7 @@ struct PlaceDetailView: View {
             } else if c.isNearbyStatic {
                 ClayButton("Collect  ·  +\(c.pointValue) pts", systemImage: "plus.circle.fill",
                            kind: .spruce, fullWidth: true) {
-                    celebrationPoints = gameState.collectPlace(c)
+                    celebrationPoints = gameState.collectPlace(c, userCoordinate: locationManager.userLocation?.coordinate)
                     Haptics.success()
                     withAnimation(.spring(response: 0.4)) { showCelebration = true }
                 }

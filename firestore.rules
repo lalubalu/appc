@@ -197,16 +197,23 @@ service cloud.firestore {
       let validPoints = data.pointValue is int && data.pointValue >= 0 && data.pointValue <= 1000;
       let validCreator = data.creatorID is string && data.creatorID.size() >= 1;
 
+      // Optional venue coordinates — used by checkInToEvent's proximity check.
+      let validLatitude = !('latitude' in data) ||
+        (data.latitude is number && data.latitude >= -90 && data.latitude <= 90);
+      let validLongitude = !('longitude' in data) ||
+        (data.longitude is number && data.longitude >= -180 && data.longitude <= 180);
+
       let allowedFields = [
         'title', 'description', 'organizer', 'date', 'time',
         'locationName', 'attendeeCount', 'maxAttendees',
         'category', 'imagePlaceholder', 'pointValue',
-        'creatorID', 'createdAt'
+        'creatorID', 'createdAt', 'latitude', 'longitude'
       ];
       let noExtraFields = data.keys().hasOnly(allowedFields);
 
       return validAttendees && validMaxAttendees && validCategory
-          && validPoints && validCreator && noExtraFields;
+          && validPoints && validCreator && validLatitude && validLongitude
+          && noExtraFields;
     }
 
     // SERVER-OWNED game fields: only Cloud Functions (Admin SDK) may change these.

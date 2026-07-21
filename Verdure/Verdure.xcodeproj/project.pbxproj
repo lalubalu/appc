@@ -29,6 +29,7 @@
 		558A56E80AD3C17D8F4234F6 /* ClayMotion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29157D7AF46A04CCA52AE9DB /* ClayMotion.swift */; };
 		60E90FF95995A79E1D2B8E65 /* CommunityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEA9F386EB5E937576F7F17A /* CommunityView.swift */; };
 		626A0BD954D31F21C687A1F4 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A5B78787E70FB7634F58374 /* NotificationManager.swift */; };
+		6802FBCB20F69C21972B1E56 /* StorageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44E07B985CADB6E0B4B6D069 /* StorageService.swift */; };
 		695F7A1DCA2D3432AB1493B9 /* CollectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CFA596E7610A4BCAD8CF30E /* CollectionView.swift */; };
 		6F9CB4D2428A49E0D85A3A4B /* PlaceDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A0269E080A13E4D39959C84 /* PlaceDetailView.swift */; };
 		6FFF01A80DDCBB08E1ADE8E3 /* DailyGemView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CFEA8513D425DCA88B19D39 /* DailyGemView.swift */; };
@@ -38,6 +39,7 @@
 		802EFD37E82F221417E485B9 /* Rubik-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 87F07F03961C7624432B9C95 /* Rubik-Regular.ttf */; };
 		8382CD7BF30156541B90731F /* ProfileDetailViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8E8418A5C7A73270C491DFB /* ProfileDetailViews.swift */; };
 		86B284BB9EE5BA5A2AE6CAD3 /* EventsAPIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECE60B1AABA084FECD0E731D /* EventsAPIService.swift */; };
+		897853A42D1A4B04F9FBA08A /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 48DF56816A9D1163254EBF1B /* FirebaseStorage */; };
 		89D687423521880D5FDF845A /* GameStateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A24A71EC76E347E6E0D77601 /* GameStateManager.swift */; };
 		8AD0116FB14C40E39BB45880 /* RewardsStoreView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24B8F0F1602E59034C79FC39 /* RewardsStoreView.swift */; };
 		8AEB525E8D3833FDE48B338E /* Rubik-Light.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 2D7249F69C54A8490C112737 /* Rubik-Light.ttf */; };
@@ -63,7 +65,18 @@
 		D8F3CFEC200FF24E182F3713 /* NotificationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DFBFC44B8F8126080EA2194 /* NotificationsView.swift */; };
 		E787B0F3D42D15C53C1B9A27 /* ExploreView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F91EB7C7709DEBD9167F2DC /* ExploreView.swift */; };
 		E7F872E997D7F08418276AA0 /* Rubik-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 63CF83506D67AB715494A196 /* Rubik-Medium.ttf */; };
+		EF3E1857F9BBB36768778D30 /* GameStateManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F78B4B0C2A812A0AB3F50868 /* GameStateManagerTests.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		F14AA5345D1A381162EB4A46 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 026CD9D81577B455A2698BCF /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B138F5327FFFA902202D8A10;
+			remoteInfo = Verdure;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		046EBA7E822D16C7DA6FF62B /* FunctionsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FunctionsService.swift; sourceTree = "<group>"; };
@@ -75,6 +88,7 @@
 		18435643F4C1731E6A07A618 /* AccountType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountType.swift; sourceTree = "<group>"; };
 		18D37ABD5658791FD46C6AA8 /* RarityBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RarityBadge.swift; sourceTree = "<group>"; };
 		1C5DEE879934EC46DB64A8A8 /* PlacesAPIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacesAPIService.swift; sourceTree = "<group>"; };
+		1E690517E9D387A2E5A6DFDE /* VerdureTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = VerdureTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		20CB77B69D321A7C73C16B98 /* AuthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthView.swift; sourceTree = "<group>"; };
 		24B8F0F1602E59034C79FC39 /* RewardsStoreView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RewardsStoreView.swift; sourceTree = "<group>"; };
 		29157D7AF46A04CCA52AE9DB /* ClayMotion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClayMotion.swift; sourceTree = "<group>"; };
@@ -82,6 +96,7 @@
 		2D7249F69C54A8490C112737 /* Rubik-Light.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Rubik-Light.ttf"; sourceTree = "<group>"; };
 		341DA15FA2B7C4910C824D7F /* SharedComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedComponents.swift; sourceTree = "<group>"; };
 		3EE8DEBB376ECBD578D6F796 /* CollectionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionModels.swift; sourceTree = "<group>"; };
+		44E07B985CADB6E0B4B6D069 /* StorageService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageService.swift; sourceTree = "<group>"; };
 		46515EDD96AE8C6965E13DF0 /* RewardConfirmationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RewardConfirmationView.swift; sourceTree = "<group>"; };
 		4980C285D25D44340DD6DB8E /* VerdureMedallion3D.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerdureMedallion3D.swift; sourceTree = "<group>"; };
 		4C3F67EDF9828ADE46D44C8E /* OrganizerVerificationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrganizerVerificationView.swift; sourceTree = "<group>"; };
@@ -120,6 +135,7 @@
 		E052E70BACF86711D3588EC5 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		E8D7DFEB4A596604D4742909 /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		ECE60B1AABA084FECD0E731D /* EventsAPIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventsAPIService.swift; sourceTree = "<group>"; };
+		F78B4B0C2A812A0AB3F50868 /* GameStateManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameStateManagerTests.swift; sourceTree = "<group>"; };
 		FB8F363A9957A893687367F5 /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
 		FEBC782328C28AF430767CD4 /* LocationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -132,6 +148,7 @@
 				453783882CF79E54F5C84926 /* FirebaseAuth in Frameworks */,
 				1880A39FB396F2170D37D781 /* FirebaseFirestore in Frameworks */,
 				BA1F349BA9BF44634D5F47CB /* FirebaseFunctions in Frameworks */,
+				897853A42D1A4B04F9FBA08A /* FirebaseStorage in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -143,6 +160,7 @@
 			children = (
 				EFB55558534A8812D5F15052 /* Verdure */,
 				B895A07E29790B8F7346B65E /* Verdure */,
+				44EAFBD565B69BD445231DA8 /* VerdureTests */,
 				5BE83145766A26021A04571C /* Products */,
 			);
 			sourceTree = "<group>";
@@ -192,6 +210,14 @@
 			path = Collection;
 			sourceTree = "<group>";
 		};
+		44EAFBD565B69BD445231DA8 /* VerdureTests */ = {
+			isa = PBXGroup;
+			children = (
+				F78B4B0C2A812A0AB3F50868 /* GameStateManagerTests.swift */,
+			);
+			path = VerdureTests;
+			sourceTree = "<group>";
+		};
 		573C4490E913F7DA2C2CE590 /* Profile */ = {
 			isa = PBXGroup;
 			children = (
@@ -205,6 +231,7 @@
 			isa = PBXGroup;
 			children = (
 				2BAFC0E298A26E3D3994F854 /* Verdure.app */,
+				1E690517E9D387A2E5A6DFDE /* VerdureTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -258,6 +285,7 @@
 				7A5B78787E70FB7634F58374 /* NotificationManager.swift */,
 				1C5DEE879934EC46DB64A8A8 /* PlacesAPIService.swift */,
 				968ADEA7FBB0AB7976384091 /* SampleData.swift */,
+				44E07B985CADB6E0B4B6D069 /* StorageService.swift */,
 				786310F264DB5643723C30F3 /* StoreService.swift */,
 			);
 			path = Models;
@@ -348,6 +376,24 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		0923CAEDF51287469C307C89 /* VerdureTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F85FBC21F21C3853A3ED2256 /* Build configuration list for PBXNativeTarget "VerdureTests" */;
+			buildPhases = (
+				89142BEEB35D023C980EB255 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				EEE51A81B2B170463D81FCC2 /* PBXTargetDependency */,
+			);
+			name = VerdureTests;
+			packageProductDependencies = (
+			);
+			productName = VerdureTests;
+			productReference = 1E690517E9D387A2E5A6DFDE /* VerdureTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		B138F5327FFFA902202D8A10 /* Verdure */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 93D853198FCE4F986DCD7A39 /* Build configuration list for PBXNativeTarget "Verdure" */;
@@ -365,6 +411,7 @@
 				E158D05D5E48685B178E12B5 /* FirebaseAuth */,
 				90080ED01EE002D32C04C263 /* FirebaseFirestore */,
 				9599CF5F1C78D28BF7DB6D7B /* FirebaseFunctions */,
+				48DF56816A9D1163254EBF1B /* FirebaseStorage */,
 			);
 			productName = Verdure;
 			productReference = 2BAFC0E298A26E3D3994F854 /* Verdure.app */;
@@ -399,6 +446,7 @@
 			projectRoot = "";
 			targets = (
 				B138F5327FFFA902202D8A10 /* Verdure */,
+				0923CAEDF51287469C307C89 /* VerdureTests */,
 			);
 		};
 /* End PBXProject section */
@@ -427,6 +475,14 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		89142BEEB35D023C980EB255 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				EF3E1857F9BBB36768778D30 /* GameStateManagerTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		F2C41D6166887BD075588121 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -467,6 +523,7 @@
 				8AD0116FB14C40E39BB45880 /* RewardsStoreView.swift in Sources */,
 				4E2DA6C00098E371236E4BC5 /* SampleData.swift in Sources */,
 				BBFD9809C22B0F0C7C2F9F33 /* SharedComponents.swift in Sources */,
+				6802FBCB20F69C21972B1E56 /* StorageService.swift in Sources */,
 				15F1D2FBA27BA06AF8AC5B74 /* StoreService.swift in Sources */,
 				A4B66D902F329F667601EFA1 /* VerdureApp.swift in Sources */,
 				C08AF95A9985DFD800CCC54E /* VerdureMedallion3D.swift in Sources */,
@@ -476,7 +533,32 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		EEE51A81B2B170463D81FCC2 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B138F5327FFFA902202D8A10 /* Verdure */;
+			targetProxy = F14AA5345D1A381162EB4A46 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		00C8F244AA11725EC7C92DA9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.vaiybhav.verdure.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Verdure.app/Verdure";
+			};
+			name = Release;
+		};
 		011674B9CB248A516A4758FC /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -636,6 +718,23 @@
 			};
 			name = Debug;
 		};
+		E1809849FA7A1E2A8CFA70F0 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.vaiybhav.verdure.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Verdure.app/Verdure";
+			};
+			name = Debug;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -657,6 +756,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
+		F85FBC21F21C3853A3ED2256 /* Build configuration list for PBXNativeTarget "VerdureTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E1809849FA7A1E2A8CFA70F0 /* Debug */,
+				00C8F244AA11725EC7C92DA9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
@@ -671,6 +779,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		48DF56816A9D1163254EBF1B /* FirebaseStorage */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 02023A4EC18E5AA3F536D99A /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseStorage;
+		};
 		90080ED01EE002D32C04C263 /* FirebaseFirestore */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 02023A4EC18E5AA3F536D99A /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;

@@ -50,12 +50,18 @@ final class FunctionsService: Sendable {
 
     // MARK: - Callables
 
-    func checkInToEvent(eventId: String, category: String, claimedPoints: Int) async throws -> ServerAwardResult {
-        let data = try await Self.call("checkInToEvent", [
+    func checkInToEvent(eventId: String, category: String, claimedPoints: Int,
+                        proofPath: String?, lat: Double?, lon: Double?) async throws -> ServerAwardResult {
+        var payload: [String: any Sendable] = [
             "eventId": eventId,
             "category": category,
             "claimedPoints": claimedPoints,
-        ])
+        ]
+        // Attendance evidence — the server rejects check-ins without these.
+        if let proofPath { payload["proofPath"] = proofPath }
+        if let lat { payload["lat"] = lat }
+        if let lon { payload["lng"] = lon }
+        let data = try await Self.call("checkInToEvent", payload)
         return ServerAwardResult(
             alreadyDone: data["alreadyCheckedIn"] as? Bool ?? false,
             awarded: data["awarded"] as? Int ?? 0,
@@ -64,11 +70,15 @@ final class FunctionsService: Sendable {
         )
     }
 
-    func collectPlace(placeId: String, claimedPoints: Int) async throws -> ServerAwardResult {
-        let data = try await Self.call("collectPlace", [
+    func collectPlace(placeId: String, claimedPoints: Int,
+                      lat: Double? = nil, lon: Double? = nil) async throws -> ServerAwardResult {
+        var payload: [String: any Sendable] = [
             "placeId": placeId,
             "claimedPoints": claimedPoints,
-        ])
+        ]
+        if let lat { payload["lat"] = lat }
+        if let lon { payload["lng"] = lon }
+        let data = try await Self.call("collectPlace", payload)
         return ServerAwardResult(
             alreadyDone: data["alreadyCollected"] as? Bool ?? false,
             awarded: data["awarded"] as? Int ?? 0,

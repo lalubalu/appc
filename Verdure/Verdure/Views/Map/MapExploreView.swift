@@ -256,7 +256,7 @@ struct MapExploreView: View {
     }
 
     private func collect(_ c: CollectiblePlace) {
-        let pts = gameState.collectPlace(c)
+        let pts = gameState.collectPlace(c, userCoordinate: locationManager.userLocation?.coordinate)
         guard pts > 0 else { return }
         celebrationCollectible = c
         celebrationPoints = pts

@@ -65,6 +65,18 @@ targets:
         product: FirebaseFirestore
       - package: Firebase
         product: FirebaseFunctions
+      - package: Firebase
+        product: FirebaseStorage
+  VerdureTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - VerdureTests
+    dependencies:
+      - target: Verdure
+    settings:
+      GENERATE_INFOPLIST_FILE: YES
+      PRODUCT_BUNDLE_IDENTIFIER: com.vaiybhav.verdure.tests
 schemes:
   Verdure:
     build:
@@ -77,6 +89,8 @@ schemes:
       storeKitConfiguration: Verdure.storekit
     test:
       config: Debug
+      targets:
+        - VerdureTests
     profile:
       config: Release
     analyze:

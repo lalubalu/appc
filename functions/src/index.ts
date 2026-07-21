@@ -18,10 +18,35 @@ import { setGlobalOptions } from "firebase-functions/v2";
 import { initializeApp } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
+import { getStorage } from "firebase-admin/storage";
 
 initializeApp();
 const db = getFirestore();
 setGlobalOptions({ region: "us-central1", maxInstances: 10 });
+
+// ── Attendance-evidence helpers ─────────────────────────────────────────────
+
+/** Great-circle distance in meters (haversine). */
+function distanceMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+/** Parse + range-check a coordinate component; NaN → undefined. */
+function parseCoord(v: unknown, max: number): number | undefined {
+  const n = Number(v);
+  if (!Number.isFinite(n) || Math.abs(n) > max) return undefined;
+  return n;
+}
+
+// Client gate is 500 ft (~152 m); the server allows generous GPS slop on top —
+// anything beyond this is not "at the event".
+const MAX_CHECKIN_DISTANCE_M = 1500;
 
 // Server-trusted ceilings so a spoofed client can't claim absurd point values.
 // Keep in sync with EventCategory.defaultPoints in the app.
@@ -51,6 +76,13 @@ const REWARD_COSTS: Record<string, number> = {
  * checkInToEvent — record an attendance and award points, server-side & idempotent.
  * Community events (in /events) are validated against their stored pointValue;
  * external events are clamped to the category ceiling. Double check-ins are no-ops.
+ *
+ * ATTENDANCE EVIDENCE (required):
+ *  - proofPath: a Storage object under proofs/{uid}/ (the caller's own folder —
+ *    storage.rules make it owner-writable). Existence is verified best-effort.
+ *  - lat/lng: the user's GPS fix. If the event doc stores venue coordinates, the
+ *    fix must be within MAX_CHECKIN_DISTANCE_M; otherwise the fix is recorded in
+ *    /attendance for manual spot-checking.
  */
 export const checkInToEvent = onCall(async (req) => {
   const uid = req.auth?.uid;
@@ -61,13 +93,60 @@ export const checkInToEvent = onCall(async (req) => {
   const claimed = Math.max(0, Math.floor(Number(req.data?.claimedPoints ?? 0)));
   if (!eventId) throw new HttpsError("invalid-argument", "Missing eventId.");
 
-  // Determine the authoritative point value.
+  // ── Evidence: proof photo reference ──
+  const proofPath = String(req.data?.proofPath ?? "");
+  if (!proofPath.startsWith(`proofs/${uid}/`) || proofPath.includes("..")) {
+    throw new HttpsError("invalid-argument", "A proof-of-attendance photo is required to check in.");
+  }
+  // Best-effort existence check: hard-fail only on a definitive "not there".
+  // (Storage being unreachable/misconfigured shouldn't block honest check-ins.)
+  try {
+    const [exists] = await getStorage().bucket().file(proofPath).exists();
+    if (!exists) {
+      throw new HttpsError("invalid-argument", "Proof photo was not found — upload it first.");
+    }
+  } catch (e) {
+    if (e instanceof HttpsError) throw e;
+    console.warn(`[checkIn] proof existence check unavailable for ${proofPath}:`, e);
+  }
+
+  // ── Evidence: GPS fix ──
+  const lat = parseCoord(req.data?.lat, 90);
+  const lng = parseCoord(req.data?.lng, 180);
+  if (lat === undefined || lng === undefined) {
+    throw new HttpsError("invalid-argument", "Your location is required to check in.");
+  }
+
+  // Determine the authoritative point value + venue coordinate (if stored).
   let award = Math.min(claimed, CATEGORY_MAX_POINTS[category] ?? 100);
+  let distanceM: number | null = null;
   const eventSnap = await db.collection("events").doc(eventId).get();
   if (eventSnap.exists) {
-    const pv = Number(eventSnap.data()?.pointValue ?? award);
+    const ev = eventSnap.data() ?? {};
+    const pv = Number(ev.pointValue ?? award);
     award = Math.min(pv, 1000); // community events: trust the stored value (rule-validated ≤1000)
+
+    const evLat = parseCoord(ev.latitude, 90);
+    const evLng = parseCoord(ev.longitude, 180);
+    if (evLat !== undefined && evLng !== undefined) {
+      distanceM = distanceMeters(lat, lng, evLat, evLng);
+      if (distanceM > MAX_CHECKIN_DISTANCE_M) {
+        throw new HttpsError(
+          "failed-precondition",
+          `Too far from the event to check in (${Math.round(distanceM)} m away).`
+        );
+      }
+    }
   }
+
+  // Audit trail for manual spot-checks (server-only collection — no client rules).
+  const attendanceId = `${uid}_${eventId}`.replace(/[\/#?%]/g, "-").slice(0, 900);
+  await db.collection("attendance").doc(attendanceId).set({
+    uid, eventId, proofPath, lat, lng,
+    distanceM: distanceM === null ? null : Math.round(distanceM),
+    category, claimedPoints: claimed,
+    createdAt: FieldValue.serverTimestamp(),
+  }, { merge: true });
 
   const userRef = db.collection("users").doc(uid);
   const result = await db.runTransaction(async (tx) => {
@@ -110,6 +189,19 @@ export const collectPlace = onCall(async (req) => {
   const claimed = Math.max(0, Math.floor(Number(req.data?.claimedPoints ?? 0)));
   if (!placeId) throw new HttpsError("invalid-argument", "Missing placeId.");
   const award = Math.min(claimed, PLACE_MAX_POINTS);
+
+  // Record the GPS fix (when provided) for spot-checking — places have no
+  // server-side registry to hard-validate against, so this is evidence, not a gate.
+  const lat = parseCoord(req.data?.lat, 90);
+  const lng = parseCoord(req.data?.lng, 180);
+  if (lat !== undefined && lng !== undefined) {
+    const collectionId = `${uid}_${placeId}`.replace(/[\/#?%]/g, "-").slice(0, 900);
+    await db.collection("attendance").doc(collectionId).set({
+      uid, placeId, lat, lng, kind: "collect",
+      claimedPoints: claimed,
+      createdAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+  }
 
   const userRef = db.collection("users").doc(uid);
   return db.runTransaction(async (tx) => {

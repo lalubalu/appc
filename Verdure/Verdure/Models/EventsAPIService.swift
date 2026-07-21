@@ -142,7 +142,11 @@ final class EventsAPIService {
         let eventID = UUID().uuidString
         let pointValue = category.defaultPoints
 
-        let data: [String: Any] = [
+        // Best-effort forward geocode of the venue so the server can verify
+        // attendee proximity at check-in. Failure is non-fatal (event still posts).
+        let venueCoordinate = await Self.geocode(locationName)
+
+        var data: [String: Any] = [
             "title": sanitize(title, max: 200),
             "description": sanitize(description, max: 2000),
             "organizer": sanitize(organizer, max: 200),
@@ -157,6 +161,10 @@ final class EventsAPIService {
             "creatorID": currentUser.uid,
             "createdAt": FieldValue.serverTimestamp()
         ]
+        if let venueCoordinate {
+            data["latitude"] = venueCoordinate.latitude
+            data["longitude"] = venueCoordinate.longitude
+        }
 
         do {
             try await db.collection("events").document(eventID).setData(data)
@@ -174,7 +182,9 @@ final class EventsAPIService {
                 imagePlaceholder: category.icon,
                 pointValue: pointValue,
                 description: description,
-                creatorID: currentUser.uid
+                creatorID: currentUser.uid,
+                latitude: venueCoordinate?.latitude,
+                longitude: venueCoordinate?.longitude
             )
 
             events.insert(event, at: 0)
@@ -453,8 +463,19 @@ final class EventsAPIService {
             imagePlaceholder: category.icon,   // never trust a remote SF Symbol name
             pointValue: data["pointValue"] as? Int ?? category.defaultPoints,
             description: safeDescription.isEmpty ? nil : safeDescription,
-            creatorID: data["creatorID"] as? String
+            creatorID: data["creatorID"] as? String,
+            latitude: Sanitize.latitude(Sanitize.coord(data["latitude"])),
+            longitude: Sanitize.longitude(Sanitize.coord(data["longitude"]))
         )
+    }
+
+    /// Forward-geocode a venue string to a coordinate (best-effort, nil on failure).
+    static func geocode(_ address: String) async -> CLLocationCoordinate2D? {
+        let trimmed = address.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let geocoder = CLGeocoder()
+        let placemarks = try? await geocoder.geocodeAddressString(trimmed)
+        return placemarks?.first?.location?.coordinate
     }
 
     // MARK: - Cache
@@ -553,6 +574,8 @@ private struct CachedEvent: Codable {
     let pointValue: Int
     let description: String?
     let creatorID: String?
+    let latitude: Double?    // optional → caches written before coords existed still decode
+    let longitude: Double?
 
     init(from event: Event) {
         self.id = event.id
@@ -568,6 +591,8 @@ private struct CachedEvent: Codable {
         self.pointValue = event.pointValue
         self.description = event.description
         self.creatorID = event.creatorID
+        self.latitude = event.latitude
+        self.longitude = event.longitude
     }
 
     func toEvent() -> Event {
@@ -585,7 +610,9 @@ private struct CachedEvent: Codable {
             imagePlaceholder: imagePlaceholder,
             pointValue: pointValue,
             description: description,
-            creatorID: creatorID
+            creatorID: creatorID,
+            latitude: latitude,
+            longitude: longitude
         )
     }
 }

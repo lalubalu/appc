@@ -109,18 +109,19 @@ The app's visual system mirrors the Verdure website: **claymorphism** with a sag
 
 ## What Needs to Be Done (Backend & Beyond)
 
-- [ ] **Upgrade Firebase project to Blaze**, then `npx firebase-tools deploy --only functions` (rules are deployed; functions blocked on billing)
-- [ ] **Enable Storage in console** (Get Started), then `npx firebase-tools deploy --only storage`
+- [ ] **Upgrade Firebase project to Blaze**, then `npx firebase-tools deploy --only functions` (rules ARE deployed; functions blocked on billing — queued check-ins hold until then)
+- [ ] **Enable Storage in console** (Get Started), then `npx firebase-tools deploy --only storage` (proof photos spool locally until then)
 - [ ] Create the two Verdure+ subscriptions in App Store Connect (`com.vaiybhav.verdure.plus.monthly` / `.yearly` — local testing uses `Verdure/Verdure.storekit` via the Verdure scheme)
 - [ ] Server-side subscription check (App Store Server API) so redeemReward enforces Plus-only tiers
-- [ ] Re-register Firebase app under `com.vaiybhav.verdure`
-- [ ] Server-side proof-of-attendance verification (manual spot-check for now)
+- [ ] Real-device QA (2 phones): GPS gate outdoors, photo upload over cellular, airplane-mode queue replay
 - [ ] Real gift-card fulfillment (Tango/Tremendous)
 - [ ] Real photos (AsyncImage + CDN) to replace clay icon placeholders
 - [ ] Push notifications, real social features
-- [ ] Dynamic Type + XCTest target
+- [ ] Dynamic Type app-wide (scaled variants exist in VType; check-in + paywall adopted)
 
 ## Changelog
+
+- **2026-07-20** — **Attendance evidence + honest paywall + tests.** Check-in now demands real proof: GPS proximity gate in EventDetailSheet (CoreLocation vs. event coords — source-provided or geocoded; hard 500 ft gate when the venue is known), proof photo spooled to Application Support and uploaded to Storage (`proofs/{uid}/{digest}.jpg`) during queue flush, and `checkInToEvent` now REQUIRES proofPath + lat/lng server-side (path-ownership check, best-effort existence check, ≤1.5 km haversine vs. stored event coords, `/attendance` audit log). Events carry optional `latitude/longitude` (rules-validated; community events geocode at creation; Eventbrite/Localist/Commons parse source coords; sample events seeded). Legacy event backfill dropped (nothing honest to submit). Fixed the Firebase bundle-ID mismatch via CLI re-registration (`apps:create` + new GoogleService-Info.plist — warning verified gone in launch logs). Paywall now sells ONLY live benefits (Premium Rewards + new profile member badge); roadmap features removed from sale copy. `VType.scaled*` Dynamic Type variants added (check-in + paywall adopted). New VerdureTests target: 10 passing transaction-logic tests (double check-in/collect no-ops, fast double-redeem, proof spooling, queue persistence + v1 decode, reset). Firestore rules redeployed. Functions/Storage deploys still blocked on Blaze + console Storage setup.
 
 - **2026-07-19** — **Server-authoritative points + personalization + Verdure+.** Points/check-ins/redemptions now go through Cloud Functions callables (`checkInToEvent`, new `collectPlace`, `redeemReward` w/ real REWARD_COSTS); GameStateManager applies earns optimistically and reconciles via a persisted pending-op queue (offline-safe, idempotent replays, legacy backfill on first connect). Firestore rules deployed with production lockdown (client writes to points/checked-in/redeemed denied; zero-on-create). FirebaseFunctions added to SwiftPM. Daily Gem reworked into a once-per-day fun-fact splash (generic nature/community/environment facts, no repeats until pool exhausts — `DailyGemStore`). New "For You" personalized events section (interest→event-category mapping + in-app interest picker). Paid events removed (Ticketmaster/SeatGeek providers off; Eventbrite/Localist filtered to free). Verdure+ subscription via StoreKit 2 (`StoreService`, clay `PaywallView`, `Verdure.storekit` scheme config; Gold/Platinum reward tiers gated). VoiceOver pass on check-in, redeem, and onboarding flows.
 

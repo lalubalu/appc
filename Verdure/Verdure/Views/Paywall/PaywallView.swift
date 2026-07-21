@@ -3,14 +3,16 @@ import StoreKit
 
 // MARK: - Verdure+ Paywall
 //
-// Subscription tiers from the Verdure Subscription Model doc:
-//   Free    — explore, map, community events, personalized discovery, Daily Gem,
-//             gamification, $5–10 gift cards, basic community.
-//   Verdure+ ($4.99/mo · $49.99/yr) — AI Adventure Planner, AR Adventures,
-//             health integrations, premium navigation, smart outdoor insights,
-//             premium rewards ($25–50 cards, multipliers), Community+, advanced
-//             personalization.
-// Premium Rewards gating is live today; the other Plus features ship next.
+// HONEST-COPY POLICY (App Store 2.3.1/3.1.2 safety): this sheet lists ONLY
+// features that exist in the shipping build. Roadmap items from the Verdure
+// Subscription Model doc (AI Adventure Planner, AR Adventures, health
+// integrations, premium navigation, smart insights, Community+) are NOT sold
+// here — they get added to `features` one by one as they actually ship. A
+// single muted line acknowledges that more is in development, promising nothing.
+//
+// Live Verdure+ benefits today:
+//   • Premium Rewards — Gold ($25) + Platinum ($50) gift-card tiers unlock
+//   • Member badge on the profile player card
 
 struct PaywallView: View {
     @Environment(StoreService.self) private var store
@@ -65,8 +67,8 @@ struct PaywallView: View {
             Text("Verdure+")
                 .font(VType.display(38, .bold)).foregroundStyle(Palette.ink)
                 .accessibilityAddTraits(.isHeader)
-            Text("Everything in free, plus the tools that turn\nwalks into adventures.")
-                .font(VType.body(15)).foregroundStyle(Palette.inkSoft)
+            Text("Everything in free, plus premium rewards\nand member perks.")
+                .font(VType.scaledBody(15, relativeTo: .subheadline)).foregroundStyle(Palette.inkSoft)
                 .multilineTextAlignment(.center).lineSpacing(3)
         }
     }
@@ -95,25 +97,15 @@ struct PaywallView: View {
         let title: String
         let detail: String
         let kind: ClayStyle.ClayAccentKind
-        let comingSoon: Bool
         var id: String { title }
     }
 
+    /// ONLY shipped features belong in this list — see the honest-copy policy above.
     private let features: [PlusFeature] = [
         PlusFeature(icon: "gift.fill", title: "Premium Rewards",
-                    detail: "$25–50 gift cards, bonus multipliers & early access", kind: .gold, comingSoon: false),
-        PlusFeature(icon: "wand.and.stars", title: "AI Adventure Planner",
-                    detail: "Personalized itineraries for weather, time & budget", kind: .teal, comingSoon: true),
-        PlusFeature(icon: "binoculars.fill", title: "AR Adventures",
-                    detail: "Exclusive collectibles, seasonal quests & hidden wildlife", kind: .spruce, comingSoon: true),
-        PlusFeature(icon: "heart.fill", title: "Health Integrations",
-                    detail: "Apple Health sync & advanced activity insights", kind: .terracotta, comingSoon: true),
-        PlusFeature(icon: "map.fill", title: "Premium Navigation",
-                    detail: "Offline maps, alerts & trail guidance", kind: .sky, comingSoon: true),
-        PlusFeature(icon: "chart.bar.fill", title: "Smart Outdoor Insights",
-                    detail: "Crowd forecasts, best times & weather picks", kind: .teal, comingSoon: true),
-        PlusFeature(icon: "person.3.fill", title: "Community+",
-                    detail: "Discussions, group planning & premium clubs", kind: .spruce, comingSoon: true),
+                    detail: "Unlock the Gold & Platinum tiers — redeem $25 and $50 gift cards", kind: .gold),
+        PlusFeature(icon: "medal.fill", title: "Member Badge",
+                    detail: "A gold Verdure+ badge on your player card", kind: .spruce),
     ]
 
     private var featureList: some View {
@@ -122,19 +114,11 @@ struct PaywallView: View {
                 HStack(spacing: Spacing.md) {
                     ClayIconTile(systemImage: feature.icon, kind: feature.kind, size: 44, radius: Radius.chip)
                     VStack(alignment: .leading, spacing: 2) {
-                        HStack(spacing: 6) {
-                            Text(feature.title)
-                                .font(VType.display(15, .semibold)).foregroundStyle(Palette.ink)
-                            if feature.comingSoon {
-                                Text("SOON")
-                                    .font(VType.body(8, .bold)).tracking(0.8)
-                                    .foregroundStyle(Palette.inkSoft)
-                                    .padding(.horizontal, 6).padding(.vertical, 3)
-                                    .background(ClayBackground(style: .inset, radius: Radius.chip))
-                            }
-                        }
+                        Text(feature.title)
+                            .font(VType.scaledDisplay(15, .semibold, relativeTo: .subheadline))
+                            .foregroundStyle(Palette.ink)
                         Text(feature.detail)
-                            .font(VType.body(12)).foregroundStyle(Palette.inkSoft)
+                            .font(VType.scaledBody(12, relativeTo: .caption)).foregroundStyle(Palette.inkSoft)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer()
@@ -142,8 +126,14 @@ struct PaywallView: View {
                 .padding(Spacing.md)
                 .claySurface(.surface, radius: Radius.md, elevation: 0.75)
                 .accessibilityElement(children: .combine)
-                .accessibilityLabel("\(feature.title). \(feature.detail).\(feature.comingSoon ? " Coming soon." : "")")
+                .accessibilityLabel("\(feature.title). \(feature.detail).")
             }
+
+            // Roadmap acknowledgement — deliberately vague, promises nothing.
+            Text("More member features are in development and will be included as they launch.")
+                .font(VType.scaledBody(11, relativeTo: .caption2)).foregroundStyle(Palette.inkFaint)
+                .multilineTextAlignment(.center)
+                .padding(.top, 2)
         }
     }
 
