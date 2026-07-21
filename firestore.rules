@@ -90,8 +90,11 @@ service cloud.firestore {
                     && request.resource.data.authorID == request.auth.uid
                     && validPostDocument(request.resource.data);
 
-      // Posts are immutable; only the author can delete.
-      allow update: if false;
+      // Posts are immutable EXCEPT likes: any signed-in user may bump likeCount
+      // by exactly +1 per write (nothing else may change). Author can delete.
+      allow update: if request.auth != null
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likeCount'])
+                    && request.resource.data.likeCount == resource.data.likeCount + 1;
       allow delete: if request.auth != null
                     && resource.data.authorID == request.auth.uid;
     }

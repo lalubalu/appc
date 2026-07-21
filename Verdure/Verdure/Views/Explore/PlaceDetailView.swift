@@ -1,14 +1,40 @@
 import SwiftUI
+import MapKit
 
 struct PlaceDetailView: View {
     let place: Place
-    @State private var isSaved = false
     @State private var showCelebration = false
     @State private var celebrationPoints = 0
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
     @Environment(GameStateManager.self) private var gameState
     @Environment(PlacesAPIService.self) private var placesService
+    @Environment(EventsAPIService.self) private var eventsService
     @Environment(LocationManager.self) private var locationManager
+
+    private var isSaved: Bool { gameState.isPlaceSaved(place.id) }
+
+    /// Real upcoming events matched to this place by venue name.
+    private var eventsHere: [Event] {
+        let name = place.name.lowercased()
+        return eventsService.events
+            .filter { $0.date > Date().addingTimeInterval(-3600) }
+            .filter { $0.locationName.lowercased().contains(name) || name.contains($0.locationName.lowercased()) }
+            .sorted { $0.date < $1.date }
+    }
+
+    /// Open Apple Maps with directions to the place (real coords when known).
+    private func openDirections() {
+        Haptics.tap()
+        if let coord = place.coordinate {
+            let item = MKMapItem(placemark: MKPlacemark(coordinate: coord))
+            item.name = place.name
+            item.openInMaps(launchOptions: [MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving])
+        } else {
+            let query = place.name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+            if let url = URL(string: "http://maps.apple.com/?daddr=\(query)&dirflg=d") { openURL(url) }
+        }
+    }
 
     private var collectible: CollectiblePlace? {
         placesService.collectible(for: place) ?? SampleData.collectible(for: place)
@@ -37,10 +63,11 @@ struct PlaceDetailView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { } label: {
+                    ShareLink(item: "\(place.name) — found on Verdure. \(place.shortDescription)") {
                         Image(systemName: "square.and.arrow.up").font(.system(size: 15, weight: .semibold))
                     }
                     .tint(Palette.ink)
+                    .accessibilityLabel("Share \(place.name)")
                 }
             }
 
@@ -61,12 +88,28 @@ struct PlaceDetailView: View {
                 .fill(kind.accent.faceGradient)
                 .frame(height: 250)
                 .overlay {
-                    Image(systemName: place.imagePlaceholder)
-                        .font(.system(size: 150, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.16))
-                        .rotationEffect(.degrees(-8))
-                        .offset(x: 70, y: 10)
-                        .clipped()
+                    if let urlString = place.photoURL, let url = URL(string: urlString) {
+                        // Real photo from the place's source (NPS/RecGov/OSM).
+                        AsyncImage(url: url) { image in
+                            image.resizable().scaledToFill()
+                                .overlay(LinearGradient(colors: [.clear, .black.opacity(0.45)],
+                                                        startPoint: .center, endPoint: .bottom))
+                        } placeholder: {
+                            Image(systemName: place.imagePlaceholder)
+                                .font(.system(size: 150, weight: .semibold))
+                                .foregroundStyle(.white.opacity(0.16))
+                                .rotationEffect(.degrees(-8))
+                                .offset(x: 70, y: 10)
+                        }
+                        .frame(height: 250)
+                    } else {
+                        Image(systemName: place.imagePlaceholder)
+                            .font(.system(size: 150, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.16))
+                            .rotationEffect(.degrees(-8))
+                            .offset(x: 70, y: 10)
+                            .clipped()
+                    }
                 }
                 .overlay(
                     RoundedRectangle(cornerRadius: Radius.lg, style: .continuous)
@@ -109,7 +152,9 @@ struct PlaceDetailView: View {
     private var quickStats: some View {
         HStack(spacing: 10) {
             statWell(place.distance, "Away", "location.fill", Palette.teal.base)
-            statWell(String(format: "%.1f", place.rating), "\(place.reviewCount) reviews", "star.fill", Palette.gold.base)
+            if let rating = place.rating {   // only REAL ratings are shown
+                statWell(String(format: "%.1f", rating), "\(place.reviewCount ?? 0) reviews", "star.fill", Palette.gold.base)
+            }
             if let c = collectible {
                 statWell("\(c.pointValue)", c.rarity.rawValue, c.rarity.icon, c.rarity.accent.base)
             } else {
@@ -142,18 +187,22 @@ struct PlaceDetailView: View {
 
             Divider().background(Palette.surfaceShadow.opacity(0.4))
 
-            // Hours
+            // Hours — real (OSM opening_hours) when available; otherwise typical
+            // hours for this kind of place, labeled as such.
             HStack(spacing: 10) {
                 Image(systemName: "clock.fill").font(.system(size: 14, weight: .bold))
                     .foregroundStyle(kind.accent.base).frame(width: 22)
-                Text("Hours").font(VType.body(13, .semibold)).foregroundStyle(Palette.inkSoft)
+                Text(place.openHoursReal != nil ? "Hours" : "Typical hours")
+                    .font(VType.body(13, .semibold)).foregroundStyle(Palette.inkSoft)
                 Spacer()
-                Text(place.openHours).font(VType.body(13, .semibold)).foregroundStyle(Palette.ink)
+                Text(place.openHoursReal ?? "\(place.openHours) · varies")
+                    .font(VType.body(13, .semibold)).foregroundStyle(Palette.ink)
+                    .lineLimit(1).minimumScaleFactor(0.7)
             }
 
             // Amenities
             VStack(alignment: .leading, spacing: Spacing.sm) {
-                Text("Amenities").font(VType.body(13, .semibold)).foregroundStyle(Palette.inkSoft)
+                Text("Typical for \(place.category.rawValue.lowercased())").font(VType.body(13, .semibold)).foregroundStyle(Palette.inkSoft)
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 118), spacing: 8)], spacing: 8) {
                     ForEach(place.amenities, id: \.label) { item in
                         HStack(spacing: 6) {
@@ -189,10 +238,10 @@ struct PlaceDetailView: View {
             collectButton
             HStack(spacing: Spacing.sm) {
                 ClayButton("Directions", systemImage: "arrow.triangle.turn.up.right.diamond.fill",
-                           kind: .teal, fullWidth: true) {}
+                           kind: .teal, fullWidth: true) { openDirections() }
                 ClayButton(isSaved ? "Saved" : "Save", systemImage: isSaved ? "bookmark.fill" : "bookmark",
                            kind: .ghost, fullWidth: true) {
-                    withAnimation(.spring(response: 0.3)) { isSaved.toggle() }
+                    withAnimation(.spring(response: 0.3)) { gameState.togglePlaceSaved(place.id) }
                 }
             }
         }
@@ -237,14 +286,34 @@ struct PlaceDetailView: View {
     private var eventsSection: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
             Text("Upcoming Events Here").font(VType.display(20, .semibold)).foregroundStyle(Palette.ink)
-            HStack(spacing: 10) {
-                Image(systemName: "calendar").foregroundStyle(Palette.inkFaint)
-                Text("No upcoming events at this location.")
-                    .font(VType.body(14)).foregroundStyle(Palette.inkSoft)
-                Spacer()
+            if eventsHere.isEmpty {
+                HStack(spacing: 10) {
+                    Image(systemName: "calendar").foregroundStyle(Palette.inkFaint)
+                    Text("No upcoming events at this location.")
+                        .font(VType.body(14)).foregroundStyle(Palette.inkSoft)
+                    Spacer()
+                }
+                .padding(Spacing.md)
+                .background(ClayBackground(style: .inset, radius: Radius.md))
+            } else {
+                ForEach(eventsHere.prefix(3)) { event in
+                    HStack(spacing: Spacing.md) {
+                        ClayIconTile(systemImage: event.imagePlaceholder,
+                                     kind: event.category.clayKind, size: 42, radius: Radius.chip)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(event.title).font(VType.display(14, .semibold)).foregroundStyle(Palette.ink)
+                                .lineLimit(1)
+                            Text("\(event.date.formatted(date: .abbreviated, time: .omitted)) · \(event.time)")
+                                .font(VType.body(12)).foregroundStyle(Palette.inkSoft).lineLimit(1)
+                        }
+                        Spacer()
+                        PointsBadge(points: event.pointValue)
+                    }
+                    .padding(Spacing.sm)
+                    .claySurface(.surface, radius: Radius.md, elevation: 0.7)
+                    .accessibilityElement(children: .combine)
+                }
             }
-            .padding(Spacing.md)
-            .background(ClayBackground(style: .inset, radius: Radius.md))
         }
     }
 }
@@ -254,6 +323,8 @@ struct PlaceDetailView: View {
         PlaceDetailView(place: SampleData.places[0])
             .environment(GameStateManager())
             .environment(PlacesAPIService())
+            .environment(EventsAPIService())
+            .environment(LocationManager())
     }
 }
 

@@ -11,11 +11,20 @@ struct Place: Identifiable, Hashable {
     let shortDescription: String
     let distance: String        // e.g. "0.4 mi"
     let distanceValue: Double   // numeric miles for proximity checks
-    let rating: Double
-    let reviewCount: Int
+    let rating: Double?         // nil when the source has no real rating (never fabricated)
+    let reviewCount: Int?
     let imagePlaceholder: String // SF Symbol name
     let accentColor: Color
     let isFeatured: Bool
+    var latitude: Double? = nil   // REAL venue coordinates from the source —
+    var longitude: Double? = nil  //   drives map pins + collection proximity
+    var photoURL: String? = nil   // real photo when the source provides one (NPS, RecGov, OSM image tag)
+    var openHoursReal: String? = nil // real opening hours (OSM opening_hours tag) — nil hides the row
+
+    var coordinate: CLLocationCoordinate2D? {
+        guard let latitude, let longitude else { return nil }
+        return CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    }
 
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
     static func == (lhs: Place, rhs: Place) -> Bool { lhs.id == rhs.id }
@@ -176,6 +185,7 @@ struct CommunityPost: Identifiable {
     let likeCount: Int
     let commentCount: Int
     let imagePlaceholder: String?
+    var docID: String? = nil   // Firestore document ID — nil for local/sample posts (likes need it)
 }
 
 // MARK: - User Profile

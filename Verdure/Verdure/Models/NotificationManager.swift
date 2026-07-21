@@ -5,8 +5,8 @@ import UserNotifications
 
 // MARK: - In-app notification model
 
-struct AppNotification: Identifiable {
-    enum Kind {
+struct AppNotification: Identifiable, Codable {
+    enum Kind: String, Codable {
         case event, badge, points, community, gem, system
         var icon: String {
             switch self {
@@ -29,7 +29,7 @@ struct AppNotification: Identifiable {
             }
         }
     }
-    let id = UUID()
+    var id = UUID()
     let kind: Kind
     let title: String
     let message: String
@@ -54,8 +54,18 @@ final class NotificationManager {
 
     private init() {
         self.enabled = UserDefaults.standard.object(forKey: "notificationsEnabled") as? Bool ?? true
-        seedInbox()
+        // Real inbox: persisted entries only — no fake seeded notifications.
+        if let data = UserDefaults.standard.data(forKey: "notificationInbox"),
+           let saved = try? JSONDecoder().decode([AppNotification].self, from: data) {
+            self.inbox = saved
+        }
         refreshPermissionStatus()
+    }
+
+    private func persistInbox() {
+        if let data = try? JSONEncoder().encode(Array(inbox.prefix(50))) {
+            UserDefaults.standard.set(data, forKey: "notificationInbox")
+        }
     }
 
     // MARK: Permission
@@ -88,10 +98,12 @@ final class NotificationManager {
 
     func markAllRead() {
         inbox = inbox.map { var n = $0; n.isRead = true; return n }
+        persistInbox()
     }
 
     func push(_ notification: AppNotification) {
         inbox.insert(notification, at: 0)
+        persistInbox()
     }
 
     // MARK: Local notifications
@@ -127,20 +139,4 @@ final class NotificationManager {
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["event-\(event.id)"])
     }
 
-    // MARK: Seed (realistic inbox for first run / demo)
-
-    private func seedInbox() {
-        inbox = [
-            AppNotification(kind: .gem, title: "Today's Daily Gem is ready",
-                            message: "Tap the gem to reveal a new fact about your neighborhood.", timeAgo: "2m"),
-            AppNotification(kind: .badge, title: "Badge unlocked: Social Butterfly",
-                            message: "You've attended 3 community events. Nice!", timeAgo: "3h"),
-            AppNotification(kind: .event, title: "Event tomorrow",
-                            message: "River Cleanup Day starts at 9:00 AM at Riverside Park.", timeAgo: "5h"),
-            AppNotification(kind: .points, title: "+200 points earned",
-                            message: "Thanks for checking in to Weekend Farmers Market.", timeAgo: "1d", isRead: true),
-            AppNotification(kind: .community, title: "Maya mentioned a spot you collected",
-                            message: "“The butterfly pavilion at Botanica Gardens is incredible!”", timeAgo: "1d", isRead: true),
-        ]
-    }
 }

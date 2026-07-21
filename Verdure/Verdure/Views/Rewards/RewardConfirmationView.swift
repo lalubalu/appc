@@ -46,17 +46,19 @@ struct RewardConfirmationView: View {
                         ClayIconTile(systemImage: reward.icon, kind: kind, size: 38, radius: Radius.chip)
                         Text(reward.name).font(VType.display(18, .semibold)).foregroundStyle(kind.accent.base)
                     }
-                    Text("Your gift card code will be delivered here once the rewards backend is connected.")
+                    Text("Your redemption is recorded. The gift-card code will be emailed to your account address within 48 hours.")
                         .font(VType.body(14)).foregroundStyle(Palette.inkSoft)
                         .multilineTextAlignment(.center).padding(.horizontal, Spacing.xl).lineSpacing(3)
 
                     HStack(spacing: 10) {
-                        Text("XXXX-XXXX-XXXX")
-                            .font(VType.num(20, .bold)).monospacedDigit().foregroundStyle(Palette.inkSoft).tracking(2)
-                        Image(systemName: "doc.on.doc").font(.system(size: 14, weight: .semibold)).foregroundStyle(Palette.inkFaint)
+                        Image(systemName: "envelope.badge.fill")
+                            .font(.system(size: 15, weight: .bold)).foregroundStyle(Palette.teal.base)
+                        Text("Delivery via email · keep an eye on your inbox")
+                            .font(VType.body(13, .semibold)).foregroundStyle(Palette.inkSoft)
                     }
                     .padding(.vertical, Spacing.md).padding(.horizontal, Spacing.lg)
                     .background(ClayBackground(style: .inset, radius: Radius.sm))
+                    .accessibilityElement(children: .combine)
                 }
                 .opacity(showContent ? 1 : 0)
                 .offset(y: showContent ? 0 : 20)

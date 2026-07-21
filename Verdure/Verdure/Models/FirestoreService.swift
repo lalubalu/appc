@@ -185,11 +185,25 @@ final class FirestoreService {
                     timeAgo: Self.relativeTime(when),
                     likeCount: (d["likeCount"] as? Int) ?? 0,
                     commentCount: 0,
-                    imagePlaceholder: nil
+                    imagePlaceholder: nil,
+                    docID: doc.documentID
                 )
             }
         } catch {
             return []
+        }
+    }
+
+    /// Increment a post's like count (rules allow exactly +1 per write on
+    /// likeCount only). The caller keeps its own liked-set so the heart state
+    /// persists locally.
+    func likePost(docID: String) async {
+        guard Auth.auth().currentUser != nil else { return }
+        do {
+            try await db.collection("posts").document(docID)
+                .updateData(["likeCount": FieldValue.increment(Int64(1))])
+        } catch {
+            print("[FirestoreService] likePost error: \(error.localizedDescription)")
         }
     }
 

@@ -2,10 +2,13 @@
   "name": "verdure-functions",
   "description": "Server-authoritative game logic + notifications for Verdure",
   "type": "module",
-  "engines": { "node": "20" },
+  "engines": {
+    "node": "20"
+  },
   "main": "lib/index.js",
   "scripts": {
     "build": "tsc",
+    "e2e": "cd .. && npx firebase-tools@13 emulators:exec --only auth,functions,firestore,storage \"node functions/scripts/e2e-backend.mjs\"",
     "serve": "npm run build && firebase emulators:start --only functions",
     "deploy": "firebase deploy --only functions",
     "logs": "firebase functions:log"
@@ -15,6 +18,7 @@
     "firebase-functions": "^6.1.0"
   },
   "devDependencies": {
+    "firebase": "^12.16.0",
     "typescript": "^5.5.0"
   },
   "private": true

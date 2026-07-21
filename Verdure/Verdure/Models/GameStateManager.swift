@@ -48,6 +48,132 @@ final class GameStateManager {
         didSet { save(savedEventIDs, forKey: "savedEventIDs") }
     }
 
+    /// Bookmarked places (local only).
+    var savedPlaceIDs: Set<String> {
+        didSet { save(savedPlaceIDs, forKey: "savedPlaceIDs") }
+    }
+
+    // MARK: - Earn History (fuels real challenges, badges & streaks)
+
+    /// One record per earn action, with the context (category/rarity) needed to
+    /// compute challenge progress and badge unlocks honestly.
+    struct EarnRecord: Codable, Equatable {
+        enum Kind: String, Codable { case event, place }
+        let kind: Kind
+        let id: String
+        let category: String   // EventCategory/PlaceCategory rawValue
+        let rarity: String?    // PlaceRarity rawValue (places only)
+        let points: Int
+        let date: Date
+    }
+
+    private(set) var earnHistory: [EarnRecord] {
+        didSet {
+            if let data = try? JSONEncoder().encode(earnHistory.suffix(500)) {
+                UserDefaults.standard.set(data, forKey: "earnHistory")
+            }
+        }
+    }
+
+    private func record(_ record: EarnRecord) {
+        earnHistory.append(record)
+        refreshGamification()
+    }
+
+    // MARK: - Daily Streak (consecutive days the app was opened)
+
+    private(set) var currentStreak: Int {
+        didSet { UserDefaults.standard.set(currentStreak, forKey: "streakCount") }
+    }
+    private var lastActiveDay: String {
+        didSet { UserDefaults.standard.set(lastActiveDay, forKey: "streakLastDay") }
+    }
+
+    /// Call on every foreground. Same day → no-op; consecutive day → streak+1;
+    /// a gap → streak resets to 1.
+    func recordActiveDay(now: Date = Date()) {
+        let today = Self.dayString(now)
+        guard lastActiveDay != today else { return }
+        if let last = Self.dayFormatter.date(from: lastActiveDay),
+           let dayAfterLast = Calendar.current.date(byAdding: .day, value: 1, to: last),
+           Calendar.current.isDate(now, inSameDayAs: dayAfterLast) {
+            currentStreak += 1
+        } else {
+            currentStreak = 1
+        }
+        lastActiveDay = today
+    }
+
+    nonisolated static let dayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.calendar = Calendar(identifier: .gregorian)
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
+    nonisolated static func dayString(_ date: Date) -> String { dayFormatter.string(from: date) }
+
+    // MARK: - XP, Badges & Challenge bonuses (computed by GamificationEngine)
+
+    /// XP bonus from completed challenges (progression-only; points stay server-owned).
+    private(set) var challengeBonusXP: Int {
+        didSet { UserDefaults.standard.set(challengeBonusXP, forKey: "challengeBonusXP") }
+    }
+    /// Challenges already rewarded, keyed "challengeID|yyyy-MM" so monthly ones re-arm.
+    private var completedChallengeKeys: Set<String> {
+        didSet { save(completedChallengeKeys, forKey: "completedChallengeKeys") }
+    }
+    /// Unlocked badges with their unlock dates (stable across launches).
+    private(set) var earnedBadges: [String: Date] {
+        didSet {
+            if let data = try? JSONEncoder().encode(earnedBadges) {
+                UserDefaults.standard.set(data, forKey: "earnedBadges")
+            }
+        }
+    }
+
+    /// Total progression XP: lifetime points ×2 plus challenge bonuses.
+    var totalXP: Int { lifetimePoints * 2 + challengeBonusXP }
+    var level: Int { max(1, totalXP / 500 + 1) }
+    var xpInLevel: Int { totalXP % 500 }
+    var levelProgress: Double { Double(xpInLevel) / 500.0 }
+
+    /// Re-evaluate challenges + badges after an earn; awards bonuses, unlocks
+    /// badges, and drops real entries into the notification inbox.
+    func refreshGamification(now: Date = Date()) {
+        // Challenge completions → one-time XP bonus per month-window.
+        for challenge in GamificationEngine.challenges(for: self, now: now) where challenge.progress >= 1.0 {
+            let key = "\(challenge.title)|\(Self.monthKey(now))"
+            guard !completedChallengeKeys.contains(key) else { continue }
+            completedChallengeKeys.insert(key)
+            challengeBonusXP += challenge.xpReward
+            NotificationManager.shared.push(AppNotification(
+                kind: .points, title: "Challenge complete: \(challenge.title)",
+                message: "+\(challenge.xpReward) XP — \(challenge.description)", timeAgo: "now"))
+        }
+        // Badge unlocks → persist the unlock date once.
+        for badge in GamificationEngine.badges(for: self) where badge.earned {
+            guard earnedBadges[badge.name] == nil else { continue }
+            earnedBadges[badge.name] = now
+            NotificationManager.shared.push(AppNotification(
+                kind: .badge, title: "Badge unlocked: \(badge.name)",
+                message: badge.detail, timeAgo: "now"))
+        }
+    }
+
+    nonisolated static func monthKey(_ date: Date) -> String {
+        let comps = Calendar.current.dateComponents([.year, .month], from: date)
+        return "\(comps.year ?? 0)-\(comps.month ?? 0)"
+    }
+
+    // MARK: - Saved places
+
+    func isPlaceSaved(_ placeID: String) -> Bool { savedPlaceIDs.contains(placeID) }
+
+    func togglePlaceSaved(_ placeID: String) {
+        if savedPlaceIDs.contains(placeID) { savedPlaceIDs.remove(placeID) }
+        else { savedPlaceIDs.insert(placeID); Haptics.success() }
+    }
+
     // MARK: - Server Ops Queue
     //
     // Points are SERVER-authoritative: check-ins, collections, and redemptions go
@@ -231,11 +357,28 @@ final class GameStateManager {
         self.lifetimePoints = UserDefaults.standard.integer(forKey: "lifetimePoints")
         self.redeemedRewardIDs = Self.loadSet(forKey: "redeemedRewardIDs")
         self.savedEventIDs = Self.loadSet(forKey: "savedEventIDs")
+        self.savedPlaceIDs = Self.loadSet(forKey: "savedPlaceIDs")
         if let data = UserDefaults.standard.data(forKey: "pendingServerOps"),
            let ops = try? JSONDecoder().decode([PendingOp].self, from: data) {
             self.pendingOps = ops
         } else {
             self.pendingOps = []
+        }
+        if let data = UserDefaults.standard.data(forKey: "earnHistory"),
+           let records = try? JSONDecoder().decode([EarnRecord].self, from: data) {
+            self.earnHistory = records
+        } else {
+            self.earnHistory = []
+        }
+        self.currentStreak = UserDefaults.standard.integer(forKey: "streakCount")
+        self.lastActiveDay = UserDefaults.standard.string(forKey: "streakLastDay") ?? ""
+        self.challengeBonusXP = UserDefaults.standard.integer(forKey: "challengeBonusXP")
+        self.completedChallengeKeys = Self.loadSet(forKey: "completedChallengeKeys")
+        if let data = UserDefaults.standard.data(forKey: "earnedBadges"),
+           let badges = try? JSONDecoder().decode([String: Date].self, from: data) {
+            self.earnedBadges = badges
+        } else {
+            self.earnedBadges = [:]
         }
 
         // Seed demo data on first launch
@@ -277,6 +420,11 @@ final class GameStateManager {
                           category: event.category.rawValue, points: pts,
                           lat: userCoordinate?.latitude, lon: userCoordinate?.longitude,
                           proofFile: proofFile))
+        record(EarnRecord(kind: .event, id: event.id, category: event.category.rawValue,
+                          rarity: nil, points: pts, date: Date()))
+        NotificationManager.shared.push(AppNotification(
+            kind: .points, title: "+\(pts) points earned",
+            message: "Thanks for checking in to \(event.title).", timeAgo: "now"))
         return pts
     }
 
@@ -313,6 +461,9 @@ final class GameStateManager {
         lifetimePoints += pts
         enqueue(PendingOp(kind: .collect, id: collectible.id, category: "", points: pts,
                           lat: userCoordinate?.latitude, lon: userCoordinate?.longitude))
+        record(EarnRecord(kind: .place, id: collectible.id,
+                          category: collectible.place.category.rawValue,
+                          rarity: collectible.rarity.rawValue, points: pts, date: Date()))
         return pts
     }
 
@@ -483,6 +634,12 @@ final class GameStateManager {
         lifetimePoints = 0
         redeemedRewardIDs = []
         pendingOps = []
+        earnHistory = []
+        currentStreak = 0
+        lastActiveDay = ""
+        challengeBonusXP = 0
+        completedChallengeKeys = []
+        earnedBadges = [:]
         try? FileManager.default.removeItem(at: Self.proofsDirectory)   // clear spooled proof photos
         UserDefaults.standard.removeObject(forKey: "gameStateSeeded_v2")
     }

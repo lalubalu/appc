@@ -101,8 +101,10 @@ export const checkInToEvent = onCall(async (req) => {
   // Best-effort existence check: hard-fail only on a definitive "not there".
   // (Storage being unreachable/misconfigured shouldn't block honest check-ins.)
   try {
-    const [exists] = await getStorage().bucket().file(proofPath).exists();
+    const bucket = getStorage().bucket();
+    const [exists] = await bucket.file(proofPath).exists();
     if (!exists) {
+      console.warn(`[checkIn] proof missing: bucket=${bucket.name} path=${proofPath}`);
       throw new HttpsError("invalid-argument", "Proof photo was not found — upload it first.");
     }
   } catch (e) {
@@ -264,8 +266,15 @@ export const redeemReward = onCall(async (req) => {
 /**
  * onPostCreated — fan-out a push notification when a community post is created.
  * Requires FCM tokens stored at users/{uid}.fcmTokens (set from the iOS client).
+ *
+ * Skipped under the Local Emulator Suite: the Firestore emulator rejects v2
+ * eventarc trigger registration (tools/jar version skew) and this trigger isn't
+ * part of the E2E surface — only the callables are.
  */
-export const onPostCreated = onDocumentCreated("posts/{postId}", async (event) => {
+const inEmulator = process.env.FUNCTIONS_EMULATOR === "true";
+
+export const onPostCreated: unknown = inEmulator ? undefined
+  : onDocumentCreated("posts/{postId}", async (event) => {
   const post = event.data?.data();
   if (!post) return;
   // Collect a handful of recent tokens (a real app would target by proximity/follows).

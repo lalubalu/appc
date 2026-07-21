@@ -165,18 +165,24 @@ final class PlacesAPIService {
             )
             let distMiles = dist / 1609.34
 
+            let tags = element.tags ?? [:]
             let place = Place(
                 id: "osm-\(element.id)",
                 name: name,
                 category: category,
-                shortDescription: Sanitize.text(Self.buildDescription(tags: element.tags ?? [:], category: category, name: name), max: 180),
+                shortDescription: Sanitize.text(Self.buildDescription(tags: tags, category: category, name: name), max: 180),
                 distance: String(format: "%.1f mi", distMiles),
                 distanceValue: distMiles,
-                rating: Self.syntheticRating(tags: element.tags ?? [:]),
-                reviewCount: Int.random(in: 12...200),
+                rating: nil,          // OSM has no ratings — never fabricate one
+                reviewCount: nil,
                 imagePlaceholder: category.icon,
                 accentColor: category.tint,
-                isFeatured: distMiles < 0.5
+                isFeatured: distMiles < 0.5,
+                latitude: lat,        // REAL coordinates → map pins + collect proximity
+                longitude: lon,
+                photoURL: Sanitize.url(tags["image"]),
+                openHoursReal: Sanitize.text(tags["opening_hours"], max: 80).isEmpty ? nil
+                    : Sanitize.text(tags["opening_hours"], max: 80)
             )
 
             results.append(place)
@@ -243,15 +249,6 @@ final class PlacesAPIService {
         return parts.joined(separator: " ")
     }
 
-    private static func syntheticRating(tags: [String: String]) -> Double {
-        // Better-tagged places tend to be more notable
-        var base = 4.0
-        if tags["wikipedia"] != nil { base += 0.5 }
-        if tags["wheelchair"] == "yes" { base += 0.2 }
-        if tags["website"] != nil { base += 0.1 }
-        return min(base + Double.random(in: -0.3...0.3), 5.0)
-    }
-
     // MARK: - Additional free place sources (Recreation.gov + NPS)
 
     /// Recreation.gov RIDB facilities near a point (free key, true geo-radius search).
@@ -282,12 +279,17 @@ final class PlacesAPIService {
             let rawID = (f["FacilityID"] as? String) ?? (f["FacilityID"] as? Int).map(String.init) ?? UUID().uuidString
             let id = String(rawID.unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) || $0 == "-" })
             let desc = Sanitize.text(f["FacilityDescription"] as? String, max: 180)
+            // RIDB facilities can include a MEDIA array with real photos.
+            let media = (f["MEDIA"] as? [[String: Any]])?.first { ($0["MediaType"] as? String) == "Image" }
+                ?? (f["MEDIA"] as? [[String: Any]])?.first
             return Place(
                 id: "rec-\(id)", name: name, category: category,
                 shortDescription: desc.isEmpty ? "A federal recreation area — explore it to add it to your collection." : desc,
                 distance: String(format: "%.1f mi", distMiles), distanceValue: distMiles,
-                rating: 4.4, reviewCount: Int.random(in: 20...300),
-                imagePlaceholder: category.icon, accentColor: category.tint, isFeatured: distMiles < 1.0
+                rating: nil, reviewCount: nil,   // RIDB has no ratings — never fabricate
+                imagePlaceholder: category.icon, accentColor: category.tint, isFeatured: distMiles < 1.0,
+                latitude: lat, longitude: lon,
+                photoURL: Sanitize.url(media?["URL"] as? String)
             )
         }
     }
@@ -316,12 +318,16 @@ final class PlacesAPIService {
             let rawID = (p["id"] as? String) ?? UUID().uuidString
             let id = String(rawID.unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) || $0 == "-" })
             let desc = Sanitize.text(p["description"] as? String, max: 180)
+            // NPS returns real photography for nearly every site.
+            let firstImage = (p["images"] as? [[String: Any]])?.first?["url"] as? String
             return Place(
                 id: "nps-\(id)", name: name, category: .scenic,
                 shortDescription: desc.isEmpty ? "A national park site — a rare find for your collection." : desc,
                 distance: String(format: "%.0f mi", distMiles), distanceValue: distMiles,
-                rating: 4.8, reviewCount: Int.random(in: 200...2000),
-                imagePlaceholder: PlaceCategory.scenic.icon, accentColor: PlaceCategory.scenic.tint, isFeatured: false
+                rating: nil, reviewCount: nil,   // NPS has no ratings — never fabricate
+                imagePlaceholder: PlaceCategory.scenic.icon, accentColor: PlaceCategory.scenic.tint, isFeatured: false,
+                latitude: lat, longitude: lon,
+                photoURL: Sanitize.url(firstImage)
             )
         }
     }
@@ -376,23 +382,29 @@ final class PlacesAPIService {
 
     static func buildCollectibles(from places: [Place], center: CLLocationCoordinate2D) -> [CollectiblePlace] {
         places.map { place in
-            // Parse distance back to coordinate offset (approximate)
-            let distMiles = place.distanceValue
-            let distKm = distMiles * 1.60934
-            let latOffset = distKm / 111.0  // rough deg per km
-            let lonOffset = distKm / (111.0 * cos(center.latitude * .pi / 180))
-
-            // Distribute around center using place ID hash for deterministic placement
-            let hash = abs(place.id.hashValue)
-            let angle = Double(hash % 360) * .pi / 180.0
-            let coordLat = center.latitude + latOffset * cos(angle)
-            let coordLon = center.longitude + lonOffset * sin(angle)
+            // REAL venue coordinates whenever the source provided them — this is
+            // what makes map pins and the collect-proximity check truthful.
+            let coordinate: CLLocationCoordinate2D
+            if let real = place.coordinate {
+                coordinate = real
+            } else {
+                // Legacy fallback (cached places from before coords were stored):
+                // deterministic ring placement at the right distance.
+                let distKm = place.distanceValue * 1.60934
+                let latOffset = distKm / 111.0
+                let lonOffset = distKm / (111.0 * cos(center.latitude * .pi / 180))
+                let angle = Double(abs(place.id.hashValue) % 360) * .pi / 180.0
+                coordinate = CLLocationCoordinate2D(
+                    latitude: center.latitude + latOffset * cos(angle),
+                    longitude: center.longitude + lonOffset * sin(angle)
+                )
+            }
 
             return CollectiblePlace(
                 id: place.id,
                 place: place,
                 rarity: CollectiblePlace.rarityFor(place.category),
-                coordinate: CLLocationCoordinate2D(latitude: coordLat, longitude: coordLon)
+                coordinate: coordinate
             )
         }
     }
@@ -481,10 +493,14 @@ private struct CachedPlace: Codable {
     let shortDescription: String
     let distance: String
     let distanceValue: Double
-    let rating: Double
-    let reviewCount: Int
+    let rating: Double?      // optional → caches from the fabricated-rating era still decode
+    let reviewCount: Int?
     let imagePlaceholder: String
     let isFeatured: Bool
+    let latitude: Double?
+    let longitude: Double?
+    let photoURL: String?
+    let openHoursReal: String?
 
     init(from place: Place) {
         self.id = place.id
@@ -497,6 +513,10 @@ private struct CachedPlace: Codable {
         self.reviewCount = place.reviewCount
         self.imagePlaceholder = place.imagePlaceholder
         self.isFeatured = place.isFeatured
+        self.latitude = place.latitude
+        self.longitude = place.longitude
+        self.photoURL = place.photoURL
+        self.openHoursReal = place.openHoursReal
     }
 
     func toPlace() -> Place {
@@ -512,7 +532,11 @@ private struct CachedPlace: Codable {
             reviewCount: reviewCount,
             imagePlaceholder: imagePlaceholder,
             accentColor: category.tint,
-            isFeatured: isFeatured
+            isFeatured: isFeatured,
+            latitude: latitude,
+            longitude: longitude,
+            photoURL: photoURL,
+            openHoursReal: openHoursReal
         )
     }
 }

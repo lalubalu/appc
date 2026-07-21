@@ -16,7 +16,9 @@ final class GameStateManagerTests: XCTestCase {
 
     private let gameStateKeys = [
         "collectedPlaceIDs", "checkedInEventIDs", "pointsBalance", "lifetimePoints",
-        "redeemedRewardIDs", "savedEventIDs", "pendingServerOps",
+        "redeemedRewardIDs", "savedEventIDs", "savedPlaceIDs", "pendingServerOps",
+        "earnHistory", "streakCount", "streakLastDay", "challengeBonusXP",
+        "completedChallengeKeys", "earnedBadges", "notificationInbox",
     ]
 
     override func setUp() async throws {

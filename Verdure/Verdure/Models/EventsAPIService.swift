@@ -281,7 +281,7 @@ final class EventsAPIService {
                 date: date,
                 time: time,
                 locationName: locationName,
-                attendeeCount: Int.random(in: 10...120),
+                attendeeCount: 0,   // SerpApi provides no attendance data — never fabricate it
                 maxAttendees: nil,
                 category: category,
                 imagePlaceholder: category.icon,

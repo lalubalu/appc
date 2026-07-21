@@ -171,26 +171,27 @@ enum RubikWeight: String {
 
 /// Verdure type ramp. Display = Fredoka (chunky rounded, headers only).
 /// Everything else = Rubik (legible at small sizes).
+///
+/// DYNAMIC TYPE: every variant scales with the user's text-size setting
+/// (`relativeTo:`), so the whole app honors accessibility sizes without
+/// per-call-site adoption. Display tracks .title2 (headers), body/num track
+/// .body. Existing lineLimit/minimumScaleFactor guards keep tight layouts
+/// usable at the largest sizes.
 enum VType {
     // Display — Fredoka. Hero + short section headers ONLY.
     static func display(_ size: CGFloat = 40, _ w: FredokaWeight = .semibold) -> Font {
-        .custom(w.rawValue, size: size)
+        .custom(w.rawValue, size: size, relativeTo: .title2)
     }
     // Body / UI — Rubik.
     static func body(_ size: CGFloat = 16, _ w: RubikWeight = .regular) -> Font {
-        .custom(w.rawValue, size: size)
+        .custom(w.rawValue, size: size, relativeTo: .body)
     }
     /// Tabular-number Rubik for stats/counters (pair with .monospacedDigit()).
     static func num(_ size: CGFloat = 16, _ w: RubikWeight = .bold) -> Font {
-        .custom(w.rawValue, size: size)
+        .custom(w.rawValue, size: size, relativeTo: .body)
     }
 
-    // MARK: Dynamic Type–aware variants
-    //
-    // Same faces, but they scale with the user's text-size setting. Adopted
-    // incrementally, starting with the flows touched most recently (check-in,
-    // paywall). Prefer these over the fixed variants in new/updated UI.
-
+    // Explicit-relative variants (same faces; pick the text style yourself).
     static func scaledDisplay(_ size: CGFloat, _ w: FredokaWeight = .semibold,
                               relativeTo style: Font.TextStyle = .title3) -> Font {
         .custom(w.rawValue, size: size, relativeTo: style)

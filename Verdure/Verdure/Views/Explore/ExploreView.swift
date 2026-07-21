@@ -3,6 +3,7 @@ import SwiftUI
 struct ExploreView: View {
     @Environment(GameStateManager.self) private var gameState
     @Environment(PlacesAPIService.self) private var placesService
+    @Environment(AuthService.self) private var authService
     @State private var showGem = false
     @State private var showNotifications = false
     @State private var placeSearch = ""
@@ -33,9 +34,9 @@ struct ExploreView: View {
             return matchesFilter && matchesSearch
         }
     }
-    private var level: Int { max(1, gameState.lifetimePoints / 500 + 1) }
-    private var xpInLevel: Int { gameState.lifetimePoints % 500 }
-    private var levelProgress: Double { Double(xpInLevel) / 500.0 }
+    private var level: Int { gameState.level }
+    private var xpInLevel: Int { gameState.xpInLevel }
+    private var levelProgress: Double { gameState.levelProgress }
 
     var body: some View {
         NavigationStack {
@@ -86,7 +87,7 @@ struct ExploreView: View {
                 }
             }
             .buttonStyle(.plain)
-            UserAvatar(initials: "ME", size: 46, accent: Palette.spruce)
+            UserAvatar(initials: authService.currentUser?.initials ?? "ME", size: 46, accent: Palette.spruce)
         }
     }
 
@@ -101,7 +102,7 @@ struct ExploreView: View {
         HStack(spacing: 12) {
             levelTile
             VStack(spacing: 12) {
-                statTile(value: "\(SampleData.currentUser.currentStreak)", unit: "day streak",
+                statTile(value: "\(gameState.currentStreak)", unit: "day streak",
                          icon: "flame.fill", kind: .terracotta)
                 statTile(value: "\(gameState.pointsBalance)", unit: "points",
                          icon: "leaf.circle.fill", kind: .gold)
@@ -240,7 +241,7 @@ struct ExploreView: View {
                               accent: Palette.gold.base)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 14) {
-                    ForEach(Array(SampleData.challenges.enumerated()), id: \.element.id) { i, c in
+                    ForEach(Array(GamificationEngine.challenges(for: gameState).enumerated()), id: \.element.id) { i, c in
                         QuestCard(challenge: c, kind: [.teal, .gold, .spruce, .terracotta][i % 4])
                     }
                 }
@@ -367,9 +368,21 @@ private struct NearbyCard: View {
                     .fill(place.category.accent.faceGradient)
                     .frame(height: 110)
                     .overlay {
-                        Image(systemName: place.imagePlaceholder)
-                            .font(.system(size: 42, weight: .semibold))
-                            .foregroundStyle(place.category.accent.onColor.opacity(0.9))
+                        if let urlString = place.photoURL, let url = URL(string: urlString) {
+                            // Real photo when the source provides one.
+                            AsyncImage(url: url) { image in
+                                image.resizable().scaledToFill()
+                            } placeholder: {
+                                Image(systemName: place.imagePlaceholder)
+                                    .font(.system(size: 42, weight: .semibold))
+                                    .foregroundStyle(place.category.accent.onColor.opacity(0.9))
+                            }
+                            .frame(height: 110)
+                        } else {
+                            Image(systemName: place.imagePlaceholder)
+                                .font(.system(size: 42, weight: .semibold))
+                                .foregroundStyle(place.category.accent.onColor.opacity(0.9))
+                        }
                     }
                 if collected {
                     VStack { HStack { Spacer()
@@ -385,7 +398,9 @@ private struct NearbyCard: View {
                 Text(place.name).font(VType.display(15, .semibold)).foregroundStyle(Palette.ink).lineLimit(1)
                 HStack(spacing: 10) {
                     Label(place.distance, systemImage: "location.fill")
-                    Label(String(format: "%.1f", place.rating), systemImage: "star.fill")
+                    if let rating = place.rating {   // only show REAL ratings
+                        Label(String(format: "%.1f", rating), systemImage: "star.fill")
+                    }
                 }
                 .font(VType.num(11, .semibold)).foregroundStyle(Palette.inkFaint)
             }

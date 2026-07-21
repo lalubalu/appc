@@ -27,9 +27,11 @@ struct ProfileView: View {
     private var displayName: String { authService.currentUser?.displayName ?? "Explorer" }
     private var initials: String { authService.currentUser?.initials ?? "ME" }
     private var joinDate: String { authService.currentUser?.joinDateFormatted ?? "March 2026" }
-    private var totalXP: Int { gameState.lifetimePoints * 2 }
-    private var level: Int { totalXP / 500 + 1 }
-    private var levelProgress: Double { Double(totalXP % 500) / 500.0 }
+    private var totalXP: Int { gameState.totalXP }
+    private var level: Int { gameState.level }
+    private var levelProgress: Double { gameState.levelProgress }
+    private var badges: [Badge] { GamificationEngine.badges(for: gameState) }
+    private var challenges: [Challenge] { GamificationEngine.challenges(for: gameState) }
 
     var body: some View {
         NavigationStack {
@@ -50,10 +52,10 @@ struct ProfileView: View {
                 RewardsStoreView().environment(gameState)
             }
             .sheet(isPresented: $showAllBadges) {
-                AllBadgesView(badges: SampleData.currentUser.badges)
+                AllBadgesView(badges: badges)
             }
             .sheet(isPresented: $showAllChallenges) {
-                AllChallengesView(challenges: SampleData.challenges)
+                AllChallengesView(challenges: challenges)
             }
             .sheet(isPresented: $showAbout) { AboutVerdureView() }
             .sheet(isPresented: $showNotifSettings) { NotificationSettingsView() }
@@ -199,7 +201,7 @@ struct ProfileView: View {
         HStack(spacing: 10) {
             statTile(gameState.totalEventsAttended, "Events", "calendar.badge.checkmark", .spruce, dy: 0)
             statTile(gameState.totalCollected, "Places", "leaf.fill", .teal, dy: 14)
-            statTile(SampleData.currentUser.currentStreak, "Streak", "flame.fill", .terracotta, dy: 0)
+            statTile(gameState.currentStreak, "Streak", "flame.fill", .terracotta, dy: 0)
             statTile(gameState.lifetimePoints, "Lifetime", "sparkles", .gold, dy: 14)
         }
     }
@@ -224,7 +226,6 @@ struct ProfileView: View {
     private var badgesConstellation: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
             SectionHeader(title: "Badges", action: "See All") { Haptics.tap(); showAllBadges = true }
-            let badges = SampleData.currentUser.badges
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 22) {
                 ForEach(Array(badges.enumerated()), id: \.element.id) { i, badge in
                     Button { Haptics.soft(); selectedBadge = badge } label: {
@@ -270,7 +271,7 @@ struct ProfileView: View {
             SectionHeader(title: "Active Challenges", action: "View All") { Haptics.tap(); showAllChallenges = true }
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
-                    ForEach(Array(SampleData.challenges.enumerated()), id: \.element.id) { i, c in
+                    ForEach(Array(challenges.enumerated()), id: \.element.id) { i, c in
                         Button { Haptics.soft(); selectedChallenge = c } label: {
                             challengeCard(c, kind: [.teal, .gold, .spruce, .terracotta][i % 4])
                         }

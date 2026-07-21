@@ -46,6 +46,7 @@ struct RootView: View {
                     .onAppear {
                         locationManager.requestPermission()
                         connectServicesIfNeeded()
+                        gameState.recordActiveDay()   // real daily streak
                         checkDailyGem()
                         if NotificationManager.shared.enabled {
                             Task { await NotificationManager.shared.requestPermission() }
@@ -61,6 +62,7 @@ struct RootView: View {
                     }
                     .onChange(of: scenePhase) { _, phase in
                         guard phase == .active else { return }
+                        gameState.recordActiveDay()   // streak counts foregrounds across days
                         // First foreground of a new day → show the Daily Gem.
                         checkDailyGem()
                         // Retry any earn-ops queued while offline.
@@ -93,6 +95,10 @@ struct RootView: View {
     private func checkDailyGem() {
         guard DailyGemStore.shouldShowSplash else { return }
         DailyGemStore.markSplashShown()
-        dailyGemFact = DailyGemStore.todaysFact
+        let fact = DailyGemStore.todaysFact
+        dailyGemFact = fact
+        NotificationManager.shared.push(AppNotification(
+            kind: .gem, title: "Today's Daily Gem",
+            message: fact.text, timeAgo: "now"))
     }
 }

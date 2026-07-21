@@ -3,23 +3,49 @@ import SwiftUI
 struct CommunityView: View {
     @Environment(FirestoreService.self) private var firestore
     @Environment(AuthService.self) private var authService
-    @State private var posts: [CommunityPost] = SampleData.communityPosts
+    @State private var posts: [CommunityPost] = []
+    @State private var loadedRemote = false
     @State private var newPostText = ""
     @State private var showNewPost = false
     @State private var selectedProfile: CommunityProfile?
 
-    /// Load real community posts from Firestore; fall back to sample data when there
-    /// are none yet (or the user isn't signed in, since the feed requires auth).
+    /// Posts shown in the feed: real Firestore posts when any exist; the sample
+    /// starter feed only as a cold-start placeholder (never mixed together).
+    private var feedPosts: [CommunityPost] {
+        posts.isEmpty ? SampleData.communityPosts : posts
+    }
+    private var isShowingSamples: Bool { posts.isEmpty }
+
+    /// Load real community posts from Firestore (requires auth for reads).
     private func loadPosts() async {
         let remote = await firestore.fetchRecentPosts()
-        if !remote.isEmpty { posts = remote + SampleData.communityPosts.prefix(2) }
+        loadedRemote = true
+        if !remote.isEmpty { posts = remote }
     }
 
-    private let storyNames: [(String, String)] = [
-        ("MC", "Maya"), ("JE", "Jordan"), ("PS", "Priya"), ("AR", "Alex"), ("TK", "Tomo"), ("LW", "Lena")
-    ]
-    private let trending = ["Botanica Gardens", "Hawk Ridge", "Marina Point", "The Commons",
-                            "Riverside Park", "Overlook Bluff", "Cedar Court"]
+    // MARK: Derived — real data only
+
+    private var myInitials: String { authService.currentUser?.initials ?? "ME" }
+    private var myName: String { authService.currentUser?.displayName ?? "You" }
+
+    /// Story rail = the actual authors in the feed (deduped, excluding you).
+    private var feedAuthors: [(initials: String, name: String)] {
+        var seen = Set<String>()
+        var result: [(String, String)] = []
+        for post in feedPosts where post.authorName != myName && seen.insert(post.authorName).inserted {
+            result.append((post.authorInitials, post.authorName.components(separatedBy: " ").first ?? post.authorName))
+        }
+        return Array(result.prefix(8))
+    }
+
+    /// Trending = the places actually being posted about, by frequency.
+    private var trendingPlaces: [String] {
+        var counts: [String: Int] = [:]
+        for post in feedPosts where !post.placeName.isEmpty && post.placeName != "Nearby" {
+            counts[post.placeName, default: 0] += 1
+        }
+        return counts.sorted { $0.value > $1.value }.map(\.key)
+    }
 
     var body: some View {
         NavigationStack {
@@ -28,7 +54,7 @@ struct CommunityView: View {
                     VStack(alignment: .leading, spacing: Spacing.lg) {
                         header.dramaticRise(index: 0)
                         storyRail.dramaticRise(index: 1)
-                        trendingTicker.dramaticRise(index: 2)
+                        if trendingPlaces.count >= 2 { trendingTicker.dramaticRise(index: 2) }
                         feed
                     }
                     .padding(.top, Spacing.sm)
@@ -40,7 +66,10 @@ struct CommunityView: View {
             .sheet(isPresented: $showNewPost) {
                 newPostSheet.presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
             }
-            .sheet(item: $selectedProfile) { CommunityProfileSheet(profile: $0) }
+            .sheet(item: $selectedProfile) { profile in
+                CommunityProfileSheet(profile: profile,
+                                      posts: feedPosts.filter { $0.authorName == profile.name })
+            }
             .task { await loadPosts() }
             .refreshable { await loadPosts() }
         }
@@ -58,27 +87,41 @@ struct CommunityView: View {
             Text("Community").font(VType.display(44, .bold)).foregroundStyle(Palette.ink)
             HStack(spacing: 6) {
                 Circle().fill(Palette.teal.base).frame(width: 8, height: 8).breathing(scale: 1.4, duration: 1.4)
-                CountUp(value: 247).font(VType.num(14, .bold)).foregroundStyle(Palette.ink)
-                Text("explorers active now").font(VType.body(13, .medium)).foregroundStyle(Palette.inkSoft)
+                if isShowingSamples {
+                    Text("Starter stories — yours will replace them")
+                        .font(VType.body(13, .medium)).foregroundStyle(Palette.inkSoft)
+                } else {
+                    CountUp(value: posts.count).font(VType.num(14, .bold)).foregroundStyle(Palette.ink)
+                    Text(posts.count == 1 ? "recent post nearby" : "recent posts nearby")
+                        .font(VType.body(13, .medium)).foregroundStyle(Palette.inkSoft)
+                }
             }
         }
         .padding(.horizontal, Spacing.md)
+        .accessibilityElement(children: .combine)
     }
 
-    // MARK: - Story rail
+    // MARK: - Story rail (real authors from the feed)
 
     private var storyRail: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 16) {
-                StoryRing(initials: "ME", name: "Your story", accent: Palette.spruce, isYou: true)
+                StoryRing(initials: myInitials, name: "Your story", accent: Palette.spruce, isYou: true)
                     .onTapGesture { Haptics.tap(); showNewPost = true }
-                ForEach(Array(storyNames.enumerated()), id: \.offset) { i, s in
+                    .accessibilityLabel("Share your story")
+                    .accessibilityHint("Opens the new post composer.")
+                    .accessibilityAddTraits(.isButton)
+                ForEach(Array(feedAuthors.enumerated()), id: \.offset) { i, author in
                     let accent = Palette.accentCycle[i % Palette.accentCycle.count]
-                    StoryRing(initials: s.0, name: s.1, accent: accent, isYou: false)
+                    StoryRing(initials: author.initials, name: author.name, accent: accent, isYou: false)
                         .onTapGesture {
                             Haptics.soft()
-                            selectedProfile = CommunityProfile(name: s.1, initials: s.0, accent: accent)
+                            selectedProfile = CommunityProfile(
+                                name: feedPosts.first { $0.authorInitials == author.initials }?.authorName ?? author.name,
+                                initials: author.initials, accent: accent)
                         }
+                        .accessibilityLabel("View \(author.name)'s posts")
+                        .accessibilityAddTraits(.isButton)
                 }
             }
             .padding(.horizontal, Spacing.md)
@@ -86,7 +129,7 @@ struct CommunityView: View {
         }
     }
 
-    // MARK: - Trending marquee
+    // MARK: - Trending (real place frequency from posts)
 
     private var trendingTicker: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -94,7 +137,7 @@ struct CommunityView: View {
                 .foregroundStyle(Palette.inkSoft).padding(.horizontal, Spacing.md)
             Marquee(spacing: 12, speed: 36) {
                 HStack(spacing: 12) {
-                    ForEach(Array(trending.enumerated()), id: \.offset) { i, t in
+                    ForEach(Array(trendingPlaces.enumerated()), id: \.offset) { i, t in
                         HStack(spacing: 6) {
                             Image(systemName: "flame.fill").font(.system(size: 10, weight: .bold))
                                 .foregroundStyle(Palette.accentCycle[i % Palette.accentCycle.count].base)
@@ -113,15 +156,20 @@ struct CommunityView: View {
 
     private var feed: some View {
         LazyVStack(spacing: 18) {
-            ForEach(Array(posts.enumerated()), id: \.element.id) { i, post in
+            ForEach(Array(feedPosts.enumerated()), id: \.element.id) { i, post in
                 HStack(spacing: 0) {
                     if i % 2 == 1 { Spacer(minLength: 26) }
                     PostCard(post: post, accent: kind(for: i)) {
-                        guard post.authorName != "You" else { return }
+                        guard post.authorName != myName else { return }
                         Haptics.soft()
                         selectedProfile = CommunityProfile(name: post.authorName,
                                                            initials: post.authorInitials,
                                                            accent: kind(for: i).accent)
+                    } onLike: {
+                        // Real like: persists to Firestore (rules allow +1 on likeCount).
+                        if let docID = post.docID {
+                            Task { await firestore.likePost(docID: docID) }
+                        }
                     }
                         .rotationEffect(.degrees(i % 2 == 0 ? -1.2 : 1.2))
                     if i % 2 == 0 { Spacer(minLength: 26) }
@@ -149,6 +197,7 @@ struct CommunityView: View {
         .breathing(scale: 1.06, duration: 2.2)
         .padding(.trailing, Spacing.lg)
         .padding(.bottom, 100)
+        .accessibilityLabel("New post")
     }
 
     // MARK: - New post sheet
@@ -159,10 +208,11 @@ struct CommunityView: View {
                 VerdureBackground()
                 VStack(alignment: .leading, spacing: Spacing.md) {
                     HStack(spacing: Spacing.sm) {
-                        AvatarCircle(initials: "ME", size: 42, accent: Palette.teal)
+                        AvatarCircle(initials: myInitials, size: 42, accent: Palette.teal)
                         VStack(alignment: .leading, spacing: 1) {
-                            Text("You").font(VType.display(15, .semibold)).foregroundStyle(Palette.ink)
-                            Text("Posting to the neighborhood")
+                            Text(myName).font(VType.display(15, .semibold)).foregroundStyle(Palette.ink)
+                            Text(authService.isAuthenticated ? "Posting to the neighborhood"
+                                                             : "Sign in to share with the neighborhood")
                                 .font(VType.body(12)).foregroundStyle(Palette.inkSoft)
                         }
                         Spacer()
@@ -171,15 +221,9 @@ struct CommunityView: View {
                         .font(VType.body(16)).foregroundStyle(Palette.ink)
                         .lineLimit(5...10).padding(14)
                         .background(ClayBackground(style: .inset, radius: Radius.sm))
-                    HStack(spacing: Spacing.md) {
-                        attachmentButton(icon: "photo.fill", label: "Photo", kind: .teal)
-                        attachmentButton(icon: "mappin", label: "Location", kind: .gold)
-                        attachmentButton(icon: "face.smiling", label: "Feeling", kind: .terracotta)
-                        Spacer()
-                    }
                     ClayButton("Share Post", systemImage: "paperplane.fill", kind: .spruce, fullWidth: true) { post() }
-                        .disabled(newPostText.trimmingCharacters(in: .whitespaces).isEmpty)
-                        .opacity(newPostText.trimmingCharacters(in: .whitespaces).isEmpty ? 0.5 : 1)
+                        .disabled(newPostText.trimmingCharacters(in: .whitespaces).isEmpty || !authService.isAuthenticated)
+                        .opacity(newPostText.trimmingCharacters(in: .whitespaces).isEmpty || !authService.isAuthenticated ? 0.5 : 1)
                     Spacer()
                 }
                 .padding(Spacing.md)
@@ -195,10 +239,8 @@ struct CommunityView: View {
 
     private func post() {
         let text = newPostText.trimmingCharacters(in: .whitespaces)
-        guard !text.isEmpty else { return }
-        let name = authService.currentUser?.displayName ?? "You"
-        let initials = authService.currentUser?.initials ?? "ME"
-        let new = CommunityPost(authorName: name, authorInitials: initials,
+        guard !text.isEmpty, let uid = authService.currentUser?.uid else { return }
+        let new = CommunityPost(authorName: myName, authorInitials: myInitials,
                                 placeName: "Your neighborhood", content: text,
                                 timeAgo: "now", likeCount: 0, commentCount: 0, imagePlaceholder: nil)
         // Optimistic local insert for instant UI…
@@ -206,18 +248,12 @@ struct CommunityView: View {
         newPostText = ""
         Haptics.success()
         showNewPost = false
-        // …then persist to Firestore so it's shared (when signed in).
-        if let uid = authService.currentUser?.uid {
-            Task { _ = await firestore.createPost(authorID: uid, authorName: name,
-                                                  authorInitials: initials,
-                                                  placeName: "Your neighborhood", content: text) }
-        }
-    }
-
-    private func attachmentButton(icon: String, label: String, kind: ClayStyle.ClayAccentKind) -> some View {
-        VStack(spacing: 6) {
-            ClayIconTile(systemImage: icon, kind: kind, size: 46, radius: Radius.chip)
-            Text(label).font(VType.body(11, .medium)).foregroundStyle(Palette.inkSoft)
+        // …then persist to Firestore so it's shared.
+        Task {
+            _ = await firestore.createPost(authorID: uid, authorName: myName,
+                                           authorInitials: myInitials,
+                                           placeName: "Your neighborhood", content: text)
+            await loadPosts()   // pick up the server copy (with its docID for likes)
         }
     }
 }
@@ -267,11 +303,22 @@ private struct PostCard: View {
     let post: CommunityPost
     let accent: ClayStyle.ClayAccentKind
     var onProfile: () -> Void = {}
+    var onLike: () -> Void = {}
     @State private var liked = false
     @State private var bump = false
     @State private var burst = false
 
     private var likeCount: Int { post.likeCount + (liked ? 1 : 0) }
+
+    /// Local persisted set of liked posts, so hearts survive relaunches and the
+    /// same post can't be liked twice from this device.
+    private static let likedKey = "likedPostIDs"
+    private static func likedSet() -> Set<String> {
+        Set(UserDefaults.standard.stringArray(forKey: likedKey) ?? [])
+    }
+    private static func markLiked(_ id: String) {
+        UserDefaults.standard.set(Array(likedSet().union([id])), forKey: likedKey)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
@@ -294,31 +341,16 @@ private struct PostCard: View {
                     }
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("\(post.authorName), posted at \(post.placeName)")
                 Spacer()
                 Text(post.timeAgo).font(VType.body(12, .medium)).foregroundStyle(Palette.inkFaint)
             }
 
             Text(post.content).font(VType.body(15)).foregroundStyle(Palette.ink).lineSpacing(3)
 
-            if post.imagePlaceholder != nil {
-                RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
-                    .fill(accent.accent.faceGradient)
-                    .frame(height: 190)
-                    .overlay {
-                        Image(systemName: "photo.fill").font(.system(size: 38, weight: .semibold))
-                            .foregroundStyle(accent.accent.onColor.opacity(0.7))
-                    }
-                    .overlay(RoundedRectangle(cornerRadius: Radius.sm, style: .continuous)
-                        .strokeBorder(.white.opacity(0.18), lineWidth: 1))
-                    .shimmer()
-            }
-
             HStack(spacing: Spacing.lg) {
                 likeButton
-                action("bubble.right", "\(post.commentCount)")
-                action("arrow.turn.up.right", nil)
                 Spacer()
-                Image(systemName: "bookmark").font(.system(size: 14, weight: .semibold)).foregroundStyle(Palette.inkFaint)
             }
         }
         .padding(Spacing.md)
@@ -327,17 +359,21 @@ private struct PostCard: View {
             Capsule().fill(accent.accent.faceGradient)
                 .frame(width: 4).padding(.vertical, Spacing.md).padding(.leading, 4).opacity(0.6)
         }
+        .onAppear {
+            if let docID = post.docID, Self.likedSet().contains(docID) { liked = true }
+        }
     }
 
     private var likeButton: some View {
         Button {
-            liked.toggle()
+            guard !liked else { return }   // one like per device
+            liked = true
+            if let docID = post.docID { Self.markLiked(docID) }
+            onLike()
             Haptics.soft()
             withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) { bump.toggle() }
-            if liked {
-                burst = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { burst = false }
-            }
+            burst = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { burst = false }
         } label: {
             HStack(spacing: 5) {
                 ZStack {
@@ -357,14 +393,8 @@ private struct PostCard: View {
             .foregroundStyle(liked ? Palette.terracotta.base : Palette.inkSoft)
         }
         .buttonStyle(.plain)
-    }
-
-    private func action(_ icon: String, _ count: String?) -> some View {
-        HStack(spacing: 5) {
-            Image(systemName: icon).font(.system(size: 14, weight: .semibold))
-            if let count { Text(count).font(VType.num(12, .semibold)) }
-        }
-        .foregroundStyle(Palette.inkSoft)
+        .accessibilityLabel(liked ? "Liked, \(likeCount) likes" : "Like, \(likeCount) likes")
+        .accessibilityAddTraits(.isButton)
     }
 }
 
@@ -381,28 +411,19 @@ struct CommunityProfile: Identifiable {
     let name: String
     let initials: String
     let accent: ClayAccent
-
-    // Deterministic demo stats derived from the name (stable across launches).
-    private var seed: Int { name.unicodeScalars.reduce(0) { $0 + Int($1.value) } }
-    var level: Int { 2 + seed % 18 }
-    var points: Int { 200 + (seed % 36) * 75 }
-    var places: Int { 5 + seed % 45 }
-    var events: Int { 1 + seed % 28 }
-    var streak: Int { seed % 45 }
-    var memberSince: String { ["January", "February", "March", "April", "May"][seed % 5] + " 2026" }
-    var levelProgress: Double { Double((seed * 37) % 100) / 100.0 }
 }
 
+/// Honest member sheet: shows only what we actually know — the member's posts
+/// from the current feed. (No fabricated levels/stats/follow mechanics.)
 struct CommunityProfileSheet: View {
     let profile: CommunityProfile
+    var posts: [CommunityPost] = []
     @Environment(\.dismiss) private var dismiss
-    @State private var following = false
 
     var body: some View {
         NavigationStack {
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: Spacing.lg) {
-                    // Hero
                     VStack(spacing: Spacing.md) {
                         ZStack {
                             PulseHalo(color: profile.accent.base.opacity(0.5), size: 120, lineWidth: 2)
@@ -411,50 +432,42 @@ struct CommunityProfileSheet: View {
                         }
                         .frame(height: 124).padding(.top, Spacing.sm)
                         Text(profile.name).font(VType.display(28, .bold)).foregroundStyle(Palette.ink)
-                        HStack(spacing: 8) {
-                            Text("LEVEL \(profile.level)").font(VType.body(12, .bold)).tracking(1)
-                                .foregroundStyle(profile.accent.onColor)
-                                .padding(.horizontal, 10).padding(.vertical, 5)
-                                .background(ClayBackground(style: .accent(.spruce), radius: Radius.chip, elevation: 0.3))
-                            Text("Member since \(profile.memberSince)")
-                                .font(VType.body(12, .medium)).foregroundStyle(Palette.inkSoft)
-                        }
+                        Text(posts.count == 1 ? "1 post in the neighborhood feed"
+                                              : "\(posts.count) posts in the neighborhood feed")
+                            .font(VType.body(13, .medium)).foregroundStyle(Palette.inkSoft)
                     }
 
-                    // Level progress
-                    VStack(spacing: Spacing.sm) {
-                        HStack {
-                            Text("Progress to level \(profile.level + 1)")
-                                .font(VType.body(13, .semibold)).foregroundStyle(Palette.inkSoft)
+                    if posts.isEmpty {
+                        HStack(spacing: 8) {
+                            Image(systemName: "bubble.left").foregroundStyle(Palette.inkFaint)
+                            Text("No posts from this member yet.")
+                                .font(VType.body(14)).foregroundStyle(Palette.inkSoft)
                             Spacer()
-                            Text("\(Int(profile.levelProgress * 100))%").font(VType.num(13, .bold))
+                        }
+                        .padding(Spacing.md)
+                        .background(ClayBackground(style: .inset, radius: Radius.md))
+                    } else {
+                        ForEach(posts) { post in
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "mappin").font(.system(size: 9, weight: .bold))
+                                    Text(post.placeName).font(VType.body(12, .semibold))
+                                    Spacer()
+                                    Text(post.timeAgo).font(VType.body(11, .medium)).foregroundStyle(Palette.inkFaint)
+                                }
                                 .foregroundStyle(profile.accent.base)
+                                Text(post.content).font(VType.body(14)).foregroundStyle(Palette.ink).lineSpacing(3)
+                                HStack(spacing: 5) {
+                                    Image(systemName: "heart.fill").font(.system(size: 11, weight: .bold))
+                                        .foregroundStyle(Palette.terracotta.base)
+                                    Text("\(post.likeCount)").font(VType.num(12, .semibold)).foregroundStyle(Palette.inkSoft)
+                                }
+                            }
+                            .padding(Spacing.md)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .claySurface(.surface, radius: Radius.md, elevation: 0.7)
                         }
-                        ClayProgressBar(value: profile.levelProgress,
-                                        gradient: [profile.accent.depth, profile.accent.base], height: 14)
                     }
-                    .padding(Spacing.md).claySurface(.surface, radius: Radius.md)
-
-                    // Stats — color-coded
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                        statTile("\(profile.places)", "Places", "leaf.fill", .teal)
-                        statTile("\(profile.events)", "Events", "calendar.badge.checkmark", .spruce)
-                        statTile("\(profile.streak)", "Day streak", "flame.fill", .terracotta)
-                        statTile("\(profile.points)", "Points", "sparkles", .gold)
-                    }
-
-                    Button { Haptics.tap(); withAnimation(.spring(response: 0.3)) { following.toggle() } } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: following ? "checkmark" : "person.badge.plus")
-                                .font(.system(size: 15, weight: .bold))
-                            Text(following ? "Following" : "Follow")
-                                .font(VType.body(16, .bold))
-                        }
-                        .foregroundStyle(following ? Palette.spruce.base : Palette.spruce.onColor)
-                        .frame(maxWidth: .infinity).padding(.vertical, 15)
-                        .background(ClayBackground(style: following ? .surface : .accent(.spruce), radius: Radius.md))
-                    }
-                    .buttonStyle(.plain)
 
                     Spacer(minLength: 0)
                 }
@@ -469,22 +482,10 @@ struct CommunityProfileSheet: View {
                         Image(systemName: "xmark").font(.system(size: 14, weight: .bold))
                             .foregroundStyle(Palette.inkSoft)
                     }
+                    .accessibilityLabel("Close")
                 }
             }
         }
         .presentationDetents([.large])
-    }
-
-    private func statTile(_ value: String, _ label: String, _ icon: String, _ kind: ClayStyle.ClayAccentKind) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Image(systemName: icon).font(.system(size: 18, weight: .bold)).foregroundStyle(kind.accent.base)
-            Text(value).font(VType.num(26, .bold)).foregroundStyle(Palette.ink)
-                .lineLimit(1).minimumScaleFactor(0.5)
-            Text(label).font(VType.body(11, .medium)).foregroundStyle(Palette.inkSoft)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading).padding(Spacing.md)
-        .claySurface(.surface, radius: Radius.md, elevation: 0.8)
-        .overlay(RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
-            .strokeBorder(kind.accent.base.opacity(0.38), lineWidth: 1.5))
     }
 }
