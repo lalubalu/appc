@@ -210,10 +210,13 @@ struct ProfileView: View {
                           _ kind: ClayStyle.ClayAccentKind, dy: CGFloat) -> some View {
         VStack(spacing: 7) {
             Image(systemName: icon).font(.system(size: 16, weight: .bold)).foregroundStyle(kind.accent.base)
+                .accessibilityHidden(true)   // decorative glyph
             CountUp(value: value).font(VType.num(22, .bold)).monospacedDigit().foregroundStyle(Palette.ink)
                 .lineLimit(1).minimumScaleFactor(0.5)
             Text(label).font(VType.body(10, .medium)).foregroundStyle(Palette.inkSoft).lineLimit(1)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(value) \(label)")
         .frame(maxWidth: .infinity).padding(.vertical, Spacing.md)
         .claySurface(.surface, radius: Radius.md, elevation: 0.8)
         .overlay(RoundedRectangle(cornerRadius: Radius.md, style: .continuous)

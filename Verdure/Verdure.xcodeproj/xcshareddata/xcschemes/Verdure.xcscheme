@@ -50,6 +50,17 @@
                ReferencedContainer = "container:Verdure.xcodeproj">
             </BuildableReference>
          </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "4F6684A127FD0F45ED0ECBD7"
+               BuildableName = "VerdureUITests.xctest"
+               BlueprintName = "VerdureUITests"
+               ReferencedContainer = "container:Verdure.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
       <CommandLineArguments>
       </CommandLineArguments>

@@ -1,4 +1,30 @@
 import SwiftUI
+
+// MARK: - QA motion kill-switch
+//
+// Continuous (repeatForever) animations never reach quiescence, which blocks
+// XCUITest's accessibility-audit snapshotter ("Audit failed to complete in
+// time"). UI tests launch with `-QADisableMotion YES` to freeze ambient motion;
+// release builds are unaffected.
+@MainActor
+enum QAMotion {
+    #if DEBUG
+    static let disabled = UserDefaults.standard.bool(forKey: "QADisableMotion")
+    #else
+    static let disabled = false
+    #endif
+}
+
+/// `-QAOfflineData YES`: skip live network fetches (cache/samples only) so
+/// screens settle instantly and deterministically for UI tests + audits.
+@MainActor
+enum QAData {
+    #if DEBUG
+    static let offline = UserDefaults.standard.bool(forKey: "QAOfflineData")
+    #else
+    static let offline = false
+    #endif
+}
 import CoreMotion
 
 // =====================================================================
@@ -82,6 +108,7 @@ struct Shimmer: ViewModifier {
                 }
                 .mask(content)
                 .onAppear {
+                    guard !QAMotion.disabled else { return }
                     withAnimation(.linear(duration: 2.4).repeatForever(autoreverses: false)) {
                         phase = 1.2
                     }
@@ -105,6 +132,7 @@ struct IdleFloat: ViewModifier {
         content
             .offset(y: up ? -distance : distance / 2)
             .onAppear {
+                guard !QAMotion.disabled else { return }
                 withAnimation(.easeInOut(duration: duration).repeatForever(autoreverses: true)) {
                     up = true
                 }
@@ -187,7 +215,7 @@ struct VerdureBackground: View {
         }
         .ignoresSafeArea()
         .onAppear {
-            guard !reduceMotion else { return }
+            guard !reduceMotion, !QAMotion.disabled else { return }
             withAnimation(.easeInOut(duration: 11).repeatForever(autoreverses: true)) { drift = 1 }
         }
     }
@@ -264,7 +292,7 @@ struct Breathing: ViewModifier {
         content
             .scaleEffect(on && !reduceMotion ? scale : 1)
             .onAppear {
-                guard !reduceMotion else { return }
+                guard !reduceMotion, !QAMotion.disabled else { return }
                 withAnimation(.easeInOut(duration: duration).repeatForever(autoreverses: true)) { on = true }
             }
     }
@@ -291,7 +319,7 @@ struct PulseHalo: View {
             .scaleEffect(pulse && !reduceMotion ? 1.9 : 1)
             .opacity(pulse && !reduceMotion ? 0 : 0.8)
             .onAppear {
-                guard !reduceMotion else { return }
+                guard !reduceMotion, !QAMotion.disabled else { return }
                 withAnimation(.easeOut(duration: 1.9).repeatForever(autoreverses: false)) { pulse = true }
             }
             .allowsHitTesting(false)
@@ -350,13 +378,13 @@ struct Marquee<Content: View>: View {
             })
             .offset(x: offset)
             .onAppear {
-                guard !reduceMotion, contentWidth > 0 else { return }
+                guard !reduceMotion, !QAMotion.disabled, contentWidth > 0 else { return }
                 withAnimation(.linear(duration: Double(contentWidth) / speed).repeatForever(autoreverses: false)) {
                     offset = -contentWidth - spacing
                 }
             }
             .onChange(of: contentWidth) { _, w in
-                guard !reduceMotion, w > 0 else { return }
+                guard !reduceMotion, !QAMotion.disabled, w > 0 else { return }
                 offset = 0
                 withAnimation(.linear(duration: Double(w) / speed).repeatForever(autoreverses: false)) {
                     offset = -w - spacing
@@ -382,7 +410,7 @@ struct FloatingBlob: View {
             .blur(radius: size * 0.3)
             .offset(y: f && !reduceMotion ? -size * 0.25 : size * 0.2)
             .onAppear {
-                guard !reduceMotion else { return }
+                guard !reduceMotion, !QAMotion.disabled else { return }
                 withAnimation(.easeInOut(duration: 3.4).repeatForever(autoreverses: true).delay(delay)) { f = true }
             }
             .allowsHitTesting(false)

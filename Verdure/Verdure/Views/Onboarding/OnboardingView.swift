@@ -66,16 +66,22 @@ struct OnboardingView: View {
                                 Text("Back").font(VType.body(15, .medium))
                             }
                             .foregroundStyle(Palette.inkSoft)
+                            .frame(minWidth: 44, minHeight: 44)   // a11y hit target
+                            .contentShape(Rectangle())
                         }
                         .padding(.leading, Spacing.lg).padding(.top, Spacing.md)
                     }
                     Spacer()
                     if currentPage < pages.count {
-                        Button("Skip") {
+                        Button {
                             withAnimation(.spring(response: 0.5)) { currentPage = pages.count }
+                        } label: {
+                            Text("Skip")
+                                .font(VType.body(15, .medium))
+                                .foregroundStyle(Palette.inkSoft)
+                                .frame(minWidth: 44, minHeight: 44)   // a11y hit target
+                                .contentShape(Rectangle())
                         }
-                        .font(VType.body(15, .medium))
-                        .foregroundStyle(Palette.inkSoft)
                         .padding(.trailing, Spacing.lg).padding(.top, Spacing.md)
                     }
                 }
@@ -108,8 +114,7 @@ struct OnboardingView: View {
                         }
                     }
                     .padding(.bottom, Spacing.sm)
-                    .accessibilityElement()
-                    .accessibilityLabel("Step \(currentPage + 1) of \(totalPages)")
+                    .accessibilityHidden(true)   // decorative dots — step info lives on the CTA hint
 
                     if let error = authService.errorMessage {
                         Text(error)
@@ -127,6 +132,7 @@ struct OnboardingView: View {
                         .disabled(isSubmitting)
                         .opacity(isSubmitting ? 0.6 : 1)
                         .padding(.horizontal, Spacing.lg)
+                        .accessibilityHint("Step \(currentPage + 1) of \(totalPages)")
                 }
                 .padding(.bottom, Spacing.xl)
             }

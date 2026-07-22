@@ -39,6 +39,7 @@ final class PlacesAPIService {
     /// Fetch nearby places from Overpass API around a coordinate.
     /// Falls back to SampleData on failure.
     func fetchNearbyPlaces(around center: CLLocationCoordinate2D) async {
+        if QAData.offline { return }   // QA: cached/sample data only
         // Skip if we already fetched for a nearby coordinate recently
         if let cached = cachedCenter, isCacheValid(),
            distance(cached, center) < 500 { // within 500m of cached center

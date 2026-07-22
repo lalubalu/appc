@@ -18,6 +18,7 @@ struct CommunityView: View {
 
     /// Load real community posts from Firestore (requires auth for reads).
     private func loadPosts() async {
+        if QAData.offline { loadedRemote = true; return }   // QA: sample feed
         let remote = await firestore.fetchRecentPosts()
         loadedRemote = true
         if !remote.isEmpty { posts = remote }
@@ -108,6 +109,7 @@ struct CommunityView: View {
             HStack(spacing: 16) {
                 StoryRing(initials: myInitials, name: "Your story", accent: Palette.spruce, isYou: true)
                     .onTapGesture { Haptics.tap(); showNewPost = true }
+                    .accessibilityElement(children: .combine)
                     .accessibilityLabel("Share your story")
                     .accessibilityHint("Opens the new post composer.")
                     .accessibilityAddTraits(.isButton)
@@ -120,6 +122,7 @@ struct CommunityView: View {
                                 name: feedPosts.first { $0.authorInitials == author.initials }?.authorName ?? author.name,
                                 initials: author.initials, accent: accent)
                         }
+                        .accessibilityElement(children: .combine)
                         .accessibilityLabel("View \(author.name)'s posts")
                         .accessibilityAddTraits(.isButton)
                 }
@@ -291,7 +294,7 @@ private struct StoryRing: View {
         }
         .frame(width: 72)
         .onAppear {
-            guard !reduceMotion else { return }
+            guard !reduceMotion, !QAMotion.disabled else { return }
             withAnimation(.linear(duration: 7).repeatForever(autoreverses: false)) { rot = true }
         }
     }
@@ -391,6 +394,8 @@ private struct PostCard: View {
                     .contentTransition(.numericText())
             }
             .foregroundStyle(liked ? Palette.terracotta.base : Palette.inkSoft)
+            .frame(minWidth: 44, minHeight: 44)   // a11y hit target
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(liked ? "Liked, \(likeCount) likes" : "Like, \(likeCount) likes")

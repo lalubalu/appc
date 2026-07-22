@@ -13,6 +13,7 @@ struct EventsView: View {
     @State private var showInterestPicker = false
     @State private var selectedCategory: EventCategory? = nil
     @State private var searchText = ""
+    @FocusState private var searchFocused: Bool
     @AppStorage("accountType") private var accountTypeRaw = AccountType.visitor.rawValue
     @AppStorage("interestCategories") private var interestCategoriesRaw = ""
     private var accountType: AccountType { AccountType(rawValue: accountTypeRaw) ?? .visitor }
@@ -269,10 +270,12 @@ struct EventsView: View {
                 Image(systemName: "calendar.badge.checkmark")
                     .font(.system(size: 42, weight: .semibold))
                     .foregroundStyle(Palette.evergreen.onColor.opacity(0.55))
+                    .accessibilityHidden(true)   // decorative glyph
             }
             .padding(Spacing.lg)
             .frame(maxWidth: .infinity)
             .background(ClayBackground(style: .accent(.evergreen), radius: Radius.lg, elevation: 1.1))
+            .accessibilityElement(children: .combine)
 
             // Search
             HStack(spacing: 10) {
@@ -281,14 +284,20 @@ struct EventsView: View {
                 TextField("Search events, hosts, places…", text: $searchText)
                     .font(VType.body(15)).foregroundStyle(Palette.ink)
                     .autocorrectionDisabled()
+                    .focused($searchFocused)
+                    .frame(minHeight: 44)
                 if !searchText.isEmpty {
                     Button { searchText = "" } label: {
                         Image(systemName: "xmark.circle.fill").foregroundStyle(Palette.inkFaint)
                     }
                 }
             }
-            .padding(.vertical, 13).padding(.horizontal, 16)
+            .padding(.horizontal, 16)
             .background(ClayBackground(style: .inset, radius: Radius.sm))
+            // The entire clay well focuses the field — a ≥44pt real-world target.
+            // (SwiftUI reports only the text rect to the a11y audit; see QAHelpers.)
+            .contentShape(Rectangle())
+            .onTapGesture { searchFocused = true }
 
             // Tappable category filter row
             ScrollView(.horizontal, showsIndicators: false) {
@@ -347,6 +356,11 @@ struct EventsView: View {
                                         .opacity(phase.isIdentity ? 1 : 0.55)
                                 }
                                 .onTapGesture { Haptics.soft(); selectedEvent = event }
+                                .accessibilityElement(children: .combine)
+                                .accessibilityLabel("\(event.title), \(event.category.rawValue), \(dateFormatter.string(from: event.date))")
+                                .accessibilityHint("Opens event details.")
+                                .accessibilityAddTraits(.isButton)
+                                .accessibilityIdentifier("event-poster")
                         }
                     }
                     .scrollTargetLayout()
@@ -394,6 +408,11 @@ struct EventsView: View {
                     TimelineRow(event: event, isCheckedIn: gameState.isCheckedIn(event.id),
                                 isLast: i == min(5, displayEvents.count) - 1)
                         .onTapGesture { Haptics.soft(); selectedEvent = event }
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel("\(event.title), \(dateFormatter.string(from: event.date)) at \(event.locationName)")
+                        .accessibilityHint("Opens event details.")
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityIdentifier("event-row-\(i)")
                 }
             }
             .padding(.horizontal, Spacing.md)

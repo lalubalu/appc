@@ -70,6 +70,7 @@ final class EventsAPIService {
 
     /// Fetch nearby events from SerpApi + Firestore around a coordinate.
     func fetchNearbyEvents(around center: CLLocationCoordinate2D) async {
+        if QAData.offline { return }   // QA: cached/sample data only
         // Skip if we fetched for a nearby coordinate recently
         if let cached = cachedCenter, let last = lastFetchDate,
            Date().timeIntervalSince(last) < fetchCooldown,

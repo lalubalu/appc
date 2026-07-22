@@ -183,6 +183,7 @@ private struct GemTile: View {
                                 Image(systemName: collectible.place.imagePlaceholder)
                                     .font(.system(size: height * 0.34, weight: .semibold))
                                     .foregroundStyle(collectible.rarity.accent.onColor.opacity(0.92))
+                                    .accessibilityHidden(true)   // decorative glyph
                             }
                             .overlay(alignment: .topTrailing) {
                                 Image(systemName: "checkmark.seal.fill")
@@ -248,6 +249,7 @@ private struct CategoryCollectionCard: View {
                     .frame(width: 46, height: 46).rotationEffect(.degrees(-90))
                 Image(systemName: category.icon).font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(category.accent.base)
+                    .accessibilityHidden(true)   // decorative glyph
             }
             Text(category.rawValue).font(VType.body(11, .semibold)).foregroundStyle(Palette.ink)
             Text("\(collected)/\(total)").font(VType.num(10, .bold)).foregroundStyle(Palette.inkSoft)
@@ -255,6 +257,8 @@ private struct CategoryCollectionCard: View {
         .frame(width: 88)
         .padding(.vertical, Spacing.md)
         .claySurface(.surface, radius: Radius.sm, elevation: 0.6)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(category.rawValue), \(collected) of \(total) collected")
     }
 }
 

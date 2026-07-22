@@ -27,7 +27,27 @@ private enum AppTab: Int, CaseIterable {
 }
 
 struct MainTabView: View {
-    @State private var selected: AppTab = .events
+    @State private var selected: AppTab
+
+    init() {
+        // QA hook (debug builds only): `-QATab collect` as a launch argument lands
+        // in the NSArgumentDomain and selects the initial tab, so UI tests and
+        // simctl screenshot sweeps can open any screen without scripted taps.
+        var initial: AppTab = .events
+        #if DEBUG
+        if let raw = UserDefaults.standard.string(forKey: "QATab") {
+            switch raw.lowercased() {
+            case "explore": initial = .explore
+            case "map": initial = .map
+            case "collect": initial = .collect
+            case "community": initial = .community
+            case "profile": initial = .profile
+            default: initial = .events
+            }
+        }
+        #endif
+        _selected = State(initialValue: initial)
+    }
 
     var body: some View {
         ZStack(alignment: .bottom) {

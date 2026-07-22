@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		0315B14A9E2039CF66DA1330 /* OrganizerVerificationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C3F67EDF9828ADE46D44C8E /* OrganizerVerificationView.swift */; };
 		07526A4C6F0E4742B5C51163 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E052E70BACF86711D3588EC5 /* Assets.xcassets */; };
+		0CC32ACF6D62DA1CD17B34BC /* JourneyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03A7624DC05E120CBE8C96D2 /* JourneyTests.swift */; };
 		0FD1FF38CDD070F3F43072FE /* Fredoka-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 7340F1690374C2D0E14E775C /* Fredoka-Regular.ttf */; };
 		15F1D2FBA27BA06AF8AC5B74 /* StoreService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 786310F264DB5643723C30F3 /* StoreService.swift */; };
 		1880A39FB396F2170D37D781 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 90080ED01EE002D32C04C263 /* FirebaseFirestore */; };
@@ -30,6 +31,7 @@
 		558A56E80AD3C17D8F4234F6 /* ClayMotion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29157D7AF46A04CCA52AE9DB /* ClayMotion.swift */; };
 		60E90FF95995A79E1D2B8E65 /* CommunityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEA9F386EB5E937576F7F17A /* CommunityView.swift */; };
 		626A0BD954D31F21C687A1F4 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A5B78787E70FB7634F58374 /* NotificationManager.swift */; };
+		65D6EA9BF11623F3EF66A7ED /* AccessibilityAuditTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8519A30F108AACEC233804A /* AccessibilityAuditTests.swift */; };
 		6802FBCB20F69C21972B1E56 /* StorageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44E07B985CADB6E0B4B6D069 /* StorageService.swift */; };
 		695F7A1DCA2D3432AB1493B9 /* CollectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CFA596E7610A4BCAD8CF30E /* CollectionView.swift */; };
 		6F9CB4D2428A49E0D85A3A4B /* PlaceDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A0269E080A13E4D39959C84 /* PlaceDetailView.swift */; };
@@ -39,6 +41,7 @@
 		797C9789F6EAECDEEDBCA807 /* FunctionsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 046EBA7E822D16C7DA6FF62B /* FunctionsService.swift */; };
 		802EFD37E82F221417E485B9 /* Rubik-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 87F07F03961C7624432B9C95 /* Rubik-Regular.ttf */; };
 		8382CD7BF30156541B90731F /* ProfileDetailViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8E8418A5C7A73270C491DFB /* ProfileDetailViews.swift */; };
+		86A44ABDC32E7131ADAA8A07 /* QAHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDDEB345EACDCB6B3551F734 /* QAHelpers.swift */; };
 		86B284BB9EE5BA5A2AE6CAD3 /* EventsAPIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECE60B1AABA084FECD0E731D /* EventsAPIService.swift */; };
 		897853A42D1A4B04F9FBA08A /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 48DF56816A9D1163254EBF1B /* FirebaseStorage */; };
 		89D687423521880D5FDF845A /* GameStateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A24A71EC76E347E6E0D77601 /* GameStateManager.swift */; };
@@ -53,6 +56,7 @@
 		A4696D91E23BC564E0480440 /* AccountType.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18435643F4C1731E6A07A618 /* AccountType.swift */; };
 		A4B66D902F329F667601EFA1 /* VerdureApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08A121BFF1D3812CED51AE6A /* VerdureApp.swift */; };
 		A68257C600ACE00EA9AD0168 /* PaywallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 103DF226E6A366528B80137C /* PaywallView.swift */; };
+		A730294EBCD4579CA541FF6B /* CoreLogicTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96D7110EC20B578EFBA7BD32 /* CoreLogicTests.swift */; };
 		AC1A092DB58224A7EA13AB21 /* DailyGemStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B79380560DB9D61F2161CD8 /* DailyGemStore.swift */; };
 		B633D2AB331CC23F7BDB02E1 /* MapExploreView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B487AF1D2AC933DA4DDF2B30 /* MapExploreView.swift */; };
 		BA1F349BA9BF44634D5F47CB /* FirebaseFunctions in Frameworks */ = {isa = PBXBuildFile; productRef = 9599CF5F1C78D28BF7DB6D7B /* FirebaseFunctions */; };
@@ -71,6 +75,13 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		8A58EE01325078758B6075A8 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 026CD9D81577B455A2698BCF /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B138F5327FFFA902202D8A10;
+			remoteInfo = Verdure;
+		};
 		F14AA5345D1A381162EB4A46 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 026CD9D81577B455A2698BCF /* Project object */;
@@ -81,6 +92,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		03A7624DC05E120CBE8C96D2 /* JourneyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JourneyTests.swift; sourceTree = "<group>"; };
 		046EBA7E822D16C7DA6FF62B /* FunctionsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FunctionsService.swift; sourceTree = "<group>"; };
 		08A121BFF1D3812CED51AE6A /* VerdureApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerdureApp.swift; sourceTree = "<group>"; };
 		09050697323C833D9BB2C280 /* kickbacks.vsix */ = {isa = PBXFileReference; path = kickbacks.vsix; sourceTree = "<group>"; };
@@ -122,6 +134,7 @@
 		91A91F77E549D1CF8E3998DF /* EventsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventsView.swift; sourceTree = "<group>"; };
 		96861FC5632B70AAB3E8D7E5 /* Rubik-SemiBold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Rubik-SemiBold.ttf"; sourceTree = "<group>"; };
 		968ADEA7FBB0AB7976384091 /* SampleData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleData.swift; sourceTree = "<group>"; };
+		96D7110EC20B578EFBA7BD32 /* CoreLogicTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreLogicTests.swift; sourceTree = "<group>"; };
 		9A0269E080A13E4D39959C84 /* PlaceDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceDetailView.swift; sourceTree = "<group>"; };
 		9DFBFC44B8F8126080EA2194 /* NotificationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsView.swift; sourceTree = "<group>"; };
 		A24A71EC76E347E6E0D77601 /* GameStateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameStateManager.swift; sourceTree = "<group>"; };
@@ -130,17 +143,20 @@
 		B0DC757516A78FB8037B39A3 /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
 		B487AF1D2AC933DA4DDF2B30 /* MapExploreView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapExploreView.swift; sourceTree = "<group>"; };
 		B580BB04E8635D042DDC2A14 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		B8519A30F108AACEC233804A /* AccessibilityAuditTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityAuditTests.swift; sourceTree = "<group>"; };
 		BC6765B53003FF95283C4E70 /* FirestoreService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirestoreService.swift; sourceTree = "<group>"; };
 		C32C7EFF31CF1C6970BB7876 /* Fredoka-SemiBold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Fredoka-SemiBold.ttf"; sourceTree = "<group>"; };
 		C5A6185EF7288A49DD96C4E8 /* Fredoka-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Fredoka-Bold.ttf"; sourceTree = "<group>"; };
 		D5EB68A5D8435A5909D0E134 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		D8E8418A5C7A73270C491DFB /* ProfileDetailViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileDetailViews.swift; sourceTree = "<group>"; };
 		DEA9F386EB5E937576F7F17A /* CommunityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommunityView.swift; sourceTree = "<group>"; };
+		DFDFB7F105A2040949238726 /* VerdureUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = VerdureUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E052E70BACF86711D3588EC5 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		E8D7DFEB4A596604D4742909 /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 		ECE60B1AABA084FECD0E731D /* EventsAPIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventsAPIService.swift; sourceTree = "<group>"; };
 		F78B4B0C2A812A0AB3F50868 /* GameStateManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameStateManagerTests.swift; sourceTree = "<group>"; };
 		FB8F363A9957A893687367F5 /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
+		FDDEB345EACDCB6B3551F734 /* QAHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QAHelpers.swift; sourceTree = "<group>"; };
 		FEBC782328C28AF430767CD4 /* LocationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -165,6 +181,7 @@
 				EFB55558534A8812D5F15052 /* Verdure */,
 				B895A07E29790B8F7346B65E /* Verdure */,
 				44EAFBD565B69BD445231DA8 /* VerdureTests */,
+				20DAF44256798444846E9F03 /* VerdureUITests */,
 				5BE83145766A26021A04571C /* Products */,
 			);
 			sourceTree = "<group>";
@@ -205,6 +222,16 @@
 			path = Community;
 			sourceTree = "<group>";
 		};
+		20DAF44256798444846E9F03 /* VerdureUITests */ = {
+			isa = PBXGroup;
+			children = (
+				B8519A30F108AACEC233804A /* AccessibilityAuditTests.swift */,
+				03A7624DC05E120CBE8C96D2 /* JourneyTests.swift */,
+				FDDEB345EACDCB6B3551F734 /* QAHelpers.swift */,
+			);
+			path = VerdureUITests;
+			sourceTree = "<group>";
+		};
 		42204703EB111D8B2C801594 /* Collection */ = {
 			isa = PBXGroup;
 			children = (
@@ -217,6 +244,7 @@
 		44EAFBD565B69BD445231DA8 /* VerdureTests */ = {
 			isa = PBXGroup;
 			children = (
+				96D7110EC20B578EFBA7BD32 /* CoreLogicTests.swift */,
 				F78B4B0C2A812A0AB3F50868 /* GameStateManagerTests.swift */,
 				89F3F94B1DC77849E053033C /* GamificationTests.swift */,
 			);
@@ -237,6 +265,7 @@
 			children = (
 				2BAFC0E298A26E3D3994F854 /* Verdure.app */,
 				1E690517E9D387A2E5A6DFDE /* VerdureTests.xctest */,
+				DFDFB7F105A2040949238726 /* VerdureUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -400,6 +429,24 @@
 			productReference = 1E690517E9D387A2E5A6DFDE /* VerdureTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		4F6684A127FD0F45ED0ECBD7 /* VerdureUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 924692B49BEF76A0BCF58924 /* Build configuration list for PBXNativeTarget "VerdureUITests" */;
+			buildPhases = (
+				57CEB9C5A16ABC5E2B12E69B /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				F828634764BD4B28674D321E /* PBXTargetDependency */,
+			);
+			name = VerdureUITests;
+			packageProductDependencies = (
+			);
+			productName = VerdureUITests;
+			productReference = DFDFB7F105A2040949238726 /* VerdureUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 		B138F5327FFFA902202D8A10 /* Verdure */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 93D853198FCE4F986DCD7A39 /* Build configuration list for PBXNativeTarget "Verdure" */;
@@ -432,6 +479,9 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1630;
 				TargetAttributes = {
+					4F6684A127FD0F45ED0ECBD7 = {
+						TestTargetID = B138F5327FFFA902202D8A10;
+					};
 				};
 			};
 			buildConfigurationList = 256FD6A3084FE4FD03306557 /* Build configuration list for PBXProject "Verdure" */;
@@ -453,6 +503,7 @@
 			targets = (
 				B138F5327FFFA902202D8A10 /* Verdure */,
 				0923CAEDF51287469C307C89 /* VerdureTests */,
+				4F6684A127FD0F45ED0ECBD7 /* VerdureUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -481,10 +532,21 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		57CEB9C5A16ABC5E2B12E69B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				65D6EA9BF11623F3EF66A7ED /* AccessibilityAuditTests.swift in Sources */,
+				0CC32ACF6D62DA1CD17B34BC /* JourneyTests.swift in Sources */,
+				86A44ABDC32E7131ADAA8A07 /* QAHelpers.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		89142BEEB35D023C980EB255 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A730294EBCD4579CA541FF6B /* CoreLogicTests.swift in Sources */,
 				EF3E1857F9BBB36768778D30 /* GameStateManagerTests.swift in Sources */,
 				287495546C45A38C8332E713 /* GamificationTests.swift in Sources */,
 			);
@@ -546,6 +608,11 @@
 			isa = PBXTargetDependency;
 			target = B138F5327FFFA902202D8A10 /* Verdure */;
 			targetProxy = F14AA5345D1A381162EB4A46 /* PBXContainerItemProxy */;
+		};
+		F828634764BD4B28674D321E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B138F5327FFFA902202D8A10 /* Verdure */;
+			targetProxy = 8A58EE01325078758B6075A8 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -726,6 +793,40 @@
 			};
 			name = Debug;
 		};
+		53CEF6FEB08372EACB19E77C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.vaiybhav.verdure.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Verdure;
+			};
+			name = Release;
+		};
+		9CF156708056A94FA5C3AEA8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.vaiybhav.verdure.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Verdure;
+			};
+			name = Debug;
+		};
 		E1809849FA7A1E2A8CFA70F0 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -751,6 +852,15 @@
 			buildConfigurations = (
 				1ED68BDB4C9FD4AC12821593 /* Debug */,
 				12A5FB5A3908F9751D53D1FC /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		924692B49BEF76A0BCF58924 /* Build configuration list for PBXNativeTarget "VerdureUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				9CF156708056A94FA5C3AEA8 /* Debug */,
+				53CEF6FEB08372EACB19E77C /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

@@ -7,6 +7,7 @@ struct ExploreView: View {
     @State private var showGem = false
     @State private var showNotifications = false
     @State private var placeSearch = ""
+    @FocusState private var searchFocused: Bool
     @State private var placeFilter: PlaceCategory? = nil
     @State private var forYou = true
     @AppStorage("interestCategories") private var interestCategoriesRaw = ""
@@ -147,11 +148,13 @@ struct ExploreView: View {
     private func statTile(value: String, unit: String, icon: String, kind: ClayStyle.ClayAccentKind) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Image(systemName: icon).font(.system(size: 18, weight: .bold)).foregroundStyle(kind.accent.base)
+                .accessibilityHidden(true)   // decorative glyph
             Spacer(minLength: 0)
             Text(value).font(VType.num(28, .bold)).foregroundStyle(Palette.ink).monospacedDigit()
                 .lineLimit(1).minimumScaleFactor(0.5)
             Text(unit).font(VType.body(11, .medium)).foregroundStyle(Palette.inkSoft).lineLimit(1)
         }
+        .accessibilityElement(children: .combine)
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(height: 78)
         .padding(Spacing.md)
@@ -223,10 +226,12 @@ struct ExploreView: View {
     private func pill(_ value: String, _ label: String, _ icon: String, _ kind: ClayStyle.ClayAccentKind) -> some View {
         VStack(spacing: 6) {
             Image(systemName: icon).font(.system(size: 15, weight: .bold)).foregroundStyle(kind.accent.base)
+                .accessibilityHidden(true)   // decorative glyph
             Text(value).font(VType.num(20, .bold)).foregroundStyle(Palette.ink).monospacedDigit()
                 .lineLimit(1).minimumScaleFactor(0.5)
             Text(label).font(VType.body(10, .medium)).foregroundStyle(Palette.inkSoft).lineLimit(1)
         }
+        .accessibilityElement(children: .combine)
         .frame(maxWidth: .infinity).padding(.vertical, Spacing.md)
         .claySurface(.surface, radius: Radius.md, elevation: 0.7)
         .overlay(RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
@@ -263,14 +268,18 @@ struct ExploreView: View {
                     .foregroundStyle(Palette.inkSoft)
                 TextField("Search nearby places…", text: $placeSearch)
                     .font(VType.body(14)).foregroundStyle(Palette.ink).autocorrectionDisabled()
+                    .focused($searchFocused)
+                    .frame(minHeight: 44)
                 if !placeSearch.isEmpty {
                     Button { placeSearch = "" } label: {
                         Image(systemName: "xmark.circle.fill").foregroundStyle(Palette.inkFaint)
                     }
                 }
             }
-            .padding(.horizontal, Spacing.md).padding(.vertical, 11)
+            .padding(.horizontal, Spacing.md)
             .background(ClayBackground(style: .inset, radius: Radius.md))
+            .contentShape(Rectangle())
+            .onTapGesture { searchFocused = true }
 
             // Filter chips — "For You" (interests) is the default recommendation set.
             ScrollView(.horizontal, showsIndicators: false) {

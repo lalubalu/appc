@@ -96,6 +96,8 @@ struct SectionHeader: View {
                 Button(action: { onAction?() }) {
                     Text(action).font(VType.body(14, .semibold))
                         .foregroundStyle(Palette.spruce.base)
+                        .frame(minWidth: 44, minHeight: 44)   // a11y hit target
+                        .contentShape(Rectangle())
                 }
             }
         }

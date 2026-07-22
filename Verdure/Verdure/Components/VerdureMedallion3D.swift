@@ -153,6 +153,7 @@ struct VerdureMedallion3D: UIViewRepresentable {
         private var spinning = false
 
         func startIdleSpin() {
+            guard !QAMotion.disabled else { return }
             guard let medallion, medallion.parent != nil, !spinning else { return }
             spinning = true
             let spin = SCNAction.rotateBy(x: 0, y: .pi * 2, z: 0, duration: 22)
@@ -238,7 +239,7 @@ struct ClayMedallion: View {
         .rotation3DEffect(.degrees(rot), axis: (0, 1, 0))
         .onAppear {
             if spin {
-                withAnimation(.linear(duration: 18).repeatForever(autoreverses: false)) { rot = 360 }
+                if !QAMotion.disabled { withAnimation(.linear(duration: 18).repeatForever(autoreverses: false)) { rot = 360 } }
             }
         }
     }
