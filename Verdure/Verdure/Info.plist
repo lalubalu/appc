@@ -32,6 +32,8 @@
 	<string>$(LOCALIST_HOST)</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Verdure uses your location to find nearby events and outdoor places you can check in to.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>Verdure uses motion to gently tilt cards as you move your phone. This is purely decorative and no motion data ever leaves your device.</string>
 	<key>NeighborhoodCommonsBase</key>
 	<string>$(NEIGHBORHOOD_COMMONS_BASE)</string>
 	<key>NeighborhoodCommonsKey</key>

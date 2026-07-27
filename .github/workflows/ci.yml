@@ -1,0 +1,170 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── iOS: build + unit/UI/accessibility tests ──────────────────────────────
+  ios:
+    name: iOS tests
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pick the newest Xcode the runner image actually has, rather than pinning
+      # a path that silently disappears when the image is updated.
+      - name: Select newest Xcode
+        run: |
+          latest=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          echo "Using $latest"
+          sudo xcode-select -switch "$latest"
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      # Secrets.xcconfig is gitignored (it holds API keys). CI only needs the
+      # file to exist with the expected keys — providers with empty values
+      # disable themselves, and the tests run on sample/cached data anyway.
+      - name: Create placeholder Secrets.xcconfig
+        working-directory: Verdure
+        run: |
+          cat > Secrets.xcconfig <<'EOF'
+          SERPAPI_KEY =
+          TICKETMASTER_KEY =
+          SEATGEEK_CLIENT_ID =
+          NPS_API_KEY =
+          RECREATION_GOV_KEY =
+          EVENTBRITE_TOKEN =
+          EVENTBRITE_ORG_ID =
+          LOCALIST_HOST =
+          GOOGLE_PSE_KEY =
+          GOOGLE_PSE_CX =
+          NEIGHBORHOOD_COMMONS_BASE =
+          NEIGHBORHOOD_COMMONS_KEY =
+          EOF
+
+      - name: Generate Xcode project
+        working-directory: Verdure
+        run: xcodegen generate
+
+      - name: Cache SwiftPM
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Developer/Xcode/DerivedData/**/SourcePackages
+          key: ${{ runner.os }}-spm-${{ hashFiles('Verdure/project.yml') }}
+          restore-keys: ${{ runner.os }}-spm-
+
+      # Unit + UI + accessibility audits. UI tests inject deterministic state
+      # via launch arguments (see QA.md), so no network or real data is needed.
+      - name: Test
+        working-directory: Verdure
+        run: |
+          set -o pipefail
+          # Fall back to the newest available iPhone simulator if the pinned
+          # model isn't in the runner image.
+          DEST='platform=iOS Simulator,name=iPhone 16 Pro'
+          if ! xcrun simctl list devices available | grep -q "iPhone 16 Pro ("; then
+            NAME=$(xcrun simctl list devices available \
+              | grep -oE 'iPhone [0-9]+[^(]*' | tail -1 | sed 's/ *$//')
+            echo "iPhone 16 Pro unavailable; using '$NAME'"
+            DEST="platform=iOS Simulator,name=$NAME"
+          fi
+          xcodebuild test \
+            -project Verdure.xcodeproj \
+            -scheme Verdure \
+            -destination "$DEST" \
+            -resultBundlePath TestResults.xcresult
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcresult
+          path: Verdure/TestResults.xcresult
+
+  # ── Backend: TypeScript build + full emulator E2E ─────────────────────────
+  backend:
+    name: Functions build + emulator E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+
+      # The Firestore + Storage emulators are Java processes.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install dependencies
+        working-directory: functions
+        run: npm ci
+
+      - name: Compile TypeScript
+        working-directory: functions
+        run: npm run build
+
+      # Proves the whole server contract without touching production: storage
+      # ownership rules, check-in proof/GPS validation, point clamps and
+      # idempotency, the Firestore lockdown, Verdure+ entitlement gating,
+      # limited-time drop windows, and redemption fulfilment records.
+      - name: Backend E2E on emulators
+        run: npx firebase-tools@13 emulators:exec
+             --only auth,functions,firestore,storage
+             --project connectify-19dd8
+             "node functions/scripts/e2e-backend.mjs"
+
+  # ── Firestore rules must always compile ───────────────────────────────────
+  rules:
+    name: Firestore rules compile
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+      # Booting the Firestore emulator loads and parses firestore.rules, so a
+      # syntax error or an over-limit function fails here instead of at deploy.
+      - name: Validate rules
+        run: npx firebase-tools@13 emulators:exec
+             --only firestore
+             --project connectify-19dd8
+             "echo 'firestore.rules compiled and loaded'"
+
+  # ── Marketing site must build (it hosts /privacy and /support) ────────────
+  website:
+    name: Website build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: "Verdure Website/package-lock.json"
+      - name: Install
+        working-directory: "Verdure Website"
+        run: npm ci
+      # /privacy and /support are linked from the App Store listing — if they
+      # stop building, the submission URLs break.
+      - name: Build
+        working-directory: "Verdure Website"
+        run: npx next build

@@ -32,6 +32,11 @@ targets:
         UIRequiresFullScreen: true
         CFBundleDisplayName: Verdure
         NSLocationWhenInUseUsageDescription: "Verdure uses your location to find nearby events and outdoor places you can check in to."
+        # CMMotionManager drives the decorative parallax tilt on clay cards.
+        # Device-motion isn't permission-prompted the way motion *activity* is,
+        # but the string costs nothing and removes a crash/review-question class
+        # we cannot otherwise rule out without real-device testing.
+        NSMotionUsageDescription: "Verdure uses motion to gently tilt cards as you move your phone. This is purely decorative and no motion data ever leaves your device."
         UIAppFonts:
           - Fredoka-Regular.ttf
           - Fredoka-Medium.ttf
@@ -58,6 +63,11 @@ targets:
       PRODUCT_BUNDLE_IDENTIFIER: com.vaiybhav.verdure
       ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
       SWIFT_STRICT_CONCURRENCY: minimal
+      # iPhone only (1). The UI is phone-first — portrait-locked, floating clay
+      # tab bar, single-column layouts. Advertising iPad support would force
+      # iPad screenshots at submission and put reviewers in front of a stretched
+      # phone layout. Revisit if/when a real iPad layout is designed.
+      TARGETED_DEVICE_FAMILY: "1"
     dependencies:
       - package: Firebase
         product: FirebaseAuth
