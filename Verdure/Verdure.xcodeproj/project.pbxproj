@@ -57,6 +57,7 @@
 		A4B66D902F329F667601EFA1 /* VerdureApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08A121BFF1D3812CED51AE6A /* VerdureApp.swift */; };
 		A68257C600ACE00EA9AD0168 /* PaywallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 103DF226E6A366528B80137C /* PaywallView.swift */; };
 		A730294EBCD4579CA541FF6B /* CoreLogicTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96D7110EC20B578EFBA7BD32 /* CoreLogicTests.swift */; };
+		AB5104D5D8BFCE915694098B /* LimitedTimeRewardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0756CECF5FCD5688FB7BA774 /* LimitedTimeRewardTests.swift */; };
 		AC1A092DB58224A7EA13AB21 /* DailyGemStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B79380560DB9D61F2161CD8 /* DailyGemStore.swift */; };
 		B633D2AB331CC23F7BDB02E1 /* MapExploreView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B487AF1D2AC933DA4DDF2B30 /* MapExploreView.swift */; };
 		BA039A329895D9A14FF203DC /* CloudMergeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84511E9E4D1E47B0C6EE8166 /* CloudMergeTests.swift */; };
@@ -96,6 +97,7 @@
 /* Begin PBXFileReference section */
 		03A7624DC05E120CBE8C96D2 /* JourneyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JourneyTests.swift; sourceTree = "<group>"; };
 		046EBA7E822D16C7DA6FF62B /* FunctionsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FunctionsService.swift; sourceTree = "<group>"; };
+		0756CECF5FCD5688FB7BA774 /* LimitedTimeRewardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LimitedTimeRewardTests.swift; sourceTree = "<group>"; };
 		08A121BFF1D3812CED51AE6A /* VerdureApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerdureApp.swift; sourceTree = "<group>"; };
 		09050697323C833D9BB2C280 /* kickbacks.vsix */ = {isa = PBXFileReference; path = kickbacks.vsix; sourceTree = "<group>"; };
 		09A4D2EBD2E99F891EBAA135 /* GamificationEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GamificationEngine.swift; sourceTree = "<group>"; };
@@ -252,6 +254,7 @@
 				96D7110EC20B578EFBA7BD32 /* CoreLogicTests.swift */,
 				F78B4B0C2A812A0AB3F50868 /* GameStateManagerTests.swift */,
 				89F3F94B1DC77849E053033C /* GamificationTests.swift */,
+				0756CECF5FCD5688FB7BA774 /* LimitedTimeRewardTests.swift */,
 			);
 			path = VerdureTests;
 			sourceTree = "<group>";
@@ -557,6 +560,7 @@
 				A730294EBCD4579CA541FF6B /* CoreLogicTests.swift in Sources */,
 				EF3E1857F9BBB36768778D30 /* GameStateManagerTests.swift in Sources */,
 				287495546C45A38C8332E713 /* GamificationTests.swift in Sources */,
+				AB5104D5D8BFCE915694098B /* LimitedTimeRewardTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

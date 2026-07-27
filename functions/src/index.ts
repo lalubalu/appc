@@ -56,6 +56,69 @@ const CATEGORY_MAX_POINTS: Record<string, number> = {
 };
 
 // Reward catalog (server-trusted). Mirror RewardsStore / SampleData rewards.
+// ── Verdure+ entitlement (server-verified only) ─────────────────────────────
+//
+// SECURITY: a client's claim that it is subscribed is NEVER trusted for
+// server-side value. The only source of truth is `users/{uid}.plusExpiresAt`,
+// which Firestore rules deny to clients — it can be written exclusively by the
+// Admin SDK. Until the App Store Server API / Server Notifications handler
+// lands and starts writing it, this returns false for everyone, so the
+// benefits below are correct-but-inert rather than exploitable.
+async function hasActivePlus(uid: string): Promise<boolean> {
+  const snap = await db.collection("users").doc(uid).get();
+  const expiresAt = snap.data()?.plusExpiresAt;
+  if (!expiresAt) return false;
+  const ms = typeof expiresAt?.toMillis === "function"
+    ? expiresAt.toMillis()
+    : Number(expiresAt);
+  return Number.isFinite(ms) && ms > Date.now();
+}
+
+/** Verdure+ earn multiplier. 1.0 for everyone until entitlements are verified. */
+const PLUS_POINT_MULTIPLIER = 1.25;
+
+async function earnMultiplier(uid: string): Promise<number> {
+  return (await hasActivePlus(uid)) ? PLUS_POINT_MULTIPLIER : 1.0;
+}
+
+// ── Reward catalog ──────────────────────────────────────────────────────────
+//
+// Costs plus optional limited-time windows. `plusEarlyAccessDays` lets verified
+// Verdure+ members redeem before the public opening; the window itself is
+// enforced here so a patched client cannot redeem a closed drop.
+
+interface RewardRule {
+  cost: number;
+  /** ISO date the drop opens to everyone. */
+  availableFrom?: string;
+  /** ISO date the drop closes for everyone. */
+  availableUntil?: string;
+  /** Days of Verdure+ head start before `availableFrom`. */
+  plusEarlyAccessDays?: number;
+}
+
+/** Start of the current month, matching the client's SampleData anchor. */
+function monthAnchor(days: number): string {
+  const now = new Date();
+  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString();
+}
+
+const LIMITED_TIME_REWARDS: Record<string, RewardRule> = {
+  "rei-15-trail-season": {
+    cost: 4000,
+    availableFrom: monthAnchor(0),
+    availableUntil: monthAnchor(28),
+  },
+  "patagonia-30-earth": {
+    cost: 9000,
+    availableFrom: monthAnchor(18),
+    availableUntil: monthAnchor(40),
+    plusEarlyAccessDays: 7,
+  },
+};
+
 const REWARD_COSTS: Record<string, number> = {
   // Bronze (1000 pts)
   "starbucks-5": 1000,
@@ -120,6 +183,8 @@ export const checkInToEvent = onCall(async (req) => {
   }
 
   // Determine the authoritative point value + venue coordinate (if stored).
+  // The claim is clamped to the category ceiling BEFORE any multiplier, so a
+  // Verdure+ bonus can never be used to smuggle an inflated base award through.
   let award = Math.min(claimed, CATEGORY_MAX_POINTS[category] ?? 100);
   let distanceM: number | null = null;
   const eventSnap = await db.collection("events").doc(eventId).get();
@@ -141,12 +206,18 @@ export const checkInToEvent = onCall(async (req) => {
     }
   }
 
+  // Verdure+ earn bonus, applied AFTER the ceiling clamp above.
+  const multiplier = await earnMultiplier(uid);
+  const baseAward = award;
+  award = Math.floor(award * multiplier);
+
   // Audit trail for manual spot-checks (server-only collection — no client rules).
   const attendanceId = `${uid}_${eventId}`.replace(/[\/#?%]/g, "-").slice(0, 900);
   await db.collection("attendance").doc(attendanceId).set({
     uid, eventId, proofPath, lat, lng,
     distanceM: distanceM === null ? null : Math.round(distanceM),
     category, claimedPoints: claimed,
+    baseAward, multiplier, award,
     createdAt: FieldValue.serverTimestamp(),
   }, { merge: true });
 
@@ -237,9 +308,31 @@ export const redeemReward = onCall(async (req) => {
   if (!uid) throw new HttpsError("unauthenticated", "Sign in to redeem.");
 
   const rewardId = String(req.data?.rewardId ?? "").slice(0, 100);
-  const cost = REWARD_COSTS[rewardId];
+  const limited = LIMITED_TIME_REWARDS[rewardId];
+  const cost = limited?.cost ?? REWARD_COSTS[rewardId];
   if (!rewardId || cost === undefined) {
     throw new HttpsError("invalid-argument", "Unknown reward.");
+  }
+
+  // Limited-time drops: enforce the window server-side so a patched client
+  // can't redeem before it opens or after it closes.
+  if (limited) {
+    const now = Date.now();
+    if (limited.availableUntil && now >= Date.parse(limited.availableUntil)) {
+      throw new HttpsError("failed-precondition", "This reward is no longer available.");
+    }
+    if (limited.availableFrom) {
+      const publicFrom = Date.parse(limited.availableFrom);
+      const earlyMs = (limited.plusEarlyAccessDays ?? 0) * 86_400_000;
+      const plusFrom = publicFrom - earlyMs;
+      if (now < plusFrom) {
+        throw new HttpsError("failed-precondition", "This reward isn't available yet.");
+      }
+      // Inside the early window → Verdure+ members only (server-verified).
+      if (now < publicFrom && !(await hasActivePlus(uid))) {
+        throw new HttpsError("permission-denied", "Verdure+ early access — opens to everyone soon.");
+      }
+    }
   }
 
   const userRef = db.collection("users").doc(uid);

@@ -15,8 +15,10 @@ struct RewardsStoreView: View {
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: Spacing.xl) {
                     balanceHeader
+                    limitedTimeSection
                     ForEach(RewardTier.allCases) { tier in
-                        let tierRewards = SampleData.rewards.filter { $0.tier == tier }
+                        // Limited-time drops live in their own section above.
+                        let tierRewards = SampleData.rewards.filter { $0.tier == tier && !$0.isLimitedTime }
                         if !tierRewards.isEmpty { rewardSection(tier: tier, rewards: tierRewards) }
                     }
                 }
@@ -68,6 +70,12 @@ struct RewardsStoreView: View {
     /// idempotent on the server.
     private func redeem(_ reward: Reward) {
         guard !isRedeeming else { return }
+        // Client-side window check mirrors the server's (which is authoritative);
+        // this just avoids a pointless round-trip and gives a clearer message.
+        guard reward.isRedeemable(isPlus: store.isPlus) else {
+            redeemError = "This limited-time reward isn't open for you right now."
+            return
+        }
         isRedeeming = true
         Task {
             defer { isRedeeming = false }
@@ -120,6 +128,161 @@ struct RewardsStoreView: View {
         .padding(.horizontal, Spacing.md)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Available points: \(gameState.pointsBalance)")
+    }
+
+    // MARK: - Limited-time drops (with Verdure+ early access)
+
+    @ViewBuilder
+    private var limitedTimeSection: some View {
+        let drops = SampleData.rewards
+            .filter { $0.isLimitedTime }
+            .filter { reward in
+                // Hide drops that have already closed; show everything else so
+                // members can see what's coming.
+                if case .ended = reward.availability(isPlus: store.isPlus) { return false }
+                return true
+            }
+        if !drops.isEmpty {
+            VStack(alignment: .leading, spacing: Spacing.md) {
+                HStack(spacing: 10) {
+                    ClayIconTile(systemImage: "bolt.fill", kind: .terracotta, size: 38, radius: Radius.chip)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Limited Time").font(VType.display(18, .semibold)).foregroundStyle(Palette.ink)
+                        Text("Seasonal drops — here and gone")
+                            .font(VType.body(12, .medium)).foregroundStyle(Palette.inkSoft)
+                    }
+                }
+                .padding(.horizontal, Spacing.md)
+
+                VStack(spacing: 12) {
+                    ForEach(drops) { drop in limitedTimeCard(drop) }
+                }
+                .padding(.horizontal, Spacing.md)
+            }
+        }
+    }
+
+    private func limitedTimeCard(_ reward: Reward) -> some View {
+        let state = reward.availability(isPlus: store.isPlus)
+        let isRedeemed = gameState.isRedeemed(reward.id)
+        let canAfford = gameState.canAfford(reward)
+
+        return VStack(alignment: .leading, spacing: Spacing.sm) {
+            HStack(spacing: Spacing.md) {
+                ClayIconTile(systemImage: reward.icon, kind: reward.tier.clayKind, size: 50, radius: Radius.chip)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(reward.name).font(VType.display(15, .semibold)).foregroundStyle(Palette.ink)
+                        .lineLimit(2).fixedSize(horizontal: false, vertical: true)
+                    Text(reward.brand).font(VType.body(12)).foregroundStyle(Palette.inkSoft).lineLimit(1)
+                }
+                Spacer(minLength: Spacing.sm)
+                trailingControl(for: reward, state: state, isRedeemed: isRedeemed, canAfford: canAfford)
+            }
+            statusRow(for: state)
+        }
+        .padding(Spacing.md)
+        .claySurface(.surface, radius: Radius.md, elevation: isRedeemed ? 0.5 : 0.85)
+        .overlay(RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
+            .strokeBorder(Palette.terracotta.base.opacity(0.35), lineWidth: 1.5))
+        .opacity(isRedeemed ? 0.7 : 1)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(limitedAccessibilityLabel(reward, state: state, isRedeemed: isRedeemed))
+    }
+
+    @ViewBuilder
+    private func trailingControl(for reward: Reward, state: Reward.Availability,
+                                 isRedeemed: Bool, canAfford: Bool) -> some View {
+        if isRedeemed {
+            HStack(spacing: 4) {
+                Image(systemName: "checkmark.seal.fill").font(.system(size: 13, weight: .bold))
+                Text("Redeemed").font(VType.body(11, .bold))
+            }
+            .foregroundStyle(Palette.teal.base)
+        } else {
+            switch state {
+            case .open:
+                Button { Haptics.tap(); confirmingReward = reward } label: {
+                    Text("\(reward.pointCost) pts")
+                        .font(VType.num(13, .bold))
+                        .foregroundStyle(canAfford ? Palette.spruce.onColor : Palette.inkFaint)
+                        .padding(.horizontal, 14).padding(.vertical, 9)
+                        .background(ClayBackground(style: canAfford ? .accent(.spruce) : .inset,
+                                                   radius: Radius.chip, elevation: 0.4))
+                }
+                .disabled(!canAfford || isRedeeming).buttonStyle(.plain)
+            case .plusEarlyAccess:
+                Button { Haptics.tap(); showPaywall = true } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "bolt.fill").font(.system(size: 11, weight: .bold))
+                        Text("Early").font(VType.body(12, .bold))
+                    }
+                    .foregroundStyle(Palette.gold.onColor)
+                    .padding(.horizontal, 12).padding(.vertical, 9)
+                    .background(ClayBackground(style: .accent(.gold), radius: Radius.chip, elevation: 0.4))
+                }
+                .buttonStyle(.plain)
+            case .upcoming, .ended:
+                Text("\(reward.pointCost) pts")
+                    .font(VType.num(13, .bold)).foregroundStyle(Palette.inkFaint)
+                    .padding(.horizontal, 14).padding(.vertical, 9)
+                    .background(ClayBackground(style: .inset, radius: Radius.chip))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func statusRow(for state: Reward.Availability) -> some View {
+        let (icon, text, tint): (String, String, Color) = {
+            switch state {
+            case .open(let endsAt):
+                if let endsAt {
+                    return ("clock.fill", "Ends \(Self.relative(endsAt))", Palette.terracotta.base)
+                }
+                return ("checkmark.circle.fill", "Available now", Palette.teal.base)
+            case .plusEarlyAccess(let publicFrom):
+                return ("bolt.fill",
+                        "Verdure+ early access · opens to everyone \(Self.relative(publicFrom))",
+                        Palette.gold.base)
+            case .upcoming(let from):
+                return ("hourglass", "Drops \(Self.relative(from))", Palette.inkSoft)
+            case .ended(let at):
+                return ("xmark.circle.fill", "Closed \(Self.relative(at))", Palette.inkFaint)
+            }
+        }()
+
+        return HStack(spacing: 7) {
+            Image(systemName: icon).font(.system(size: 11, weight: .bold))
+            Text(text).font(VType.body(12, .semibold))
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(tint)
+        .padding(.horizontal, 11).padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(ClayBackground(style: .inset, radius: Radius.sm))
+    }
+
+    private func limitedAccessibilityLabel(_ reward: Reward, state: Reward.Availability,
+                                           isRedeemed: Bool) -> String {
+        var parts = ["\(reward.name) gift card", "\(reward.pointCost) points", "limited time"]
+        if isRedeemed { parts.append("already redeemed") }
+        else {
+            switch state {
+            case .open(let endsAt):
+                parts.append(endsAt.map { "ends \(Self.relative($0))" } ?? "available now")
+            case .plusEarlyAccess(let publicFrom):
+                parts.append("Verdure Plus early access, opens to everyone \(Self.relative(publicFrom))")
+            case .upcoming(let from): parts.append("drops \(Self.relative(from))")
+            case .ended(let at): parts.append("closed \(Self.relative(at))")
+            }
+        }
+        return parts.joined(separator: ", ")
+    }
+
+    private static func relative(_ date: Date) -> String {
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .full
+        return f.localizedString(for: date, relativeTo: Date())
     }
 
     // MARK: - Tier section

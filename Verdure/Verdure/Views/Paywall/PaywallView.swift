@@ -101,9 +101,15 @@ struct PaywallView: View {
     }
 
     /// ONLY shipped features belong in this list — see the honest-copy policy above.
+    ///
+    /// NOTE: the Verdure+ earn multiplier is deliberately ABSENT. Its server code
+    /// exists, but it stays inert until App Store entitlement verification is
+    /// live, and we do not sell what doesn't yet pay out.
     private let features: [PlusFeature] = [
         PlusFeature(icon: "gift.fill", title: "Premium Rewards",
                     detail: "Unlock the Gold & Platinum tiers — redeem $25 and $50 gift cards", kind: .gold),
+        PlusFeature(icon: "bolt.fill", title: "Early Access to Drops",
+                    detail: "Redeem limited-time seasonal rewards up to a week before everyone else", kind: .terracotta),
         PlusFeature(icon: "medal.fill", title: "Member Badge",
                     detail: "A gold Verdure+ badge on your player card", kind: .spruce),
     ]

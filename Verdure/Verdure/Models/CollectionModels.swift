@@ -136,4 +136,52 @@ struct Reward: Identifiable {
     let icon: String           // SF Symbol
     let pointCost: Int
     let tier: RewardTier
+
+    // MARK: Limited-time drops (nil dates = always available)
+
+    /// When everyone can redeem this reward.
+    var availableFrom: Date? = nil
+    /// When the drop closes for everyone.
+    var availableUntil: Date? = nil
+    /// Verdure+ members can redeem this many days before `availableFrom`.
+    var plusEarlyAccessDays: Int = 0
+
+    var isLimitedTime: Bool { availableFrom != nil || availableUntil != nil }
+
+    /// The moment Verdure+ members can start redeeming.
+    var plusAvailableFrom: Date? {
+        guard let availableFrom, plusEarlyAccessDays > 0 else { return availableFrom }
+        return Calendar.current.date(byAdding: .day, value: -plusEarlyAccessDays, to: availableFrom)
+    }
+
+    /// What a given user can do with this reward right now.
+    enum Availability: Equatable {
+        /// Redeemable now. `endsAt` is set for limited-time drops.
+        case open(endsAt: Date?)
+        /// In the Verdure+ early window — Plus members only until `publicFrom`.
+        case plusEarlyAccess(publicFrom: Date)
+        /// Not open to anyone yet.
+        case upcoming(from: Date)
+        /// The drop has closed.
+        case ended(at: Date)
+    }
+
+    func availability(now: Date = Date(), isPlus: Bool) -> Availability {
+        if let until = availableUntil, now >= until { return .ended(at: until) }
+
+        guard let from = availableFrom else { return .open(endsAt: availableUntil) }
+        if now >= from { return .open(endsAt: availableUntil) }
+
+        // Before the public date: Plus members may already be inside the early window.
+        if let plusFrom = plusAvailableFrom, now >= plusFrom {
+            return isPlus ? .open(endsAt: availableUntil) : .plusEarlyAccess(publicFrom: from)
+        }
+        return .upcoming(from: from)
+    }
+
+    /// Convenience: can this user redeem right now?
+    func isRedeemable(now: Date = Date(), isPlus: Bool) -> Bool {
+        if case .open = availability(now: now, isPlus: isPlus) { return true }
+        return false
+    }
 }

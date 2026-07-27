@@ -220,9 +220,13 @@ service cloud.firestore {
     }
 
     // SERVER-OWNED game fields: only Cloud Functions (Admin SDK) may change these.
+    // `plusExpiresAt` is the Verdure+ entitlement — written solely by verified
+    // App Store server notifications. A client that could set it would grant
+    // itself the earn multiplier and early reward access, so it is locked here.
     function noServerOwnedFieldChanges() {
       return !request.resource.data.diff(resource.data).affectedKeys()
-          .hasAny(['pointsBalance', 'lifetimePoints', 'checkedInEventIDs', 'redeemedRewardIDs']);
+          .hasAny(['pointsBalance', 'lifetimePoints', 'checkedInEventIDs',
+                   'redeemedRewardIDs', 'plusExpiresAt']);
     }
 
     // On create, server-owned fields must be absent or zero/empty — a fresh client
@@ -231,7 +235,9 @@ service cloud.firestore {
       return (!('pointsBalance' in data) || data.pointsBalance == 0)
           && (!('lifetimePoints' in data) || data.lifetimePoints == 0)
           && (!('checkedInEventIDs' in data) || (data.checkedInEventIDs is list && data.checkedInEventIDs.size() == 0))
-          && (!('redeemedRewardIDs' in data) || (data.redeemedRewardIDs is list && data.redeemedRewardIDs.size() == 0));
+          && (!('redeemedRewardIDs' in data) || (data.redeemedRewardIDs is list && data.redeemedRewardIDs.size() == 0))
+          // A fresh client may never mint itself a Verdure+ entitlement.
+          && !('plusExpiresAt' in data);
     }
 
     // Prevent changing fields that should be immutable after creation

@@ -200,5 +200,34 @@ enum SampleData {
         // Platinum tier (20000 pts — ~100+ events)
         Reward(id: "apple-50", name: "$50 Apple", brand: "Apple", icon: "apple.logo", pointCost: 20000, tier: .platinum),
         Reward(id: "rei-50", name: "$50 REI", brand: "REI", icon: "tent.fill", pointCost: 20000, tier: .platinum),
+    ] + limitedTimeRewards
+
+    // MARK: - Limited-time drops
+    //
+    // Seasonal rewards with a real availability window. Verdure+ members get in
+    // `plusEarlyAccessDays` before everyone else — a live member benefit that
+    // needs no server-side entitlement to *display* (StoreKit's local
+    // entitlement is Apple-signed and verified), while the server independently
+    // enforces the window on redeem. Windows are anchored to the start of the
+    // current month so the catalog always demonstrates each state.
+
+    private static func monthAnchor(addingDays days: Int) -> Date {
+        let cal = Calendar.current
+        let startOfMonth = cal.date(from: cal.dateComponents([.year, .month], from: Date())) ?? Date()
+        return cal.date(byAdding: .day, value: days, to: startOfMonth) ?? Date()
+    }
+
+    static let limitedTimeRewards: [Reward] = [
+        // Open to everyone, closes at month end — shows the "ends in N days" state.
+        Reward(id: "rei-15-trail-season", name: "$15 REI · Trail Season",
+               brand: "REI", icon: "figure.hiking", pointCost: 4000, tier: .silver,
+               availableFrom: monthAnchor(addingDays: 0),
+               availableUntil: monthAnchor(addingDays: 28)),
+        // Opens mid-month publicly; Plus members get it 7 days early.
+        Reward(id: "patagonia-30-earth", name: "$30 Patagonia · Earth Month",
+               brand: "Patagonia", icon: "leaf.circle.fill", pointCost: 9000, tier: .gold,
+               availableFrom: monthAnchor(addingDays: 18),
+               availableUntil: monthAnchor(addingDays: 40),
+               plusEarlyAccessDays: 7),
     ]
 }

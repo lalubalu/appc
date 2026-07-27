@@ -261,6 +261,66 @@ async function main() {
   code2 = await userWrite("posts/e2e-post-1", { content: "vandalized" });
   ok("rules: editing post content denied", code2 === "permission-denied", `got ${code2}`);
 
+  // ── Verdure+ entitlement & limited-time drops ────────────────────────────
+  //
+  // The entitlement (`users/{uid}.plusExpiresAt`) must be UNWRITABLE by clients:
+  // it gates the earn multiplier and early reward access.
+  code2 = await userWrite(`users/${uid}`, { plusExpiresAt: Date.now() + 86_400_000 });
+  ok("rules: client CANNOT grant itself Verdure+ (plusExpiresAt denied)",
+     code2 === "permission-denied", `got ${code2}`);
+
+  // "patagonia-30-earth" opens publicly on day 18 of the month with 7 days of
+  // Plus early access (day 11). Behaviour depends on today's date, so assert the
+  // branch that actually applies rather than pretending the clock is fixed.
+  const dayOfMonth = new Date().getUTCDate();
+  r = await call("redeemReward", { rewardId: "patagonia-30-earth" }, idToken);
+  const err = r.error?.status;
+  if (dayOfMonth < 11) {
+    ok("limited drop before early window rejected", err === "FAILED_PRECONDITION", JSON.stringify(r));
+  } else if (dayOfMonth < 18) {
+    // Inside the Plus-only window and this user has no verified entitlement.
+    ok("limited drop in early window denied to non-Plus", err === "PERMISSION_DENIED", JSON.stringify(r));
+  } else {
+    // Publicly open — so it should fail on points, not availability.
+    ok("limited drop publicly open (fails on points, not window)",
+       err === "FAILED_PRECONDITION" && /enough points/i.test(r.error?.message ?? ""), JSON.stringify(r));
+  }
+
+  // Grant a verified entitlement the only legitimate way (Admin SDK = what the
+  // App Store notification handler will do) and confirm early access opens up.
+  await db.doc(`users/${uid}`).set(
+    { plusExpiresAt: new Date(Date.now() + 86_400_000) }, { merge: true });
+  await db.doc(`users/${uid}`).set({ pointsBalance: 12000 }, { merge: true });
+  r = await call("redeemReward", { rewardId: "patagonia-30-earth" }, idToken);
+  if (dayOfMonth < 11) {
+    ok("verified Plus still cannot redeem before the early window",
+       r.error?.status === "FAILED_PRECONDITION", JSON.stringify(r));
+  } else {
+    ok("verified Plus redeems limited drop (early access honoured)",
+       r.result?.redeemed === true, JSON.stringify(r));
+  }
+
+  // The Verdure+ earn multiplier: base award is clamped to the category ceiling
+  // FIRST (Festival = 250), then multiplied — so 250 → floor(250 × 1.25) = 312.
+  // This user now has a verified entitlement from the step above.
+  r = await call("checkInToEvent", {
+    eventId: "serp-e2e-plus-multiplier", category: "Festival",
+    claimedPoints: 99999, proofPath, lat: NEAR.lat, lng: NEAR.lng,
+  }, idToken);
+  ok("verified Plus earns the 1.25× multiplier (ceiling clamped first)",
+     r.result?.awarded === 312, JSON.stringify(r));
+
+  // And a fresh user WITHOUT the entitlement still earns the base rate — proving
+  // the multiplier is gated on the server-verified field, not on any client claim.
+  const plain = await signUp(`e2e-plain-${Date.now()}@verdure.test`, password);
+  await uploadProof(`proofs/${plain.uid}/p1.jpg`, plain.idToken);
+  r = await call("checkInToEvent", {
+    eventId: "serp-e2e-plain", category: "Festival", claimedPoints: 99999,
+    proofPath: `proofs/${plain.uid}/p1.jpg`, lat: NEAR.lat, lng: NEAR.lng,
+  }, plain.idToken);
+  ok("non-Plus user earns the base rate (no multiplier)",
+     r.result?.awarded === 250, JSON.stringify(r));
+
   console.log(`\n══ ${passed} passed, ${failed} failed ══`);
   process.exit(failed > 0 ? 1 : 0);
 }
