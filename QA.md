@@ -64,15 +64,21 @@ without scripted taps:
 | Firestore rules compile | **blocking** | rules must parse and load |
 | Website build | **blocking** | protects the `/privacy` + `/support` submission URLs |
 
-**Why the accessibility audits don't gate CI.** They pass reliably on a local
-machine and have found real defects, but Apple's audit service intermittently
-refuses to attach on a headless CI simulator — `com.apple.accessibilityAudit`
-error **-902 ("Invalid target app")**. It's reproducibly the *same* screens each
-run, with the app healthy and every journey test passing, and it survives both
-retries and re-activation. Failing the build on an Apple infrastructure bug
-would just teach everyone to ignore red, so CI reports the audits without
-gating on them. **The blocking accessibility gate is the local run** (`xcodebuild
-test` with no `-only-testing`), which must be green before release.
+**Why the accessibility audits are a separate, currently non-blocking step.**
+On a headless CI simulator the audit service first refused to attach, failing
+with `com.apple.accessibilityAudit` **-902 ("Invalid target app")** on the same
+5 screens every run while the app was healthy and all journey tests passed.
+Retrying didn't help — the log showed an identical pid across attempts, so the
+process was alive and the service simply wouldn't inspect it.
+
+**Root cause: the audit service only inspects the frontmost app**, and CI never
+reliably activated it. Calling `app.activate()` before auditing fixed it, and
+**all 8 audits now pass on CI.** The step is kept `continue-on-error` for one
+more shakedown period; promote it to blocking once it's been green across
+several runs (delete the `continue-on-error` line in `ci.yml`).
+
+Either way the local full run (`xcodebuild test` with no `-only-testing`)
+remains the release gate and must be green.
 
 ## Known notes (accepted, with rationale)
 

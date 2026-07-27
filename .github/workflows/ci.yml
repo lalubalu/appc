@@ -90,15 +90,13 @@ jobs:
             -only-testing:VerdureUITests/JourneyTests \
             -resultBundlePath TestResults.xcresult
 
-      # Accessibility audits are reported but NON-BLOCKING on CI.
+      # Accessibility audits — currently reported, not gating.
       #
-      # They pass reliably on a local machine and have caught real issues, but
-      # Apple's audit service intermittently refuses to attach on a headless CI
-      # simulator ("com.apple.accessibilityAudit" -902, Invalid target app) —
-      # the same screens fail every run while the app itself is healthy and all
-      # journey tests pass. Treating that infrastructure error as a code failure
-      # would train everyone to ignore red, so it is surfaced instead of gating.
-      # The blocking gate for accessibility is the local run documented in QA.md.
+      # These failed on CI with "com.apple.accessibilityAudit" -902 (Invalid
+      # target app) until we learned the audit service only inspects the
+      # FRONTMOST app; QA.audit now calls app.activate() first and all 8 pass
+      # here. Kept continue-on-error for a short shakedown; once it's been green
+      # across several runs, delete that line to make it blocking (see QA.md).
       - name: Accessibility audits (non-blocking)
         continue-on-error: true
         working-directory: Verdure
