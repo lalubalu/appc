@@ -78,9 +78,9 @@ outdoors,parks,trails,hiking,walk,nature,community,events,local,explore,rewards,
 
 | Field | Value |
 |---|---|
-| Support URL | *(TODO — needs a live page before submission)* |
+| Support URL | `https://<domain>/support` — page built (`/support`) |
 | Marketing URL | *(the Verdure Website in this repo, once deployed)* |
-| Privacy Policy URL | **REQUIRED** — must be live before submission |
+| Privacy Policy URL | `https://<domain>/privacy` — page built (`/privacy`) |
 
 ---
 
@@ -150,16 +150,19 @@ Captured at Apple's required 6.9" size (1320 × 2868) in `screenshots/6.9-inch/`
 
 ## Pre-submission blockers
 
-- [ ] **Privacy Policy URL** — Apple hard-requires a reachable page
-- [ ] **Support URL** — same
+- [x] **Privacy Policy page** — built at `/privacy` on the marketing site
+- [x] **Support page** — built at `/support` (both linked from the footer)
+- [ ] **Deploy the marketing site** so those two URLs actually resolve, then
+      paste the live URLs into App Store Connect
 - [ ] Create the two subscriptions in App Store Connect
       (`com.vaiybhav.verdure.plus.monthly`, `com.vaiybhav.verdure.plus.yearly`)
       with localized display names, and attach them to the app
 - [ ] Upgrade Firebase to Blaze and deploy Functions + Storage — **without this
       no check-in ever credits points and no proof photo uploads** (see the
       DEPLOY STATUS table in `CLAUDE.md`)
-- [ ] Real gift-card fulfilment (redeem currently records the redemption; the
-      `TODO` in `functions/src/index.ts` is where Tango/Tremendous plugs in).
-      Do not ship paid rewards until this is real.
+- [ ] Real gift-card fulfilment. Redemption now writes a durable `pending`
+      order to `/fulfillments` in the same transaction as the points debit, so
+      nothing is lost and orders can be filled by hand meanwhile — but a real
+      vendor (Tango/Tremendous) must be integrated before shipping paid rewards.
 - [x] Privacy manifest (`PrivacyInfo.xcprivacy`) — done, ships in the bundle
 - [x] Screenshots at a required size — done (6.9")

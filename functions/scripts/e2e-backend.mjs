@@ -21,7 +21,7 @@ import { initializeApp as clientInit } from "firebase/app";
 import { getAuth, connectAuthEmulator, signInWithEmailAndPassword } from "firebase/auth";
 import {
   getFirestore as clientFirestore, connectFirestoreEmulator,
-  doc, setDoc, updateDoc, increment, serverTimestamp,
+  doc, setDoc, updateDoc, increment, serverTimestamp, collection, query, getDocs,
 } from "firebase/firestore";
 
 const PROJECT = "connectify-19dd8";
@@ -320,6 +320,30 @@ async function main() {
   }, plain.idToken);
   ok("non-Plus user earns the base rate (no multiplier)",
      r.result?.awarded === 250, JSON.stringify(r));
+
+  // ── Redemption fulfilment + server-only collection privacy ───────────────
+  //
+  // A redemption must never just debit points: it has to leave a durable,
+  // recoverable order behind (the vendor integration isn't live yet).
+  const ff = (await db.doc(`fulfillments/${uid}_starbucks-5`).get()).data();
+  ok("redemption writes a durable fulfilment record",
+     ff?.status === "pending" && ff?.rewardId === "starbucks-5" && ff?.pointsSpent === 1000,
+     JSON.stringify(ff ?? {}));
+
+  // Those records hold a delivery email + spend, and /attendance holds GPS —
+  // clients must not be able to read either.
+  try {
+    await getDocs(query(collection(cdb, "fulfillments")));
+    ok("rules: client CANNOT read /fulfillments (PII)", false, "read succeeded!");
+  } catch (e) {
+    ok("rules: client CANNOT read /fulfillments (PII)", e.code === "permission-denied", `got ${e.code}`);
+  }
+  try {
+    await getDocs(query(collection(cdb, "attendance")));
+    ok("rules: client CANNOT read /attendance (GPS)", false, "read succeeded!");
+  } catch (e) {
+    ok("rules: client CANNOT read /attendance (GPS)", e.code === "permission-denied", `got ${e.code}`);
+  }
 
   console.log(`\n══ ${passed} passed, ${failed} failed ══`);
   process.exit(failed > 0 ? 1 : 0);

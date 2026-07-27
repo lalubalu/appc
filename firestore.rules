@@ -30,6 +30,22 @@ service cloud.firestore {
     }
 
     // ──────────────────────────────────────────────
+    // SERVER-ONLY COLLECTIONS — never client-accessible
+    // ──────────────────────────────────────────────
+    // These hold the most sensitive data in the system and are written purely
+    // by Cloud Functions via the Admin SDK (which bypasses these rules):
+    //   /attendance   — GPS coordinates + proof-photo paths per check-in
+    //   /fulfillments — gift-card orders incl. delivery email + points spent
+    // The catch-all above already denies them; stating it explicitly means a
+    // future edit can't widen access to them by accident.
+    match /attendance/{docId} {
+      allow read, write: if false;
+    }
+    match /fulfillments/{docId} {
+      allow read, write: if false;
+    }
+
+    // ──────────────────────────────────────────────
     // USER DOCUMENTS: /users/{userId}
     // ──────────────────────────────────────────────
     match /users/{userId} {

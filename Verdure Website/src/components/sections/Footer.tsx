@@ -14,7 +14,9 @@ let COMPANY_LINKS = [
   { label: "Our Story", href: "/story" },
   { label: "Partnerships", href: "/partnerships" },
   { label: "Team", href: "/#team" },
-  { label: "Contact", href: "#" },
+  // Both are linked from the App Store listing, so they must stay reachable.
+  { label: "Support", href: "/support" },
+  { label: "Privacy", href: "/privacy" },
 ];
 
 let SOCIAL_LINKS = [

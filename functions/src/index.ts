@@ -351,7 +351,28 @@ export const redeemReward = onCall(async (req) => {
       lastUpdated: FieldValue.serverTimestamp(),
     }, { merge: true });
 
-    // TODO: trigger real gift-card fulfilment here (Tango/Tremendous API call).
+    // FULFILMENT QUEUE.
+    //
+    // The gift-card vendor (Tango/Tremendous) isn't wired up yet, and a
+    // redemption that only debits points would take value and give nothing
+    // back. So the debit and a durable fulfilment request are written in the
+    // SAME transaction: every redemption is recoverable and nothing can be
+    // silently lost, whether it's fulfilled by an API call later or by hand.
+    //
+    // Deterministic id => the queue is idempotent even if this ever re-runs.
+    const fulfilmentRef = db.collection("fulfillments")
+      .doc(`${uid}_${rewardId}`.replace(/[\/#?%]/g, "-").slice(0, 900));
+    tx.set(fulfilmentRef, {
+      uid,
+      rewardId,
+      pointsSpent: cost,
+      status: "pending",          // pending → sent | failed (set by the fulfiller)
+      requestedAt: FieldValue.serverTimestamp(),
+      deliverToEmail: req.auth?.token?.email ?? null,
+      vendor: null,               // filled in when a provider is integrated
+      vendorOrderId: null,
+    }, { merge: true });
+
     return { redeemed: true, remaining: balance - cost };
   });
 });
