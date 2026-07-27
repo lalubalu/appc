@@ -41,6 +41,30 @@ enum QA {
     /// screenshot matrix reviewed in QA.md instead.
     static func audit(_ app: XCUIApplication, screen: String,
                       file: StaticString = #filePath, line: UInt = #line) throws {
+        // The audit service occasionally fails to attach to the app process with
+        // `com.apple.accessibilityAudit` code -902 ("Invalid target app <pid>").
+        // That's infrastructure, not a finding — on CI it hit the first few tests
+        // in the class and cleared up once the service warmed up. Retry only that
+        // error class; real findings still fail immediately and are never retried.
+        var lastError: Error?
+        for attempt in 1...3 {
+            do {
+                try runAudit(app, screen: screen, file: file, line: line)
+                return
+            } catch let error as NSError where error.domain == "com.apple.accessibilityAudit"
+                                            && error.code == -902 {
+                lastError = error
+                XCTContext.runActivity(named: "AUDIT-RETRY [\(screen)] attempt \(attempt): \(error.localizedDescription)") { _ in }
+                _ = app.wait(for: .runningForeground, timeout: 5)
+                Thread.sleep(forTimeInterval: 2)
+            }
+        }
+        throw lastError ?? NSError(domain: "QA", code: -1,
+                                   userInfo: [NSLocalizedDescriptionKey: "audit failed to run for \(screen)"])
+    }
+
+    private static func runAudit(_ app: XCUIApplication, screen: String,
+                                 file: StaticString, line: UInt) throws {
         let structural: XCUIAccessibilityAuditType = [
             .sufficientElementDescription, .hitRegion, .trait,
         ]

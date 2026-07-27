@@ -28,7 +28,9 @@ const PROJECT = "connectify-19dd8";
 const REGION = "us-central1";
 const AUTH = `http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1`;
 const FN = `http://127.0.0.1:5001/${PROJECT}/${REGION}`;
-const BUCKET = `${PROJECT}.firebasestorage.app`;   // matches the functions runtime default
+// Must match PROOF_BUCKET in functions/src/index.ts — the default bucket differs
+// between local and CI environments, so both sides pin it explicitly.
+const BUCKET = process.env.STORAGE_BUCKET || `${PROJECT}.firebasestorage.app`;
 const STORAGE = `http://127.0.0.1:9199/v0/b/${BUCKET}/o`;
 
 process.env.FIRESTORE_EMULATOR_HOST = "127.0.0.1:8899";

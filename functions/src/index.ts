@@ -48,6 +48,18 @@ function parseCoord(v: unknown, max: number): number | undefined {
 // anything beyond this is not "at the event".
 const MAX_CHECKIN_DISTANCE_M = 1500;
 
+// The proof-photo bucket, stated explicitly.
+//
+// `getStorage().bucket()` resolves its default from ambient project metadata,
+// which differs by environment: it gave `<project>.firebasestorage.app` locally
+// but `<project>.appspot.com` in CI. That mismatch meant proofs were uploaded to
+// one bucket and looked for in another, so every check-in failed with "proof not
+// found". Pinning it here (overridable for tests) keeps dev, CI and production
+// pointed at the same place — and it matches STORAGE_BUCKET in
+// GoogleService-Info.plist, which is what the iOS app uploads to.
+const PROOF_BUCKET =
+  process.env.STORAGE_BUCKET || "connectify-19dd8.firebasestorage.app";
+
 // Server-trusted ceilings so a spoofed client can't claim absurd point values.
 // Keep in sync with EventCategory.defaultPoints in the app.
 const CATEGORY_MAX_POINTS: Record<string, number> = {
@@ -164,7 +176,7 @@ export const checkInToEvent = onCall(async (req) => {
   // Best-effort existence check: hard-fail only on a definitive "not there".
   // (Storage being unreachable/misconfigured shouldn't block honest check-ins.)
   try {
-    const bucket = getStorage().bucket();
+    const bucket = getStorage().bucket(PROOF_BUCKET);
     const [exists] = await bucket.file(proofPath).exists();
     if (!exists) {
       console.warn(`[checkIn] proof missing: bucket=${bucket.name} path=${proofPath}`);

@@ -15,6 +15,9 @@ final class AccessibilityAuditTests: XCTestCase {
 
     private func auditTab(_ tab: String, anchor: String) throws {
         let app = QA.launch(tab: tab)
+        // Terminate at the end of each test so the next audit can't attach to a
+        // stale process (a source of "Invalid target app" on CI).
+        addTeardownBlock { app.terminate() }
         QA.waitFor(app.staticTexts[anchor], "\(tab) anchor '\(anchor)'")
         try QA.audit(app, screen: tab)
     }
