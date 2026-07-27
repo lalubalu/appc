@@ -107,6 +107,33 @@ The app's visual system mirrors the Verdure website: **claymorphism** with a sag
 
 - **Firebase** project is `connectify-19dd8` (Auth + Firestore). The app bundle id is `com.vaiybhav.verdure`; `GoogleService-Info.plist` is still registered for the old bundle id, so Firebase logs a non-fatal bundle-id mismatch warning. To fully decouple, re-register a `com.vaiybhav.verdure` app in the Firebase console and swap in a new `GoogleService-Info.plist`.
 
+## ⚠️ DEPLOY STATUS — verified against the live project 2026-07-24
+
+Do not infer deploy state from changelog prose. E2E "25/25 green" is the **local
+emulator**, not production. Live facts, re-checkable any time with the command below:
+
+| Component | Live status (2026-07-24) |
+|---|---|
+| Firestore rules | ✅ **DEPLOYED** — ruleset `e98565b5…`, sha256 of live source matches `firestore.rules` byte-for-byte, updated 2026-07-21T18:39Z |
+| Cloud Functions | ❌ **NOT DEPLOYED** — 0 functions exist (v1 and v2 APIs both empty) |
+| Cloud Storage | ❌ **NO BUCKET** — Storage never initialised in console |
+| Billing plan | ❌ **Spark** (`billingEnabled: false`) — Functions *cannot* deploy until Blaze |
+
+**Consequence while Functions are down:** check-ins/collects apply optimistically on
+device and queue in `pendingOps` forever; nothing is server-credited, no proof photo
+uploads (no bucket), and `/attendance` audit rows are never written. The queue is
+durable and replays automatically once the backend is live — no data is lost.
+`GameStateManager.serverConfirmed` guards against the cloud's empty balance
+overwriting those local earnings (see `CloudMergeTests`).
+
+Re-verify live state at any time:
+```bash
+# prints billing plan, deployed function count, storage buckets, and diffs the
+# live Firestore ruleset against firestore.rules
+npx firebase-tools projects:list        # confirms auth
+npx firebase-tools deploy --only functions --non-interactive   # errors if still Spark
+```
+
 ## What Needs to Be Done (Backend & Beyond)
 
 - [ ] **Upgrade Firebase project to Blaze**, then `npx firebase-tools deploy --only functions` (rules ARE deployed; functions blocked on billing — queued check-ins hold until then)

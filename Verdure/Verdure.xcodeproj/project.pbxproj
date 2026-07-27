@@ -59,6 +59,7 @@
 		A730294EBCD4579CA541FF6B /* CoreLogicTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96D7110EC20B578EFBA7BD32 /* CoreLogicTests.swift */; };
 		AC1A092DB58224A7EA13AB21 /* DailyGemStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B79380560DB9D61F2161CD8 /* DailyGemStore.swift */; };
 		B633D2AB331CC23F7BDB02E1 /* MapExploreView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B487AF1D2AC933DA4DDF2B30 /* MapExploreView.swift */; };
+		BA039A329895D9A14FF203DC /* CloudMergeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84511E9E4D1E47B0C6EE8166 /* CloudMergeTests.swift */; };
 		BA1F349BA9BF44634D5F47CB /* FirebaseFunctions in Frameworks */ = {isa = PBXBuildFile; productRef = 9599CF5F1C78D28BF7DB6D7B /* FirebaseFunctions */; };
 		BBFD9809C22B0F0C7C2F9F33 /* SharedComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 341DA15FA2B7C4910C824D7F /* SharedComponents.swift */; };
 		BDF13AAA669E80C0CEFE9CEC /* GamificationEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09A4D2EBD2E99F891EBAA135 /* GamificationEngine.swift */; };
@@ -68,6 +69,7 @@
 		D124A1ED1A25466842488F01 /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0DC757516A78FB8037B39A3 /* MainTabView.swift */; };
 		D1931D30FD04390E180C9D85 /* RewardConfirmationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46515EDD96AE8C6965E13DF0 /* RewardConfirmationView.swift */; };
 		D1FC30331239EED083EDFF4C /* LocationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEBC782328C28AF430767CD4 /* LocationManager.swift */; };
+		D1FDF825E59771F0108E99F2 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 0DE7746BD26FC744CB9F9052 /* PrivacyInfo.xcprivacy */; };
 		D8F3CFEC200FF24E182F3713 /* NotificationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DFBFC44B8F8126080EA2194 /* NotificationsView.swift */; };
 		E787B0F3D42D15C53C1B9A27 /* ExploreView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F91EB7C7709DEBD9167F2DC /* ExploreView.swift */; };
 		E7F872E997D7F08418276AA0 /* Rubik-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 63CF83506D67AB715494A196 /* Rubik-Medium.ttf */; };
@@ -99,6 +101,7 @@
 		09A4D2EBD2E99F891EBAA135 /* GamificationEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GamificationEngine.swift; sourceTree = "<group>"; };
 		09A77B898877DEEFE5C437CB /* ClayKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClayKit.swift; sourceTree = "<group>"; };
 		0A66DC58FCDC00DEBEB66622 /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
+		0DE7746BD26FC744CB9F9052 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		103DF226E6A366528B80137C /* PaywallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallView.swift; sourceTree = "<group>"; };
 		18435643F4C1731E6A07A618 /* AccountType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountType.swift; sourceTree = "<group>"; };
 		18D37ABD5658791FD46C6AA8 /* RarityBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RarityBadge.swift; sourceTree = "<group>"; };
@@ -126,6 +129,7 @@
 		78E3C1045856FE04A699780F /* EventProviders.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventProviders.swift; sourceTree = "<group>"; };
 		7A5B78787E70FB7634F58374 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
 		7F91EB7C7709DEBD9167F2DC /* ExploreView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExploreView.swift; sourceTree = "<group>"; };
+		84511E9E4D1E47B0C6EE8166 /* CloudMergeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudMergeTests.swift; sourceTree = "<group>"; };
 		8628F2F6B8B8168D599B7772 /* Rubik-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Rubik-Bold.ttf"; sourceTree = "<group>"; };
 		87F07F03961C7624432B9C95 /* Rubik-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Rubik-Regular.ttf"; sourceTree = "<group>"; };
 		89F3F94B1DC77849E053033C /* GamificationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GamificationTests.swift; sourceTree = "<group>"; };
@@ -244,6 +248,7 @@
 		44EAFBD565B69BD445231DA8 /* VerdureTests */ = {
 			isa = PBXGroup;
 			children = (
+				84511E9E4D1E47B0C6EE8166 /* CloudMergeTests.swift */,
 				96D7110EC20B578EFBA7BD32 /* CoreLogicTests.swift */,
 				F78B4B0C2A812A0AB3F50868 /* GameStateManagerTests.swift */,
 				89F3F94B1DC77849E053033C /* GamificationTests.swift */,
@@ -398,6 +403,7 @@
 				A429CA232A021433DC06847A /* GoogleService-Info.plist.template */,
 				D5EB68A5D8435A5909D0E134 /* Info.plist */,
 				09050697323C833D9BB2C280 /* kickbacks.vsix */,
+				0DE7746BD26FC744CB9F9052 /* PrivacyInfo.xcprivacy */,
 				08A121BFF1D3812CED51AE6A /* VerdureApp.swift */,
 				1931E04FBF4B7B6EA5B67F71 /* Components */,
 				A8B9AD7C940C4E2BC4AAEAE0 /* Models */,
@@ -520,6 +526,7 @@
 				3004DA463A48EBF50CD59439 /* Fredoka-SemiBold.ttf in Resources */,
 				78DCF9627935F77ECFA04501 /* GoogleService-Info.plist in Resources */,
 				423A662A981968C6F2C46921 /* GoogleService-Info.plist.template in Resources */,
+				D1FDF825E59771F0108E99F2 /* PrivacyInfo.xcprivacy in Resources */,
 				CE853347CD5197D5B1DD9CF9 /* Rubik-Bold.ttf in Resources */,
 				8AEB525E8D3833FDE48B338E /* Rubik-Light.ttf in Resources */,
 				E7F872E997D7F08418276AA0 /* Rubik-Medium.ttf in Resources */,
@@ -546,6 +553,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BA039A329895D9A14FF203DC /* CloudMergeTests.swift in Sources */,
 				A730294EBCD4579CA541FF6B /* CoreLogicTests.swift in Sources */,
 				EF3E1857F9BBB36768778D30 /* GameStateManagerTests.swift in Sources */,
 				287495546C45A38C8332E713 /* GamificationTests.swift in Sources */,

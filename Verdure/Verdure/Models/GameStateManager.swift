@@ -203,6 +203,16 @@ final class GameStateManager {
     }
     private var isFlushing = false
 
+    /// True once a callable has actually round-tripped successfully — i.e. the
+    /// Cloud Functions are really deployed and reachable. Until then the server's
+    /// balance is NOT treated as authoritative (see mergeCloudState).
+    private(set) var serverConfirmed = false
+
+    /// Server-owned points earned locally but not yet credited by the server.
+    /// Surfaced in the UI so a stalled backend is visible instead of silent.
+    var unsyncedPointsCount: Int { pendingOps.reduce(0) { $0 + $1.points } }
+    var hasUnsyncedEarnings: Bool { !pendingOps.isEmpty }
+
     // MARK: - Cloud Sync
 
     private var firestoreService: FirestoreService?
@@ -282,6 +292,7 @@ final class GameStateManager {
                     result = try await fx.collectPlace(
                         placeId: op.id, claimedPoints: op.points, lat: op.lat, lon: op.lon)
                 }
+                serverConfirmed = true   // a callable really answered → server is live
                 if op.kind == .checkIn, let file = op.proofFile {
                     try? FileManager.default.removeItem(at: Self.proofsDirectory.appendingPathComponent(file))
                 }
@@ -559,14 +570,17 @@ final class GameStateManager {
         checkedInEventIDs = checkedInEventIDs.union(cloud.checkedInEventIDs)
         redeemedRewardIDs = redeemedRewardIDs.union(cloud.redeemedRewardIDs)
 
-        if functionsService != nil {
-            // Server-authoritative: the cloud balance is truth. Locally-earned items
-            // the server hasn't credited yet are re-submitted by the pending-op
-            // queue/backfill right after this merge, which restores their points.
+        // Adopt the cloud balance as truth ONLY when the server has actually proven
+        // itself — a successful callable round-trip AND an empty queue. Merely having
+        // a FunctionsService instance proves nothing: if the Functions aren't deployed
+        // (or are unreachable), the cloud balance is a meaningless 0 and adopting it
+        // would silently wipe legitimate optimistic points that can never be
+        // re-credited (event check-ins are intentionally not backfilled — no proof).
+        if serverConfirmed && pendingOps.isEmpty {
             pointsBalance = cloud.pointsBalance
             lifetimePoints = cloud.lifetimePoints
         } else {
-            // Legacy/offline merge: keep the max.
+            // Unproven server / work still queued → never destroy local progress.
             pointsBalance = max(pointsBalance, cloud.pointsBalance)
             lifetimePoints = max(lifetimePoints, cloud.lifetimePoints)
         }
@@ -625,6 +639,16 @@ final class GameStateManager {
         }
         return Set(array)
     }
+
+    // MARK: - Test seams
+    //
+    // mergeCloudState is private (it's only ever driven by connectCloud); these
+    // expose it to the test target without widening the production surface.
+
+    #if DEBUG
+    func applyCloudStateForTesting(_ cloud: CloudGameState) { mergeCloudState(cloud) }
+    func markServerConfirmedForTesting() { serverConfirmed = true }
+    #endif
 
     /// Reset all game state (for testing)
     func resetAll() {
