@@ -49,13 +49,16 @@ enum QA {
         var lastError: Error?
         for attempt in 1...3 {
             do {
+                // The audit service will only inspect the frontmost app; on a
+                // headless CI simulator the app isn't reliably activated.
+                app.activate()
+                _ = app.wait(for: .runningForeground, timeout: 5)
                 try runAudit(app, screen: screen, file: file, line: line)
                 return
             } catch let error as NSError where error.domain == "com.apple.accessibilityAudit"
                                             && error.code == -902 {
                 lastError = error
                 XCTContext.runActivity(named: "AUDIT-RETRY [\(screen)] attempt \(attempt): \(error.localizedDescription)") { _ in }
-                _ = app.wait(for: .runningForeground, timeout: 5)
                 Thread.sleep(forTimeInterval: 2)
             }
         }

@@ -52,6 +52,28 @@ without scripted taps:
   SwiftUI limitation, noted (not failed) in the audit handler with rationale
 - Event posters/timeline rows: combined elements with full labels + button traits
 
+## CI
+
+`.github/workflows/ci.yml` runs on every push and PR:
+
+| Job | Gate | Covers |
+|---|---|---|
+| iOS tests | **blocking** | unit tests + UI journey tests |
+| iOS tests → a11y step | *non-blocking* | accessibility audits (see below) |
+| Functions build + emulator E2E | **blocking** | TypeScript build + full backend contract |
+| Firestore rules compile | **blocking** | rules must parse and load |
+| Website build | **blocking** | protects the `/privacy` + `/support` submission URLs |
+
+**Why the accessibility audits don't gate CI.** They pass reliably on a local
+machine and have found real defects, but Apple's audit service intermittently
+refuses to attach on a headless CI simulator — `com.apple.accessibilityAudit`
+error **-902 ("Invalid target app")**. It's reproducibly the *same* screens each
+run, with the app healthy and every journey test passing, and it survives both
+retries and re-activation. Failing the build on an Apple infrastructure bug
+would just teach everyone to ignore red, so CI reports the audits without
+gating on them. **The blocking accessibility gate is the local run** (`xcodebuild
+test` with no `-only-testing`), which must be green before release.
+
 ## Known notes (accepted, with rationale)
 
 1. **Machine audit scope** = labels/hit-regions/traits. Contrast/dynamic-type/
