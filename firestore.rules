@@ -44,6 +44,11 @@ service cloud.firestore {
     match /fulfillments/{docId} {
       allow read, write: if false;
     }
+    // Rate-limit counters. A client that could write its own counter could
+    // reset it and remove its own limit, so this must stay server-only.
+    match /rateLimits/{docId} {
+      allow read, write: if false;
+    }
 
     // ──────────────────────────────────────────────
     // USER DOCUMENTS: /users/{userId}

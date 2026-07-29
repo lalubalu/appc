@@ -116,4 +116,5 @@ npx firebase-tools deploy --only functions,storage   # needs Blaze + Storage ini
 | [`CLAUDE.md`](CLAUDE.md) | Architecture, design system, deploy status, changelog |
 | [`QA.md`](QA.md) | Test strategy, QA harness, known issues |
 | [`AppStore/LISTING.md`](AppStore/LISTING.md) | Listing copy, privacy label, review notes, blockers |
+| [`SECURITY.md`](SECURITY.md) | Threat model and the reasoning behind each control |
 | [`BACKEND.md`](BACKEND.md) | Cloud Functions and rules detail |

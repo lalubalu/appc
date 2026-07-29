@@ -164,24 +164,56 @@ final class AuthService {
 
     // MARK: - Firebase Error Mapping
 
+    /// Map Firebase auth errors to user-facing text.
+    ///
+    /// ACCOUNT ENUMERATION: messages must never reveal whether an address is
+    /// registered. "No account found with this email" vs "Incorrect password"
+    /// turns the sign-in form into a membership oracle — anyone can test an
+    /// address and read the answer off which error comes back. That's the same
+    /// class of leak the website's schema removes by making `join_waitlist()`
+    /// return void so a duplicate is indistinguishable from a new signup.
+    ///
+    /// So every "this address does / doesn't exist and this password is / isn't
+    /// right" outcome collapses into ONE message. Errors that describe the
+    /// user's own input (malformed email, weak password) stay specific, because
+    /// they say nothing about who else has an account.
+    ///
+    /// State of play (verified 2026-07-28): the project already has Firebase's
+    /// Email Enumeration Protection on (`enableImprovedEmailPrivacy: true`), so
+    /// the SERVER collapses sign-in failures into one generic code. Two gaps
+    /// remain, which this closes:
+    ///   • sign-up still returns EMAIL_EXISTS — unavoidable server-side, since
+    ///     a duplicate account can't be silently created;
+    ///   • the old `default:` branch echoed Firebase's raw description, which
+    ///     names the exact condition and reopened the oracle underneath.
+    /// It's also the control that holds if that console setting is switched off.
     private static func mapFirebaseError(_ error: NSError) -> String {
         switch error.code {
-        case AuthErrorCode.emailAlreadyInUse.rawValue:
-            return "An account with this email already exists."
+        // ── Indistinguishable by design ──
+        // Phrased to fit BOTH forms: on sign-in it reads as bad credentials, on
+        // sign-up as "that didn't work, maybe you're already registered" — a
+        // nudge that's equally true whether or not the address exists, so it
+        // guides the user without confirming anything about them.
+        case AuthErrorCode.emailAlreadyInUse.rawValue,
+             AuthErrorCode.userNotFound.rawValue,
+             AuthErrorCode.wrongPassword.rawValue,
+             AuthErrorCode.invalidCredential.rawValue:
+            return "We couldn't complete that. Double-check your email and password — and if you've been here before, try signing in instead."
+
+        // ── Safe to be specific: about the input, not about other accounts ──
         case AuthErrorCode.invalidEmail.rawValue:
             return "Invalid email address."
         case AuthErrorCode.weakPassword.rawValue:
             return "Password is too weak. Use at least 6 characters."
-        case AuthErrorCode.userNotFound.rawValue:
-            return "No account found with this email."
-        case AuthErrorCode.wrongPassword.rawValue:
-            return "Incorrect password."
         case AuthErrorCode.networkError.rawValue:
             return "Network error. Please check your connection."
         case AuthErrorCode.tooManyRequests.rawValue:
             return "Too many attempts. Please try again later."
         default:
-            return error.localizedDescription
+            // Never surface a raw Firebase description: they name the exact
+            // condition (e.g. "There is no user record...") and would reopen
+            // the oracle through the default branch.
+            return "Something went wrong. Please try again."
         }
     }
 

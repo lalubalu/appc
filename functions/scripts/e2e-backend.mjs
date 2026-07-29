@@ -347,6 +347,37 @@ async function main() {
     ok("rules: client CANNOT read /attendance (GPS)", e.code === "permission-denied", `got ${e.code}`);
   }
 
+  // ── Rate limiting at the trust boundary ──────────────────────────────────
+  //
+  // The callables are reachable directly with any signed-in token, bypassing
+  // every client-side gate — so volume has to be bounded on the server.
+  // redeemReward is capped at 5/hour; this user has already spent some budget
+  // above, so drive it to the ceiling and confirm it actually stops.
+  const REDEEM_CEILING = 15;   // keep in sync with RATE_LIMITS in index.ts
+  const rl = await signUp(`e2e-rl-${Date.now()}@verdure.test`, password);
+  let exhausted = null;
+  for (let i = 0; i < REDEEM_CEILING + 5; i++) {
+    // Unknown reward → rejected on its own merits, but the limiter runs FIRST,
+    // so this still consumes budget and eventually flips to resource-exhausted.
+    const res = await call("redeemReward", { rewardId: `nope-${i}` }, rl.idToken);
+    if (res.error?.status === "RESOURCE_EXHAUSTED") { exhausted = i + 1; break; }
+  }
+  ok("redeemReward rate limit trips at its ceiling",
+     exhausted === REDEEM_CEILING + 1,
+     `tripped after ${exhausted} calls, expected ${REDEEM_CEILING + 1}`);
+
+  // Limits are per-user: an abuser must not lock everyone else out.
+  const bystander = await signUp(`e2e-bystander-${Date.now()}@verdure.test`, password);
+  r = await call("redeemReward", { rewardId: "unknown-reward" }, bystander.idToken);
+  ok("rate limit is per-user (bystander unaffected)",
+     r.error?.status === "INVALID_ARGUMENT", JSON.stringify(r));
+
+  // Counters must be server-only: a client that could reset its own counter
+  // would have no limit at all.
+  code2 = await userWrite(`rateLimits/${rl.uid}_redeemReward`, { count: 0 });
+  ok("rules: client CANNOT reset its own rate-limit counter",
+     code2 === "permission-denied", `got ${code2}`);
+
   console.log(`\n══ ${passed} passed, ${failed} failed ══`);
   process.exit(failed > 0 ? 1 : 0);
 }
