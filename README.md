@@ -92,7 +92,7 @@ cd functions && npm run e2e
 |---|---|---|
 | Unit | 38 | Transactions, cloud-merge safety, gamification, Daily Gem, sanitizer, reward windows |
 | UI + a11y | 16 | Journeys across every tab + Apple accessibility audits on 8 screens |
-| Backend E2E | 33 | Rules lockdown, check-in proof/GPS validation, entitlement gating, redemption |
+| Backend E2E | 36 | Rules lockdown, check-in proof/GPS validation, entitlement gating, redemption, rate limiting |
 
 UI tests inject deterministic state through launch arguments (`-QATab`,
 `-QAOfflineData`, `-QADisableMotion`) — see [`QA.md`](QA.md).
