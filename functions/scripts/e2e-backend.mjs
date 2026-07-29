@@ -21,7 +21,7 @@ import { initializeApp as clientInit } from "firebase/app";
 import { getAuth, connectAuthEmulator, signInWithEmailAndPassword } from "firebase/auth";
 import {
   getFirestore as clientFirestore, connectFirestoreEmulator,
-  doc, setDoc, updateDoc, increment, serverTimestamp, collection, query, getDocs,
+  doc, setDoc, updateDoc, increment, serverTimestamp, collection, query, getDocs, writeBatch,
 } from "firebase/firestore";
 
 const PROJECT = "connectify-19dd8";
@@ -256,8 +256,23 @@ async function main() {
   } catch (e) { code2 = e.code ?? String(e); }
   ok("rules: author can create a post", code2 === "ok", `got ${code2}`);
 
+  // A bare +1 is now REFUSED — that was the like-inflation vulnerability.
   code2 = await userWrite("posts/e2e-post-1", { likeCount: increment(1) });
-  ok("rules: like (+1) allowed", code2 === "ok", `got ${code2}`);
+  ok("rules: bare +1 like refused (needs ledger entry)",
+     code2 === "permission-denied", `got ${code2}`);
+
+  // The supported path: +1 and the per-user ledger row in ONE batch.
+  code2 = await (async () => {
+    try {
+      const b = writeBatch(cdb);
+      b.update(doc(cdb, "posts/e2e-post-1"), { likeCount: increment(1) });
+      b.set(doc(cdb, `postLikes/e2e-post-1_${uid}`),
+            { postId: "e2e-post-1", uid, createdAt: serverTimestamp() });
+      await b.commit();
+      return "ok";
+    } catch (e) { return e.code ?? String(e); }
+  })();
+  ok("rules: like via batch + ledger allowed", code2 === "ok", `got ${code2}`);
   code2 = await userWrite("posts/e2e-post-1", { likeCount: increment(5) });
   ok("rules: like (+5) denied", code2 === "permission-denied", `got ${code2}`);
   code2 = await userWrite("posts/e2e-post-1", { content: "vandalized" });

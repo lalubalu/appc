@@ -37,6 +37,20 @@ function distanceMeters(lat1: number, lng1: number, lat2: number, lng2: number):
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
+/**
+ * Coerce caller-supplied input to a string, safely.
+ *
+ * `String(x)` THROWS on a hostile payload — `{"toString": "x"}` makes toString
+ * non-callable, so the coercion raises TypeError, the callable dies, and the
+ * caller gets INTERNAL. That's an unhandled crash reachable by anyone with a
+ * token: a cheap denial-of-service and a leak that we failed unexpectedly
+ * rather than rejected deliberately. Anything that isn't already a primitive
+ * string is simply not a string, so treat it as absent.
+ */
+function safeString(v: unknown, fallback = ""): string {
+  return typeof v === "string" ? v : fallback;
+}
+
 /** Parse + range-check a coordinate component; NaN → undefined. */
 function parseCoord(v: unknown, max: number): number | undefined {
   const n = Number(v);
@@ -160,6 +174,45 @@ async function hasActivePlus(uid: string): Promise<boolean> {
   return Number.isFinite(ms) && ms > Date.now();
 }
 
+// ── Daily earning ceiling (economic backstop) ───────────────────────────────
+//
+// Rate limits bound how many REQUESTS an account can make; this bounds how much
+// VALUE it can extract, which is the thing that actually costs money. It is the
+// control that still holds if a future change reopens a farming path nobody
+// spotted — worst case becomes "a slow leak" instead of "unlimited gift cards".
+//
+// Sized from real behaviour, not from the limit: the most active plausible day
+// is a couple of events (~500) plus a walk collecting places (~300), so ~800.
+// 2000 is ~2.5x that, which no genuine user reaches and which caps a determined
+// abuser at roughly a $50 card every ten days instead of every hour.
+//
+// Deliberately a CLAMP, not a rejection: the check-in still succeeds and still
+// counts toward streaks, challenges and badges — only the points stop. A real
+// user who somehow hit the ceiling keeps their attendance record.
+const DAILY_POINT_CAP = 2000;
+
+function utcDayKey(now = new Date()): string {
+  return now.toISOString().slice(0, 10);   // yyyy-mm-dd
+}
+
+/**
+ * How many points this user may still earn today.
+ * Read inside the caller's transaction so concurrent check-ins can't both
+ * see the same remaining budget and each spend it.
+ */
+function remainingDailyBudget(data: FirebaseFirestore.DocumentData | undefined): number {
+  const today = utcDayKey();
+  const earned = data?.dailyEarnDay === today ? Number(data?.dailyEarnPoints) || 0 : 0;
+  return Math.max(0, DAILY_POINT_CAP - earned);
+}
+
+/** Fields recording today's spend, to merge into the user doc. */
+function dailyEarnUpdate(data: FirebaseFirestore.DocumentData | undefined, awarded: number) {
+  const today = utcDayKey();
+  const earned = data?.dailyEarnDay === today ? Number(data?.dailyEarnPoints) || 0 : 0;
+  return { dailyEarnDay: today, dailyEarnPoints: earned + awarded };
+}
+
 /** Verdure+ earn multiplier. 1.0 for everyone until entitlements are verified. */
 const PLUS_POINT_MULTIPLIER = 1.25;
 
@@ -238,13 +291,13 @@ export const checkInToEvent = onCall(async (req) => {
   if (!uid) throw new HttpsError("unauthenticated", "Sign in to check in.");
   await enforceRateLimit(uid, "checkInToEvent");
 
-  const eventId = String(req.data?.eventId ?? "").slice(0, 200);
-  const category = String(req.data?.category ?? "Social");
+  const eventId = safeString(req.data?.eventId).slice(0, 200);
+  const category = safeString(req.data?.category, "Social");
   const claimed = Math.max(0, Math.floor(Number(req.data?.claimedPoints ?? 0)));
   if (!eventId) throw new HttpsError("invalid-argument", "Missing eventId.");
 
   // ── Evidence: proof photo reference ──
-  const proofPath = String(req.data?.proofPath ?? "");
+  const proofPath = safeString(req.data?.proofPath);
   if (!proofPath.startsWith(`proofs/${uid}/`) || proofPath.includes("..")) {
     throw new HttpsError("invalid-argument", "A proof-of-attendance photo is required to check in.");
   }
@@ -277,8 +330,28 @@ export const checkInToEvent = onCall(async (req) => {
   const eventSnap = await db.collection("events").doc(eventId).get();
   if (eventSnap.exists) {
     const ev = eventSnap.data() ?? {};
-    const pv = Number(ev.pointValue ?? award);
-    award = Math.min(pv, 1000); // community events: trust the stored value (rule-validated ≤1000)
+
+    // SELF-DEALING. Community events are created by users, and the creator
+    // chooses the venue coordinates — so an event you made is always "nearby"
+    // and its proof requirement is trivially satisfied. Paying points for it
+    // makes the whole economy self-service: create event → check in → repeat.
+    // Attending your own event is fine; being paid for it is not.
+    if (typeof ev.creatorID === "string" && ev.creatorID === uid) {
+      throw new HttpsError(
+        "failed-precondition",
+        "You can't earn points for an event you created."
+      );
+    }
+
+    // VALUE COMES FROM OUR TABLE, NOT THEIR DOCUMENT.
+    // `pointValue` lives in a client-written document: the rules only bound it
+    // to <=1000, so anyone could publish a "Market" event worth 1000 and mint
+    // 13x its real value. Clamp to the ceiling for the category recorded ON THE
+    // EVENT (not the category the caller claims, which is also theirs to pick).
+    const storedCategory = safeString(ev.category, category);
+    const ceiling = CATEGORY_MAX_POINTS[storedCategory] ?? 100;
+    const storedValue = Number(ev.pointValue);
+    award = Math.min(Number.isFinite(storedValue) ? storedValue : ceiling, ceiling);
 
     const evLat = parseCoord(ev.latitude, 90);
     const evLng = parseCoord(ev.longitude, 180);
@@ -319,15 +392,21 @@ export const checkInToEvent = onCall(async (req) => {
       return { alreadyCheckedIn: true, awarded: 0, newBalance: balance, newLifetime: lifetime };
     }
 
+    // Economic backstop, read inside the transaction so two concurrent
+    // check-ins can't both spend the same remaining budget.
+    const granted = Math.min(award, remainingDailyBudget(data));
+
     tx.set(userRef, {
       checkedInEventIDs: FieldValue.arrayUnion(eventId),
-      pointsBalance: balance + award,
-      lifetimePoints: lifetime + award,
+      pointsBalance: balance + granted,
+      lifetimePoints: lifetime + granted,
+      ...dailyEarnUpdate(data, granted),
       lastUpdated: FieldValue.serverTimestamp(),
     }, { merge: true });
     return {
-      alreadyCheckedIn: false, awarded: award,
-      newBalance: balance + award, newLifetime: lifetime + award,
+      alreadyCheckedIn: false, awarded: granted,
+      newBalance: balance + granted, newLifetime: lifetime + granted,
+      dailyCapReached: granted < award,
     };
   });
 
@@ -346,7 +425,7 @@ export const collectPlace = onCall(async (req) => {
   if (!uid) throw new HttpsError("unauthenticated", "Sign in to collect.");
   await enforceRateLimit(uid, "collectPlace");
 
-  const placeId = String(req.data?.placeId ?? "").slice(0, 200);
+  const placeId = safeString(req.data?.placeId).slice(0, 200);
   const claimed = Math.max(0, Math.floor(Number(req.data?.claimedPoints ?? 0)));
   if (!placeId) throw new HttpsError("invalid-argument", "Missing placeId.");
   const award = Math.min(claimed, PLACE_MAX_POINTS);
@@ -375,15 +454,19 @@ export const collectPlace = onCall(async (req) => {
       return { alreadyCollected: true, awarded: 0, newBalance: balance, newLifetime: lifetime };
     }
 
+    const granted = Math.min(award, remainingDailyBudget(data));
+
     tx.set(userRef, {
       collectedPlaceIDs: FieldValue.arrayUnion(placeId),
-      pointsBalance: balance + award,
-      lifetimePoints: lifetime + award,
+      pointsBalance: balance + granted,
+      lifetimePoints: lifetime + granted,
+      ...dailyEarnUpdate(data, granted),
       lastUpdated: FieldValue.serverTimestamp(),
     }, { merge: true });
     return {
-      alreadyCollected: false, awarded: award,
-      newBalance: balance + award, newLifetime: lifetime + award,
+      alreadyCollected: false, awarded: granted,
+      newBalance: balance + granted, newLifetime: lifetime + granted,
+      dailyCapReached: granted < award,
     };
   });
 });
@@ -396,7 +479,7 @@ export const redeemReward = onCall(async (req) => {
   if (!uid) throw new HttpsError("unauthenticated", "Sign in to redeem.");
   await enforceRateLimit(uid, "redeemReward");
 
-  const rewardId = String(req.data?.rewardId ?? "").slice(0, 100);
+  const rewardId = safeString(req.data?.rewardId).slice(0, 100);
   const limited = LIMITED_TIME_REWARDS[rewardId];
   const cost = limited?.cost ?? REWARD_COSTS[rewardId];
   if (!rewardId || cost === undefined) {
@@ -505,4 +588,89 @@ export const onPostCreated: unknown = inEmulator ? undefined
 export const sendEventReminders = onSchedule("every day 09:00", async () => {
   // Query events happening tomorrow, find users who saved them, send FCM. (Stub.)
   return;
+});
+
+// ── External API proxy ──────────────────────────────────────────────────────
+//
+// WHY THIS EXISTS.
+// The app shipped five billable third-party keys inside its Info.plist —
+// SerpApi, Ticketmaster, NPS, Recreation.gov and an Eventbrite token. Anyone
+// who unzips the .ipa reads them straight out (`plutil -p Info.plist`), and
+// nothing in the app can prevent that: a key that reaches the device is public.
+// The exposure isn't user data — these endpoints serve public parks and events
+// — it's OUR QUOTA AND BILL. A stolen SerpApi key is someone else's search
+// budget spent on our card.
+//
+// The only real fix is to stop shipping them: the keys live in the Functions
+// runtime config, the app asks this proxy, and the proxy calls the vendor.
+// The client sends a provider name and a coordinate, never a key.
+//
+// MIGRATION (must be done in this order, or the app loses its data sources):
+//   1. deploy these functions with the keys set server-side:
+//        firebase functions:secrets:set SERPAPI_KEY   (etc.)
+//   2. ship an app build that prefers the proxy (already wired — see
+//      ProviderConfig.proxyEnabled in EventProviders.swift)
+//   3. THEN blank the keys in Secrets.xcconfig and ROTATE ALL FIVE, because
+//      every key in a build already released is compromised for good.
+// Until step 3 the keys are still in the bundle; the proxy alone doesn't undo
+// an exposure that already happened.
+//
+// The proxy is rate limited like every other callable: it spends real money per
+// call, so it's the last thing that should be freely hammerable.
+const PROXY_ALLOWLIST: Record<string, (params: Record<string, string>) => string | null> = {
+  // Recreation.gov facilities near a point.
+  recreation: (p) => {
+    const key = process.env.RECREATION_GOV_KEY;
+    if (!key) return null;
+    const q = new URLSearchParams({
+      latitude: p.lat, longitude: p.lng, radius: "25", limit: "20",
+    });
+    return `https://ridb.recreation.gov/api/v1/facilities?${q}`;
+  },
+  // National Park Service sites in a state.
+  nps: (p) => {
+    const key = process.env.NPS_API_KEY;
+    if (!key) return null;
+    const q = new URLSearchParams({ stateCode: p.state ?? "", limit: "15", api_key: key });
+    return `https://developer.nps.gov/api/v1/parks?${q}`;
+  },
+};
+
+RATE_LIMITS.externalFetch = { max: 120, windowMs: 60 * 60 * 1000 };
+
+export const externalFetch = onCall(async (req) => {
+  const uid = req.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");
+  await enforceRateLimit(uid, "externalFetch");
+
+  const provider = safeString(req.data?.provider);
+  const build = PROXY_ALLOWLIST[provider];
+  if (!build) throw new HttpsError("invalid-argument", "Unknown provider.");
+
+  // Only ever build URLs from an allowlisted template with sanitised params —
+  // never anything the caller supplies verbatim, which would make this an SSRF
+  // gadget pointed at internal metadata endpoints.
+  const lat = parseCoord(req.data?.lat, 90);
+  const lng = parseCoord(req.data?.lng, 180);
+  const state = safeString(req.data?.state).replace(/[^A-Za-z]/g, "").slice(0, 2);
+  if ((provider === "recreation") && (lat === undefined || lng === undefined)) {
+    throw new HttpsError("invalid-argument", "Coordinates required.");
+  }
+
+  const url = build({ lat: String(lat), lng: String(lng), state });
+  if (!url) throw new HttpsError("failed-precondition", `${provider} is not configured.`);
+
+  const headers: Record<string, string> =
+    provider === "recreation" ? { apikey: process.env.RECREATION_GOV_KEY ?? "" } : {};
+
+  try {
+    const res = await fetch(url, { headers, signal: AbortSignal.timeout(15000) });
+    if (!res.ok) throw new HttpsError("unavailable", `${provider} returned ${res.status}`);
+    // Cap the payload so a vendor can't be used to blow up our egress bill.
+    const text = (await res.text()).slice(0, 500_000);
+    return { provider, body: text };
+  } catch (e) {
+    if (e instanceof HttpsError) throw e;
+    throw new HttpsError("unavailable", `${provider} is unreachable.`);
+  }
 });

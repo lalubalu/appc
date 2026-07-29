@@ -154,6 +154,16 @@ jobs:
              --project connectify-19dd8
              "node functions/scripts/e2e-backend.mjs"
 
+      # Adversarial suite: ~44 attacks that must all fail, plus positive
+      # controls asserting real usage still works. Blocking — a regression here
+      # means the app is exploitable, and one of these caught a live path that
+      # minted a $50 gift card per hour.
+      - name: Red team (attacks must fail)
+        run: npx firebase-tools@13 emulators:exec
+             --only auth,functions,firestore,storage
+             --project connectify-19dd8
+             "node functions/scripts/redteam.mjs"
+
   # ── Firestore rules must always compile ───────────────────────────────────
   rules:
     name: Firestore rules compile

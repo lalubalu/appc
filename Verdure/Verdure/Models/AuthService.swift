@@ -64,10 +64,29 @@ final class AuthService {
             errorMessage = "Please enter a valid email address."
             throw AuthError.invalidEmail
         }
-        // Validate password strength
-        guard password.count >= 6, password.count <= 128 else {
+        // Validate password strength.
+        //
+        // 8 rather than Firebase's 6-character floor: these accounts hold a
+        // points balance redeemable for real gift cards, so a credential-
+        // stuffing hit has cash value. 8 is also the NIST floor. We deliberately
+        // do NOT impose symbol/case composition rules — they push people toward
+        // "Passw0rd!" and are no longer recommended; length is what matters.
+        guard password.count >= 8, password.count <= 128 else {
             isLoading = false
-            errorMessage = "Password must be 6–128 characters."
+            errorMessage = "Password must be at least 8 characters."
+            throw AuthError.weakPassword
+        }
+        // Reject the handful of passwords that dominate credential-stuffing
+        // lists. Cheap, and it costs a genuine user nothing.
+        let normalized = password.lowercased()
+        let commonPasswords: Set<String> = [
+            "password", "password1", "password123", "12345678", "123456789",
+            "qwerty123", "letmein1", "iloveyou", "welcome1", "abc12345",
+            "verdure1", "verdure123",
+        ]
+        guard !commonPasswords.contains(normalized) else {
+            isLoading = false
+            errorMessage = "That password is too common. Please choose another."
             throw AuthError.weakPassword
         }
         // Validate display name
@@ -204,7 +223,7 @@ final class AuthService {
         case AuthErrorCode.invalidEmail.rawValue:
             return "Invalid email address."
         case AuthErrorCode.weakPassword.rawValue:
-            return "Password is too weak. Use at least 6 characters."
+            return "Password is too weak. Use at least 8 characters."
         case AuthErrorCode.networkError.rawValue:
             return "Network error. Please check your connection."
         case AuthErrorCode.tooManyRequests.rawValue:
@@ -284,7 +303,7 @@ enum AuthError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidEmail: return "Invalid email address."
-        case .weakPassword: return "Password must be at least 6 characters."
+        case .weakPassword: return "Password must be at least 8 characters."
         case .missingName: return "Please enter your name."
         case .emptyPassword: return "Please enter your password."
         case .networkError: return "Network error. Please try again."

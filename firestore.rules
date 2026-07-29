@@ -51,6 +51,29 @@ service cloud.firestore {
     }
 
     // ──────────────────────────────────────────────
+    // LIKE LEDGER: /postLikes/{postId}_{uid}
+    // ──────────────────────────────────────────────
+    // One row per (post, user). The document ID is derived, not chosen, so a
+    // user can only ever write the row that represents their own like on that
+    // post — which is what makes the "+1" on the post provably one-per-person.
+    match /postLikes/{likeId} {
+      allow read: if request.auth != null;
+
+      allow create: if request.auth != null
+                    // The ID must be exactly "<postId>_<callerUid>", so nobody
+                    // can register a like on someone else's behalf.
+                    && likeId == request.resource.data.postId + '_' + request.auth.uid
+                    && request.resource.data.uid == request.auth.uid
+                    && request.resource.data.postId is string
+                    && request.resource.data.postId.size() > 0
+                    && request.resource.data.keys().hasOnly(['postId', 'uid', 'createdAt']);
+
+      // Immutable. Allowing delete would permit unlike → relike → +1 again,
+      // which reopens the inflation this ledger exists to prevent.
+      allow update, delete: if false;
+    }
+
+    // ──────────────────────────────────────────────
     // USER DOCUMENTS: /users/{userId}
     // ──────────────────────────────────────────────
     match /users/{userId} {
@@ -111,11 +134,21 @@ service cloud.firestore {
                     && request.resource.data.authorID == request.auth.uid
                     && validPostDocument(request.resource.data);
 
-      // Posts are immutable EXCEPT likes: any signed-in user may bump likeCount
-      // by exactly +1 per write (nothing else may change). Author can delete.
+      // Posts are immutable EXCEPT likes, and a like must be ACCOUNTED FOR.
+      //
+      // "+1 per write" alone is not a limit: nothing stopped one account from
+      // sending that write in a loop and inflating a post without bound (the
+      // red team landed 6/6). The count is now backed by a per-user ledger
+      // entry, and the two writes must land together in one batch:
+      //   !exists(...)     → this user has not already liked this post
+      //   existsAfter(...) → the ledger row is created by this same batch
+      // Ledger rows can never be deleted (see /postLikes), so unlike-and-relike
+      // can't be used to replay the increment either.
       allow update: if request.auth != null
                     && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likeCount'])
-                    && request.resource.data.likeCount == resource.data.likeCount + 1;
+                    && request.resource.data.likeCount == resource.data.likeCount + 1
+                    && !exists(/databases/$(database)/documents/postLikes/$(postId + '_' + request.auth.uid))
+                    && existsAfter(/databases/$(database)/documents/postLikes/$(postId + '_' + request.auth.uid));
       allow delete: if request.auth != null
                     && resource.data.authorID == request.auth.uid;
     }
@@ -161,11 +194,21 @@ service cloud.firestore {
       let validCreatedAt = !('createdAt' in data) ||
         (data.createdAt is timestamp);
 
+      // NOTE: this list governs which keys may EXIST on the document, which is
+      // a different question from who may CHANGE them — that's
+      // noServerOwnedFieldChanges(). Server-written fields must appear here or
+      // the allowlist locks the user out of their own document: once the server
+      // stamps a field the list doesn't know, every later client update fails
+      // hasOnly() and offline sync breaks permanently for that account. That is
+      // exactly what happened when plusExpiresAt and the daily-earn counters
+      // were added without updating this list.
       let allowedFields = [
         'displayName', 'email', 'interests',
         'collectedPlaceIDs', 'checkedInEventIDs', 'redeemedRewardIDs',
         'pointsBalance', 'lifetimePoints',
-        'lastUpdated', 'createdAt'
+        'lastUpdated', 'createdAt',
+        // Server-owned (writable only by the Admin SDK, see noServerOwnedFieldChanges)
+        'plusExpiresAt', 'dailyEarnDay', 'dailyEarnPoints', 'fcmTokens'
       ];
       let noExtraFields = data.keys().hasOnly(allowedFields);
 
@@ -247,7 +290,10 @@ service cloud.firestore {
     function noServerOwnedFieldChanges() {
       return !request.resource.data.diff(resource.data).affectedKeys()
           .hasAny(['pointsBalance', 'lifetimePoints', 'checkedInEventIDs',
-                   'redeemedRewardIDs', 'plusExpiresAt']);
+                   'redeemedRewardIDs', 'plusExpiresAt',
+                   // Daily earning ledger — a client that could edit these
+                   // would reset its own economic cap.
+                   'dailyEarnDay', 'dailyEarnPoints']);
     }
 
     // On create, server-owned fields must be absent or zero/empty — a fresh client

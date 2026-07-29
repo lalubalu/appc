@@ -1,5 +1,50 @@
 # Security model — Verdure app
 
+> **Red team:** `cd functions && npm run redteam` — ~44 attacks that must all
+> fail, plus positive controls that must all pass. Runs on every CI push.
+> It is the evidence behind every claim in this document; where a control isn't
+> proven by a probe, that's said explicitly.
+
+## Adversarial audit — 2026-07-28
+
+Re-audited from a zero-trust position: assume the app is fully exposed and
+prove otherwise. The threat model is **an attacker who has unzipped the
+shipped `.ipa`** — they hold the public Firebase key, project id and bucket
+name, can register accounts freely, and talk to the REST and callable endpoints
+directly, so every in-app gate is irrelevant to them.
+
+Writing the probes surfaced **five real vulnerabilities**, three of them by
+attacking rather than by reading code:
+
+| # | Severity | Vulnerability | Fix |
+|---|---|---|---|
+| 1 | **Critical** | **Self-dealt event farming.** Create your own event claiming `pointValue: 1000`, set its coordinates to where you're standing, upload any photo, check in → **1000 points minted**. Repeatable at 20/hour ≈ a **$50 gift card every hour, indefinitely**. | Points are refused for an event you created; value now comes from the server's category table, never the document |
+| 2 | **Critical** | Server trusted the stored `pointValue` up to 1000, ignoring the category ceiling — a "Market" event (real value 75) paid 1000. | Clamped to `CATEGORY_MAX_POINTS[storedCategory]` |
+| 3 | High | **Like inflation.** One account looped `increment(1)` and landed 6/6 likes on a single post. | Per-user ledger (`postLikes/{postId}_{uid}`) enforced atomically in rules via `!exists()` + `existsAfter()`; ledger rows are immutable so unlike→relike can't replay |
+| 4 | Medium | **Type-confusion DoS.** `{"toString": "x"}` as any string field crashed the callable with `INTERNAL` — `String(x)` throws when `toString` isn't callable. Present in **all** callables. | `safeString()` treats non-strings as absent |
+| 5 | Medium | **Client lockout (self-inflicted).** The user-doc `hasOnly` allowlist didn't include server-written fields, so once the server stamped `plusExpiresAt` or the daily counters, **every subsequent client sync failed permanently**. | Allowlist covers server fields; `noServerOwnedFieldChanges` still stops the client changing them |
+
+Findings 1–3 were only visible by *executing* attacks. Two of the probes also
+initially passed **vacuously** — one attacked a code path the app doesn't use,
+another failed on a broken upload before reaching the assertion — which is why
+the harness now asserts its own preconditions and includes positive controls.
+
+### Still open, stated plainly
+
+- **Five billable third-party keys ship in the bundle** (SerpApi, Ticketmaster,
+  NPS, Recreation.gov, Eventbrite). A key on a device is public — this is
+  quota/billing theft, not user-data exposure. `externalFetch` (an allowlisted
+  server-side proxy, SSRF-tested) exists to end it, but the keys stay exposed
+  until it is deployed, the app is rebuilt against it, **and all five are
+  rotated** — every key in an already-released build is compromised for good.
+- **No App Check**, so callables accept any valid user token, not just the real
+  app. This is what makes account-farming cheap and is the next hardening step.
+- **Rate limits are per-account**, so free account creation resets the budget.
+  The daily earning cap is the backstop that bounds value regardless.
+- **Cloud Functions are not deployed** — every control in the callables is code
+  that has never run in production. The rules-layer controls *are* live.
+
+
 The website's Supabase schema (`Verdure-website--main/supabase/migrations/`)
 argues its security decisions out in comments rather than just stating them.
 This file applies that same standard to the **iOS app + Firebase backend**, which

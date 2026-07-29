@@ -243,7 +243,7 @@ struct OnboardingView: View {
                         }
                     }
                 if showPasswordField {
-                    ClayField(placeholder: "Password (6+ characters)", text: $userPassword,
+                    ClayField(placeholder: "Password (8+ characters)", text: $userPassword,
                               secure: true, contentType: isSignUp ? .newPassword : .password)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }

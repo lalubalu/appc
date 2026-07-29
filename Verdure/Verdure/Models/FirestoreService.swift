@@ -194,16 +194,36 @@ final class FirestoreService {
         }
     }
 
-    /// Increment a post's like count (rules allow exactly +1 per write on
-    /// likeCount only). The caller keeps its own liked-set so the heart state
-    /// persists locally.
-    func likePost(docID: String) async {
-        guard Auth.auth().currentUser != nil else { return }
+    /// Like a post, exactly once per user.
+    ///
+    /// The +1 and a per-user ledger row in `postLikes/{postId}_{uid}` are
+    /// written in ONE batch, because the security rules require both: the
+    /// increment is only permitted when that row doesn't exist before the batch
+    /// and does exist after it. A bare increment — which is what this used to
+    /// send — is now correctly refused, so a single account can no longer
+    /// inflate a post by looping the call.
+    ///
+    /// Returns true when the like was recorded. A second attempt fails the
+    /// rules check and returns false, which is the intended outcome.
+    @discardableResult
+    func likePost(docID: String) async -> Bool {
+        guard let uid = Auth.auth().currentUser?.uid else { return false }
+        let batch = db.batch()
+        batch.updateData(["likeCount": FieldValue.increment(Int64(1))],
+                         forDocument: db.collection("posts").document(docID))
+        batch.setData([
+            "postId": docID,
+            "uid": uid,
+            "createdAt": FieldValue.serverTimestamp(),
+        ], forDocument: db.collection("postLikes").document("\(docID)_\(uid)"))
+
         do {
-            try await db.collection("posts").document(docID)
-                .updateData(["likeCount": FieldValue.increment(Int64(1))])
+            try await batch.commit()
+            return true
         } catch {
-            print("[FirestoreService] likePost error: \(error.localizedDescription)")
+            // Expected when this user has already liked the post.
+            print("[FirestoreService] likePost refused: \(error.localizedDescription)")
+            return false
         }
     }
 

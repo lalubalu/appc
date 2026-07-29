@@ -11,7 +11,8 @@
     "e2e": "cd .. && npx firebase-tools@13 emulators:exec --only auth,functions,firestore,storage \"node functions/scripts/e2e-backend.mjs\"",
     "serve": "npm run build && firebase emulators:start --only functions",
     "deploy": "firebase deploy --only functions",
-    "logs": "firebase functions:log"
+    "logs": "firebase functions:log",
+    "redteam": "cd .. && npx firebase-tools@13 emulators:exec --only auth,functions,firestore,storage \"node functions/scripts/redteam.mjs\""
   },
   "dependencies": {
     "firebase-admin": "^12.6.0",
