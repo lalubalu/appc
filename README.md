@@ -85,14 +85,15 @@ cd Verdure && xcodebuild test -project Verdure.xcodeproj -scheme Verdure \
   -destination 'platform=iOS Simulator,name=iPhone 16 Pro'
 
 # Backend: full server contract against local emulators (needs Java 17+)
-cd functions && npm run e2e
+cd functions && npm run test:units && npm run e2e
 ```
 
 | Suite | Count | Covers |
 |---|---|---|
 | Unit | 38 | Transactions, cloud-merge safety, gamification, Daily Gem, sanitizer, reward windows |
-| UI + a11y | 16 | Journeys across every tab + Apple accessibility audits on 8 screens |
-| Backend E2E | 36 | Rules lockdown, check-in proof/GPS validation, entitlement gating, redemption, rate limiting |
+| UI + a11y | 17 | Journeys across every tab + Apple accessibility audits on 9 screens |
+| Backend E2E | 48 | Rules lockdown, check-in proof/GPS validation, Verdure+ entitlement, redemption, fulfilment queue, rate limiting |
+| Backend units | 23 | Which vendor responses refund vs. retry; `appAccountToken` determinism + golden vector — no emulator or vendor account needed |
 
 UI tests inject deterministic state through launch arguments (`-QATab`,
 `-QAOfflineData`, `-QADisableMotion`) — see [`QA.md`](QA.md).

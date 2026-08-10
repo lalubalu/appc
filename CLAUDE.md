@@ -107,17 +107,23 @@ The app's visual system mirrors the Verdure website: **claymorphism** with a sag
 
 - **Firebase** project is `connectify-19dd8` (Auth + Firestore). The app bundle id is `com.vaiybhav.verdure`; `GoogleService-Info.plist` is still registered for the old bundle id, so Firebase logs a non-fatal bundle-id mismatch warning. To fully decouple, re-register a `com.vaiybhav.verdure` app in the Firebase console and swap in a new `GoogleService-Info.plist`.
 
-## ⚠️ DEPLOY STATUS — verified against the live project 2026-07-24
+## ⚠️ DEPLOY STATUS — re-verified against the live project 2026-08-09
 
-Do not infer deploy state from changelog prose. E2E "25/25 green" is the **local
+Do not infer deploy state from changelog prose. E2E "37/37 green" is the **local
 emulator**, not production. Live facts, re-checkable any time with the command below:
 
-| Component | Live status (2026-07-24) |
+| Component | Live status (2026-08-09) |
 |---|---|
-| Firestore rules | ✅ **DEPLOYED** — ruleset `e98565b5…`, sha256 of live source matches `firestore.rules` byte-for-byte, updated 2026-07-21T18:39Z |
+| Firestore rules | ✅ **DEPLOYED** — ruleset `43d80b64…`, sha256 of live source matches `firestore.rules` byte-for-byte, updated 2026-07-29T01:32Z |
 | Cloud Functions | ❌ **NOT DEPLOYED** — 0 functions exist (v1 and v2 APIs both empty) |
 | Cloud Storage | ❌ **NO BUCKET** — Storage never initialised in console |
 | Billing plan | ❌ **Spark** (`billingEnabled: false`) — Functions *cannot* deploy until Blaze |
+
+**The backend stack is Firebase, not Supabase.** Supabase is the *marketing
+website* only (`Verdure-website--main/`). The iOS app has zero Supabase code:
+its SwiftPM deps are FirebaseAuth/Firestore/Functions/Storage and it ships a
+`GoogleService-Info.plist`. There is no migration branch, stash, or plan. Do not
+act on a belief that the app moved to Supabase — it did not.
 
 **Consequence while Functions are down:** check-ins/collects apply optimistically on
 device and queue in `pendingOps` forever; nothing is server-credited, no proof photo
@@ -134,19 +140,65 @@ npx firebase-tools projects:list        # confirms auth
 npx firebase-tools deploy --only functions --non-interactive   # errors if still Spark
 ```
 
+## GO-LIVE RUNBOOK — run in this order
+
+Everything below is written and tested against the emulators; step 1 is the only
+one a human must do in a browser, and nothing after it can run until it's done.
+
+```bash
+# 1. HUMAN, IN THE CONSOLE (billing decision — cannot be scripted):
+#    a) console.firebase.google.com → connectify-19dd8 → Upgrade → Blaze
+#    b) Build → Storage → "Get Started" (creates the bucket)
+#       Set a budget alert while you're there; Blaze is pay-as-you-go.
+
+# 2. Secrets. Deploys succeed without these, but the features stay inert:
+#    each one is read via defineSecret and simply reports "not configured".
+cd functions
+npx firebase-tools functions:secrets:set TREMENDOUS_API_KEY            # gift cards
+npx firebase-tools functions:secrets:set TREMENDOUS_FUNDING_SOURCE_ID
+npx firebase-tools functions:secrets:set TREMENDOUS_CATALOG            # {"starbucks-5":"<product id>", ...}
+npx firebase-tools functions:secrets:set APPLE_IAP_PRIVATE_KEY         # .p8 CONTENTS
+npx firebase-tools functions:secrets:set APPLE_IAP_KEY_ID
+npx firebase-tools functions:secrets:set APPLE_IAP_ISSUER_ID
+npx firebase-tools functions:secrets:set ANTHROPIC_API_KEY             # adventure planner
+npx firebase-tools functions:secrets:set RECREATION_GOV_KEY            # places proxy
+npx firebase-tools functions:secrets:set NPS_API_KEY
+
+# 3. Deploy. Rules first — they're the lockdown the callables assume.
+cd ..
+npx firebase-tools deploy --only firestore:rules
+npx firebase-tools deploy --only storage
+npx firebase-tools deploy --only functions
+
+# 4. VERIFY IT ACTUALLY LANDED (do not trust step 3's output alone):
+#    functions should be non-empty, buckets non-empty, billingEnabled true.
+#    The same read-only REST checks that produced the table above.
+npx firebase-tools functions:list
+```
+
+Then: point App Store Server Notifications V2 at the deployed
+`appStoreNotifications` URL, set `APPLE_APP_APPLE_ID` in `functions/.env`, flip
+`APPLE_IAP_ENVIRONMENT` to `production` at launch, and work through
+`DEVICE-QA.md` on two real phones.
+
 ## What Needs to Be Done (Backend & Beyond)
 
-- [ ] **Upgrade Firebase project to Blaze**, then `npx firebase-tools deploy --only functions` (rules ARE deployed; functions blocked on billing — queued check-ins hold until then)
-- [ ] **Enable Storage in console** (Get Started), then `npx firebase-tools deploy --only storage` (proof photos spool locally until then)
+- [ ] **Upgrade Firebase project to Blaze + enable Storage** — the ONLY human-gated step; everything below is written and waiting. Re-verified 2026-08-09: still Spark, still 0 functions, still no bucket.
+- [ ] Deploy functions + storage (see runbook above), then re-verify live state
 - [ ] Create the two Verdure+ subscriptions in App Store Connect (`com.vaiybhav.verdure.plus.monthly` / `.yearly` — local testing uses `Verdure/Verdure.storekit` via the Verdure scheme)
-- [ ] Server-side subscription check (App Store Server API) so redeemReward enforces Plus-only tiers
-- [ ] Real-device QA (2 phones): GPS gate outdoors, photo upload over cellular, airplane-mode queue replay
-- [ ] Real gift-card fulfillment (Tango/Tremendous)
+- [ ] **Real-device QA (2 phones)** — script written at `DEVICE-QA.md`; needs hardware. Runs 2 and 3 also need the backend live.
+- [ ] Fund a Tremendous account + map reward ids → product ids (`TREMENDOUS_CATALOG`); flip `TREMENDOUS_ENV=production` in `functions/.env`
+- [ ] APNs Auth Key (.p8) → Firebase Cloud Messaging, and Push Notifications capability on the App ID (code is done; nothing delivers without these)
+- [ ] Once Functions are live: add the Verdure+ 1.25x multiplier to `PaywallView.features` AND the store description in the same commit (both files carry the instruction)
+- [x] ~~Server-side subscription check~~ — done (`functions/src/subscriptions.ts`)
+- [x] ~~Real gift-card fulfillment~~ — done (`functions/src/fulfillment.ts`, Tremendous)
 - [ ] Real photos (AsyncImage + CDN) to replace clay icon placeholders
-- [ ] Push notifications, real social features
+- [ ] Real social features (follows, per-user feeds)
 - [ ] Dynamic Type app-wide (scaled variants exist in VType; check-in + paywall adopted)
 
 ## Changelog
+
+- **2026-08-09** — **The backend's two dead ends closed; planner + push added.** Re-verified live state: **still Spark, 0 functions, no bucket** — the checklist was right and the changelog prose was wrong, so check-ins have been queuing on-device for three weeks and nothing has ever been server-credited (no data lost; `pendingOps` is durable). Also settled a live misconception: **the iOS app has never used Supabase** — that's the marketing website; the app is 100% Firebase. Two features that shipped as no-ops are now real: **gift-card fulfilment** (`fulfillment.ts`, Tremendous — trigger + 30-min sweeper drain `/fulfillments`, idempotent on `external_id`, permanent failures refund points and un-redeem the reward, $25+ holds for manual approval) and **Verdure+ entitlement** (`subscriptions.ts`, App Store Server API + Server Notifications V2 write `plusExpiresAt`, which `hasActivePlus` reads and nothing previously wrote — so the 1.25x multiplier and Plus early access were inert for paying members). Ownership binding uses a **uid-derived `appAccountToken`** (RFC 4122 v5), so there's no stored field to overwrite and a replayed transaction id computes the wrong token. New **AI Adventure Planner** (`adventure.ts` + `AdventurePlannerView`): Claude picks from a candidate allowlist of real nearby places, weather from Open-Meteo (no API key), and **any stop it invents is dropped server-side** — grounding is mechanical, not a prompt instruction. **Push notifications** wired (FirebaseMessaging, APNs bridge, token stored per-user and removed on sign-out). Three real bugs fixed: `externalFetch` read `process.env` secrets it never declared, so both place providers would have returned "not configured" **in production only**; the new server-written `plus*` fields would have tripped the user-doc `hasOnly()` allowlist and permanently locked users out of their own document (the exact failure the rules comment already warned about); and `defineString` params made `npm run e2e` hang on an interactive prompt (fixed with `functions/.env`). `fcmTokens` now bounded at 10 — it's client-writable and fanned out to by `onPostCreated`. Push token lifecycle wired end to end (the settings toggle now actually registers with APNs; token attaches on sign-in and detaches on sign-out — otherwise a shared phone keeps receiving push for the previous account), and Restore Purchases falls back to the server's verified entitlement when StoreKit returns nothing. Tests: **backend E2E 48/48** (was 37), **23 new backend unit checks** incl. a golden vector pinning the `appAccountToken` derivation, **iOS 55/55** incl. a new a11y audit for the planner. `DEVICE-QA.md` written — the 2-phone field script, still unrun, and honestly marked as such.
 
 - **2026-07-21** — **Backend E2E-proven + everything hardcoded made real.** New Local-Emulator E2E suite (`npm run e2e` in functions/; firebase-tools@13, firestore emulator on port 8899 — 8080 wedges on this machine; Firestore over gRPC only): **25/25 green** covering storage ownership/image rules, checkIn proof+GPS validation & haversine rejection & clamps & idempotency, attendance audit, rules lockdown, redeem lifecycle, and the new post-like rule (+1-only, deployed). Fabrications removed app-wide: real daily **streak** (foreground-day tracking), real **challenges** (monthly progress from a persisted earn-history) and **badges** (unlock dates persisted, real notifications) via `GamificationEngine`; Community rebuilt fake-free (real authors→stories, real trending from post places, real counts, Firestore-backed likes with per-device dedupe, honest member sheets, samples never mixed into real feed); notifications inbox no longer seeded — persisted real entries only; places carry **real coordinates** (collectibles/map no longer hash-scattered), **real photos** (NPS/RecGov/OSM via AsyncImage), real OSM hours when present ("typical" clearly labeled otherwise), and **no synthetic ratings/review counts/attendee counts anywhere**; PlaceDetail Share/Directions/Save all work (save persisted), events-at-place matched from live events; reward confirmation copy honest (email delivery, no fake code). **Dynamic Type enabled globally** at the VType ramp. Tests: 16/16 XCTest (incl. new streak/challenge/badge suite). Firestore rules redeployed.
 

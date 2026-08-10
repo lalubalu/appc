@@ -30,6 +30,9 @@ targets:
         UISupportedInterfaceOrientations~iphone:
           - UIInterfaceOrientationPortrait
         UIRequiresFullScreen: true
+        # Lets a silent/background push wake the app to refresh.
+        UIBackgroundModes:
+          - remote-notification
         CFBundleDisplayName: Verdure
         NSLocationWhenInUseUsageDescription: "Verdure uses your location to find nearby events and outdoor places you can check in to."
         # CMMotionManager drives the decorative parallax tilt on clay cards.
@@ -77,6 +80,11 @@ targets:
         product: FirebaseFunctions
       - package: Firebase
         product: FirebaseStorage
+      # Remote push. Needs an APNs .p8 uploaded to Firebase and the Push
+      # Notifications capability on the App ID before it can deliver anything —
+      # see PushService.swift.
+      - package: Firebase
+        product: FirebaseMessaging
   VerdureTests:
     type: bundle.unit-test
     platform: iOS

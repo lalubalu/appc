@@ -24,6 +24,17 @@ feature ships or is pulled, update this file in the same commit.
 
 *(159 characters)*
 
+> **Pending copy change — do not submit early.** A Verdure+ **1.25x earn
+> multiplier** is implemented and server-enforced (`earnMultiplier` in
+> `functions/src/index.ts`), and it is proven by the E2E suite. It is
+> deliberately absent from both the description above and `PaywallView.features`
+> because it cannot pay out until Cloud Functions are deployed *and* the Apple
+> IAP secrets are set — and this repo's rule is that we do not sell a benefit
+> that doesn't yet pay. Once both are true, add the line
+> `• Bonus points — earn 1.25x on every check-in and collection`
+> to the description **and** to `PaywallView.features` in the same commit, so
+> the store listing and the in-app paywall can never disagree.
+
 ## Description
 
 > **Step Outside. Connect Within.**
@@ -51,6 +62,11 @@ feature ships or is pulled, update this file in the same commit.
 > **A Daily Gem**
 > One fun fact a day about nature, community and the environment. Small, but it
 > gets you looking around.
+>
+> **Plan my adventure**
+> Tell Verdure how long you've got and it builds you an itinerary — real places
+> near you, ordered sensibly, shaped by the actual weather and the time of day.
+> Every stop is a place that genuinely exists nearby; nothing is invented.
 >
 > **Verdure+ (optional)**
 > $4.99/month or $49.99/year:
@@ -100,6 +116,7 @@ These must match `Verdure/Verdure/PrivacyInfo.xcprivacy` exactly.
 | Photos or Videos | Yes | Yes | No | App Functionality |
 | Other User Content | Yes | Yes | No | App Functionality |
 | Purchase History | Yes | Yes | No | App Functionality |
+| Device ID | Yes | Yes | No | App Functionality |
 
 Nothing else is collected — no contacts, health, browsing, search history,
 diagnostics, or advertising data.
@@ -124,6 +141,14 @@ diagnostics, or advertising data.
 > Verdure+ unlocks the Gold/Platinum reward tiers, early access to limited-time
 > drops, and a profile badge. Everything else in the app is free. The paywall
 > lists only features that are live in this build.
+>
+> **About "Plan my adventure"**
+> This builds an itinerary using a language model, but the model is only ever
+> allowed to choose from a list of real nearby places the app has already
+> fetched from public map/park data. Any place it returns that isn't on that
+> list is discarded server-side, so the itinerary cannot contain invented
+> locations. No user content is sent — only place names, categories and the
+> current weather.
 >
 > **Location usage**
 > Used for finding nearby places, the collection proximity check, and verifying
@@ -160,9 +185,24 @@ Captured at Apple's required 6.9" size (1320 × 2868) in `screenshots/6.9-inch/`
 - [ ] Upgrade Firebase to Blaze and deploy Functions + Storage — **without this
       no check-in ever credits points and no proof photo uploads** (see the
       DEPLOY STATUS table in `CLAUDE.md`)
-- [ ] Real gift-card fulfilment. Redemption now writes a durable `pending`
-      order to `/fulfillments` in the same transaction as the points debit, so
-      nothing is lost and orders can be filled by hand meanwhile — but a real
-      vendor (Tango/Tremendous) must be integrated before shipping paid rewards.
+- [x] Real gift-card fulfilment — **Tremendous integrated**
+      (`functions/src/fulfillment.ts`): a trigger + 30-minute sweeper drain the
+      `/fulfillments` queue, orders are idempotent on `external_id`, permanent
+      failures refund the user's points, and anything $25+ waits for manual
+      approval. **Still needs**: a funded Tremendous account and the three
+      secrets (`TREMENDOUS_API_KEY`, `TREMENDOUS_FUNDING_SOURCE_ID`, and
+      `TREMENDOUS_CATALOG` mapping reward ids to that account's product ids).
+      Nothing sends until those exist — the queue simply holds.
+- [x] Server-side Verdure+ verification — **done**
+      (`functions/src/subscriptions.ts`): the App Store Server API writes
+      `users/{uid}.plusExpiresAt`, App Store Server Notifications V2 keep it
+      fresh, and ownership is bound via a uid-derived `appAccountToken`.
+      **Still needs**: an In-App Purchase key (.p8) from App Store Connect and
+      the ASSN V2 URL pointed at the deployed `appStoreNotifications` endpoint.
+- [ ] **AI Adventure Planner**: set `ANTHROPIC_API_KEY` as a function secret.
+      Until then the planner tile is visible but returns "isn't switched on yet".
+- [ ] **Push notifications**: upload an APNs Auth Key (.p8) to Firebase → Cloud
+      Messaging and add the Push Notifications capability to the App ID.
+      Without both, permission is granted but nothing is ever delivered.
 - [x] Privacy manifest (`PrivacyInfo.xcprivacy`) — done, ships in the bundle
 - [x] Screenshots at a required size — done (6.9")

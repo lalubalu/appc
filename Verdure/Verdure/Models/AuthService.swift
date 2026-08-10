@@ -113,6 +113,10 @@ final class AuthService {
             self.currentUser = user
             self.isLoading = false
             self.persistUser(user)
+            // Attach this device's push token to the account that just signed in.
+            // FCM only volunteers a token at launch, so without this an existing
+            // install never registers for any account but the first.
+            await PushService.shared.registerCurrentTokenForSignedInUser()
         } catch {
             self.isLoading = false
             self.errorMessage = Self.mapFirebaseError(error as NSError)
@@ -156,6 +160,10 @@ final class AuthService {
             self.currentUser = user
             self.isLoading = false
             self.persistUser(user)
+            // Attach this device's push token to the account that just signed in.
+            // FCM only volunteers a token at launch, so without this an existing
+            // install never registers for any account but the first.
+            await PushService.shared.registerCurrentTokenForSignedInUser()
         } catch {
             self.isLoading = false
             self.errorMessage = Self.mapFirebaseError(error as NSError)
@@ -165,6 +173,11 @@ final class AuthService {
 
     /// Sign out the current user.
     func signOut() {
+        // Before the sign-out, while the uid is still resolvable: detach this
+        // device's push token from the account. Otherwise the next person to use
+        // the phone keeps receiving notifications meant for the previous user.
+        PushService.shared.unregisterCurrentDeviceOnSignOut()
+
         do {
             try Auth.auth().signOut()
         } catch {

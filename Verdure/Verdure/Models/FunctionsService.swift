@@ -95,6 +95,34 @@ final class FunctionsService: Sendable {
         )
     }
 
+    // MARK: - Verdure+ (server-verified entitlement)
+
+    /// The UUID to attach to a StoreKit purchase so Apple records which Verdure
+    /// account made it. Derived server-side from the uid — see subscriptions.ts.
+    func appAccountToken() async throws -> String {
+        let data = try await Self.call("getAppAccountToken", [:])
+        guard let token = data["appAccountToken"] as? String else {
+            throw ServerCallError.server("No account token returned.")
+        }
+        return token
+    }
+
+    /// Ask the server to verify a purchase with Apple and record the entitlement.
+    /// Returns whether the server considers Verdure+ currently active.
+    @discardableResult
+    func linkSubscription(transactionId: String) async throws -> Bool {
+        let data = try await Self.call("linkSubscription", ["transactionId": transactionId])
+        return data["plus"] as? Bool ?? false
+    }
+
+    /// Re-check the entitlement the server already has for this account, with no
+    /// local StoreKit transaction involved. Used as the Restore fallback when
+    /// StoreKit returns nothing but the server holds a verified subscription.
+    func refreshMySubscription() async throws -> Bool {
+        let data = try await Self.call("refreshMySubscription", [:])
+        return data["plus"] as? Bool ?? false
+    }
+
     // MARK: - Plumbing
 
     /// Runs a callable and returns its result dictionary. Both the payload and the

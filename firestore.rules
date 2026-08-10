@@ -191,6 +191,15 @@ service cloud.firestore {
       let validLastUpdated = !('lastUpdated' in data) ||
         (data.lastUpdated is timestamp);
 
+      // Push tokens. Client-writable by necessity — the device is the only
+      // thing that knows its own FCM token — but bounded, because this list is
+      // read by onPostCreated and fanned out to. Unbounded, one account could
+      // grow it until the fan-out is a spam amplifier pointed at the whole user
+      // base, and the document itself approaches Firestore's 1 MB ceiling.
+      // Nobody legitimately has more than a handful of devices.
+      let validFcmTokens = !('fcmTokens' in data) ||
+        (data.fcmTokens is list && data.fcmTokens.size() <= 10);
+
       let validCreatedAt = !('createdAt' in data) ||
         (data.createdAt is timestamp);
 
@@ -208,12 +217,17 @@ service cloud.firestore {
         'pointsBalance', 'lifetimePoints',
         'lastUpdated', 'createdAt',
         // Server-owned (writable only by the Admin SDK, see noServerOwnedFieldChanges)
-        'plusExpiresAt', 'dailyEarnDay', 'dailyEarnPoints', 'fcmTokens'
+        'plusExpiresAt', 'dailyEarnDay', 'dailyEarnPoints', 'fcmTokens',
+        // Verdure+ bookkeeping written by subscriptions.ts after Apple verifies
+        // the purchase. Listed here for the reason spelled out above: the moment
+        // the server stamps a key this list doesn't know, hasOnly() starts
+        // failing and the user can never write their own document again.
+        'plusProductId', 'plusOriginalTransactionId', 'plusStatus', 'plusUpdatedAt'
       ];
       let noExtraFields = data.keys().hasOnly(allowedFields);
 
       return validDisplayName && validEmail && validInterests
-          && validLastUpdated && validCreatedAt && noExtraFields;
+          && validLastUpdated && validCreatedAt && validFcmTokens && noExtraFields;
     }
 
     // Validate game state fields (collections, points)
@@ -293,7 +307,15 @@ service cloud.firestore {
                    'redeemedRewardIDs', 'plusExpiresAt',
                    // Daily earning ledger — a client that could edit these
                    // would reset its own economic cap.
-                   'dailyEarnDay', 'dailyEarnPoints']);
+                   'dailyEarnDay', 'dailyEarnPoints',
+                   // Verdure+ provenance. plusExpiresAt above is what grants the
+                   // benefit, but these decide WHICH Apple subscription the
+                   // account is bound to — a client that could rewrite
+                   // plusOriginalTransactionId could point itself at someone
+                   // else's subscription and have refreshMySubscription
+                   // faithfully re-grant it.
+                   'plusProductId', 'plusOriginalTransactionId',
+                   'plusStatus', 'plusUpdatedAt']);
     }
 
     // On create, server-owned fields must be absent or zero/empty — a fresh client
@@ -303,8 +325,12 @@ service cloud.firestore {
           && (!('lifetimePoints' in data) || data.lifetimePoints == 0)
           && (!('checkedInEventIDs' in data) || (data.checkedInEventIDs is list && data.checkedInEventIDs.size() == 0))
           && (!('redeemedRewardIDs' in data) || (data.redeemedRewardIDs is list && data.redeemedRewardIDs.size() == 0))
-          // A fresh client may never mint itself a Verdure+ entitlement.
-          && !('plusExpiresAt' in data);
+          // A fresh client may never mint itself a Verdure+ entitlement, nor
+          // create itself already bound to an Apple subscription.
+          && !('plusExpiresAt' in data)
+          && !('plusOriginalTransactionId' in data)
+          && !('plusProductId' in data)
+          && !('plusStatus' in data);
     }
 
     // Prevent changing fields that should be immutable after creation

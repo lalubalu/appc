@@ -1,3 +1,4 @@
+/* eslint-disable import/first */
 /**
  * Verdure Cloud Functions — server-authoritative game logic.
  *
@@ -15,6 +16,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { setGlobalOptions } from "firebase-functions/v2";
+import { defineSecret } from "firebase-functions/params";
 import { initializeApp } from "firebase-admin/app";
 import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
@@ -617,10 +619,22 @@ export const sendEventReminders = onSchedule("every day 09:00", async () => {
 //
 // The proxy is rate limited like every other callable: it spends real money per
 // call, so it's the last thing that should be freely hammerable.
+// SECRETS MUST BE BOUND, NOT MERELY SET.
+//
+// This code read `process.env.RECREATION_GOV_KEY` directly while the callable
+// declared no secrets. A secret stored with `functions:secrets:set` is only
+// mounted into a function that DECLARES it — so both keys were `undefined` in
+// production and the proxy answered "<provider> is not configured" forever,
+// while working locally where the values come from a shell env. The migration
+// note below tells you to set these secrets; without these declarations that
+// instruction silently does nothing.
+const RECREATION_GOV_KEY = defineSecret("RECREATION_GOV_KEY");
+const NPS_API_KEY = defineSecret("NPS_API_KEY");
+
 const PROXY_ALLOWLIST: Record<string, (params: Record<string, string>) => string | null> = {
   // Recreation.gov facilities near a point.
   recreation: (p) => {
-    const key = process.env.RECREATION_GOV_KEY;
+    const key = RECREATION_GOV_KEY.value();
     if (!key) return null;
     const q = new URLSearchParams({
       latitude: p.lat, longitude: p.lng, radius: "25", limit: "20",
@@ -629,7 +643,7 @@ const PROXY_ALLOWLIST: Record<string, (params: Record<string, string>) => string
   },
   // National Park Service sites in a state.
   nps: (p) => {
-    const key = process.env.NPS_API_KEY;
+    const key = NPS_API_KEY.value();
     if (!key) return null;
     const q = new URLSearchParams({ stateCode: p.state ?? "", limit: "15", api_key: key });
     return `https://developer.nps.gov/api/v1/parks?${q}`;
@@ -638,7 +652,9 @@ const PROXY_ALLOWLIST: Record<string, (params: Record<string, string>) => string
 
 RATE_LIMITS.externalFetch = { max: 120, windowMs: 60 * 60 * 1000 };
 
-export const externalFetch = onCall(async (req) => {
+export const externalFetch = onCall({
+  secrets: [RECREATION_GOV_KEY, NPS_API_KEY],
+}, async (req) => {
   const uid = req.auth?.uid;
   if (!uid) throw new HttpsError("unauthenticated", "Sign in first.");
   await enforceRateLimit(uid, "externalFetch");
@@ -661,7 +677,7 @@ export const externalFetch = onCall(async (req) => {
   if (!url) throw new HttpsError("failed-precondition", `${provider} is not configured.`);
 
   const headers: Record<string, string> =
-    provider === "recreation" ? { apikey: process.env.RECREATION_GOV_KEY ?? "" } : {};
+    provider === "recreation" ? { apikey: RECREATION_GOV_KEY.value() } : {};
 
   try {
     const res = await fetch(url, { headers, signal: AbortSignal.timeout(15000) });
@@ -674,3 +690,21 @@ export const externalFetch = onCall(async (req) => {
     throw new HttpsError("unavailable", `${provider} is unreachable.`);
   }
 });
+
+// ── Gift-card fulfilment (Tremendous) ───────────────────────────────────────
+// Re-exported so the deploy picks them up. See fulfillment.ts for why each
+// control exists — the short version is that /fulfillments was written by
+// redeemReward and never read by anything, so every redemption to date took
+// points and delivered no card.
+export { onFulfilmentWritten, sweepFulfilments, runFulfilment } from "./fulfillment.js";
+
+// ── Verdure+ entitlement (App Store Server API) ─────────────────────────────
+// The only writers of users/{uid}.plusExpiresAt, which hasActivePlus() reads.
+// Until these existed that field was never set, so every Plus benefit above was
+// inert for paying members. See subscriptions.ts for the ownership-binding model.
+export { linkSubscription, appStoreNotifications, refreshMySubscription, getAppAccountToken } from "./subscriptions.js";
+
+// ── AI Adventure Planner ────────────────────────────────────────────────────
+// Grounded in real nearby places: the model chooses from a candidate allowlist
+// and any stop it invents is dropped server-side. See adventure.ts.
+export { planAdventure } from "./adventure.js";

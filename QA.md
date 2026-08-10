@@ -1,4 +1,33 @@
-# Verdure QA Report — 2026-07-22
+# Verdure QA Report — updated 2026-08-09
+
+> **What is and isn't proven here.** Everything below runs on the simulator and
+> the Firebase Local Emulator Suite. It proves the code is correct; it does NOT
+> prove the product works, because **Cloud Functions and Storage are still not
+> deployed** (billing is Spark — see the DEPLOY STATUS table in `CLAUDE.md`).
+> The three things only real hardware and a live backend can settle are scripted
+> in `DEVICE-QA.md`, which is **written but unrun**.
+
+## 2026-08-09 run
+
+| Suite | Result |
+|---|---|
+| Unit (`VerdureTests`) | **38/38** |
+| UI journeys + a11y audits (`VerdureUITests`) | **17/17** — includes a new audit for the Adventure Planner sheet |
+| Backend E2E (emulators) | **48/48** — up from 37; adds Verdure+ entitlement (multiplier on/off/expired, early-access gating), the rules that stop a client granting itself Plus or re-pointing its Apple subscription, and the fulfilment queue's shape + lockdown |
+| Backend units (`npm run test:units`) | **23/23** — no emulator or vendor account needed. Fulfilment: which HTTP outcomes refund vs. retry (stubs `fetch`). Verdure+: `appAccountToken` determinism, with a **golden vector** so a change to the derivation fails here instead of silently de-entitling every existing subscriber. |
+| Red team (`npm run redteam`) | see below |
+
+Run them all:
+
+```bash
+cd Verdure && xcodebuild -project Verdure.xcodeproj -scheme Verdure \
+  -destination 'platform=iOS Simulator,name=iPhone 16 Pro' test
+cd functions && npm run test:units && npm run e2e && npm run redteam
+```
+
+---
+
+# Previous report — 2026-07-22
 
 Full no-cost QA pass: everything below runs on the simulator + Firebase Local
 Emulator Suite. No Blaze plan, no devices, no paid services required.

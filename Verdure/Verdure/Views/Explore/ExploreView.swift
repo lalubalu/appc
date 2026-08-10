@@ -4,7 +4,9 @@ struct ExploreView: View {
     @Environment(GameStateManager.self) private var gameState
     @Environment(PlacesAPIService.self) private var placesService
     @Environment(AuthService.self) private var authService
+    @Environment(LocationManager.self) private var locationManager
     @State private var showGem = false
+    @State private var showPlanner = false
     @State private var showNotifications = false
     @State private var placeSearch = ""
     @FocusState private var searchFocused: Bool
@@ -46,9 +48,10 @@ struct ExploreView: View {
                     header.riseIn(index: 0)
                     heroBento.riseIn(index: 1)
                     dailyGemTile.riseIn(index: 2)
-                    statsStrip.riseIn(index: 3)
-                    questsSection.riseIn(index: 4)
-                    nearbySection.riseIn(index: 5)
+                    plannerTile.riseIn(index: 3)
+                    statsStrip.riseIn(index: 4)
+                    questsSection.riseIn(index: 5)
+                    nearbySection.riseIn(index: 6)
                 }
                 .padding(.horizontal, Spacing.md)
                 .padding(.top, Spacing.sm)
@@ -56,6 +59,17 @@ struct ExploreView: View {
             }
             .background(VerdureBackground())
             .navigationDestination(for: Place.self) { PlaceDetailView(place: $0) }
+            .sheet(isPresented: $showPlanner) {
+                // Cupertino is the app's documented default when there's no fix
+                // yet — same fallback the rest of the app uses, so the planner
+                // still works indoors on a fresh install.
+                let coord = locationManager.userLocation?.coordinate
+                AdventurePlannerView(
+                    places: sourcePlaces.filter { $0.coordinate != nil },
+                    latitude: coord?.latitude ?? 37.3230,
+                    longitude: coord?.longitude ?? -122.0322
+                )
+            }
             .fullScreenCover(isPresented: $showGem) {
                 DailyGemView(fact: DailyGemStore.todaysFact) { showGem = false }
             }
@@ -164,6 +178,50 @@ struct ExploreView: View {
     }
 
     // MARK: - Daily Gem (wide immersive — today's fun fact)
+
+    /// Entry point to the AI planner. Hidden until there are at least two places
+    /// with real coordinates to plan around — offering to build an itinerary and
+    /// then failing for lack of input is a worse experience than not offering.
+    @ViewBuilder
+    private var plannerTile: some View {
+        let plannable = sourcePlaces.filter { $0.coordinate != nil }
+        if plannable.count >= 2 {
+            Button(action: { Haptics.tap(); showPlanner = true }) {
+                HStack(spacing: Spacing.md) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundStyle(Palette.teal.onColor)
+                        .frame(width: 46, height: 46)
+                        .background(RoundedRectangle(cornerRadius: Radius.chip, style: .continuous)
+                            .fill(Palette.teal.base))
+                        .accessibilityHidden(true)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Plan my adventure")
+                            .font(VType.body(17, .semibold))
+                            .foregroundStyle(Palette.ink)
+                        Text("An itinerary from real places, shaped by today's weather")
+                            .font(VType.body(13))
+                            .foregroundStyle(Palette.inkSoft)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .multilineTextAlignment(.leading)
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(Palette.inkSoft)
+                        .accessibilityHidden(true)
+                }
+                .padding(Spacing.md)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(ClayPressButtonStyle(style: .surface, radius: Radius.md))
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Plan my adventure")
+            .accessibilityHint("Builds an itinerary from real places near you, shaped by today's weather")
+            .accessibilityAddTraits(.isButton)
+        }
+    }
 
     private var dailyGemTile: some View {
         let fact = DailyGemStore.todaysFact

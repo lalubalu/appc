@@ -70,10 +70,15 @@ final class NotificationManager {
 
     // MARK: Permission
 
+    /// Ask for notification permission.
+    ///
+    /// Routed through `PushService` so the ONE user-facing toggle enables both
+    /// halves. Asking for authorization without also calling
+    /// `registerForRemoteNotifications()` grants the prompt but never obtains an
+    /// APNs token — local reminders would work, remote push would silently never
+    /// arrive, and nothing in the UI would indicate why.
     func requestPermission() async {
-        let center = UNUserNotificationCenter.current()
-        let granted = (try? await center.requestAuthorization(options: [.alert, .sound, .badge])) ?? false
-        permissionGranted = granted
+        await PushService.shared.requestAuthorizationAndRegister()
     }
 
     func refreshPermissionStatus() {

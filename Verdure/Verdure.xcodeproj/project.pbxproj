@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		0315B14A9E2039CF66DA1330 /* OrganizerVerificationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C3F67EDF9828ADE46D44C8E /* OrganizerVerificationView.swift */; };
+		031B1A9A522396A3D027E259 /* AdventurePlannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA6A0F79585FF85230ACA757 /* AdventurePlannerView.swift */; };
 		07526A4C6F0E4742B5C51163 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E052E70BACF86711D3588EC5 /* Assets.xcassets */; };
 		0CC32ACF6D62DA1CD17B34BC /* JourneyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03A7624DC05E120CBE8C96D2 /* JourneyTests.swift */; };
 		0FD1FF38CDD070F3F43072FE /* Fredoka-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 7340F1690374C2D0E14E775C /* Fredoka-Regular.ttf */; };
@@ -17,6 +18,7 @@
 		237324EFC606CFFE6E57ABAC /* VerdureTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7009DBDF066E6A4E973BD540 /* VerdureTheme.swift */; };
 		287495546C45A38C8332E713 /* GamificationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89F3F94B1DC77849E053033C /* GamificationTests.swift */; };
 		2A71FB3F93084CDDB5EBAF41 /* CollectionCelebrationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BE41FA8845AD7982EB6F010 /* CollectionCelebrationView.swift */; };
+		2A8B5A090F01593B1C2021C2 /* PushService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5583DC243B8AB0C4BBF1590 /* PushService.swift */; };
 		3004DA463A48EBF50CD59439 /* Fredoka-SemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = C32C7EFF31CF1C6970BB7876 /* Fredoka-SemiBold.ttf */; };
 		303F0CA473AA2ADD463B4C32 /* FirestoreService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC6765B53003FF95283C4E70 /* FirestoreService.swift */; };
 		33D33531905F5270B96D2943 /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB8F363A9957A893687367F5 /* AuthService.swift */; };
@@ -63,6 +65,7 @@
 		BA039A329895D9A14FF203DC /* CloudMergeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84511E9E4D1E47B0C6EE8166 /* CloudMergeTests.swift */; };
 		BA1F349BA9BF44634D5F47CB /* FirebaseFunctions in Frameworks */ = {isa = PBXBuildFile; productRef = 9599CF5F1C78D28BF7DB6D7B /* FirebaseFunctions */; };
 		BBFD9809C22B0F0C7C2F9F33 /* SharedComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 341DA15FA2B7C4910C824D7F /* SharedComponents.swift */; };
+		BCB1D42D720F587C398688BD /* AdventurePlannerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F119F024926D3A998975C97 /* AdventurePlannerService.swift */; };
 		BDF13AAA669E80C0CEFE9CEC /* GamificationEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09A4D2EBD2E99F891EBAA135 /* GamificationEngine.swift */; };
 		C08AF95A9985DFD800CCC54E /* VerdureMedallion3D.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4980C285D25D44340DD6DB8E /* VerdureMedallion3D.swift */; };
 		C91DBD7CF231CD726DAD3290 /* AuthView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20CB77B69D321A7C73C16B98 /* AuthView.swift */; };
@@ -75,6 +78,7 @@
 		E787B0F3D42D15C53C1B9A27 /* ExploreView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F91EB7C7709DEBD9167F2DC /* ExploreView.swift */; };
 		E7F872E997D7F08418276AA0 /* Rubik-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 63CF83506D67AB715494A196 /* Rubik-Medium.ttf */; };
 		EF3E1857F9BBB36768778D30 /* GameStateManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F78B4B0C2A812A0AB3F50868 /* GameStateManagerTests.swift */; };
+		FAA86C963675F4684D4EA0CC /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = AC1246103887A2D4CC83F01A /* FirebaseMessaging */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -104,6 +108,7 @@
 		09A77B898877DEEFE5C437CB /* ClayKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClayKit.swift; sourceTree = "<group>"; };
 		0A66DC58FCDC00DEBEB66622 /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
 		0DE7746BD26FC744CB9F9052 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		0F119F024926D3A998975C97 /* AdventurePlannerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdventurePlannerService.swift; sourceTree = "<group>"; };
 		103DF226E6A366528B80137C /* PaywallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallView.swift; sourceTree = "<group>"; };
 		18435643F4C1731E6A07A618 /* AccountType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountType.swift; sourceTree = "<group>"; };
 		18D37ABD5658791FD46C6AA8 /* RarityBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RarityBadge.swift; sourceTree = "<group>"; };
@@ -148,8 +153,10 @@
 		A61E82460539D352DF79BAE0 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		B0DC757516A78FB8037B39A3 /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
 		B487AF1D2AC933DA4DDF2B30 /* MapExploreView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapExploreView.swift; sourceTree = "<group>"; };
+		B5583DC243B8AB0C4BBF1590 /* PushService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushService.swift; sourceTree = "<group>"; };
 		B580BB04E8635D042DDC2A14 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		B8519A30F108AACEC233804A /* AccessibilityAuditTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityAuditTests.swift; sourceTree = "<group>"; };
+		BA6A0F79585FF85230ACA757 /* AdventurePlannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdventurePlannerView.swift; sourceTree = "<group>"; };
 		BC6765B53003FF95283C4E70 /* FirestoreService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirestoreService.swift; sourceTree = "<group>"; };
 		C32C7EFF31CF1C6970BB7876 /* Fredoka-SemiBold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Fredoka-SemiBold.ttf"; sourceTree = "<group>"; };
 		C5A6185EF7288A49DD96C4E8 /* Fredoka-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Fredoka-Bold.ttf"; sourceTree = "<group>"; };
@@ -175,6 +182,7 @@
 				1880A39FB396F2170D37D781 /* FirebaseFirestore in Frameworks */,
 				BA1F349BA9BF44634D5F47CB /* FirebaseFunctions in Frameworks */,
 				897853A42D1A4B04F9FBA08A /* FirebaseStorage in Frameworks */,
+				FAA86C963675F4684D4EA0CC /* FirebaseMessaging in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -314,6 +322,7 @@
 			isa = PBXGroup;
 			children = (
 				18435643F4C1731E6A07A618 /* AccountType.swift */,
+				0F119F024926D3A998975C97 /* AdventurePlannerService.swift */,
 				FB8F363A9957A893687367F5 /* AuthService.swift */,
 				3EE8DEBB376ECBD578D6F796 /* CollectionModels.swift */,
 				8B79380560DB9D61F2161CD8 /* DailyGemStore.swift */,
@@ -327,6 +336,7 @@
 				B580BB04E8635D042DDC2A14 /* Models.swift */,
 				7A5B78787E70FB7634F58374 /* NotificationManager.swift */,
 				1C5DEE879934EC46DB64A8A8 /* PlacesAPIService.swift */,
+				B5583DC243B8AB0C4BBF1590 /* PushService.swift */,
 				968ADEA7FBB0AB7976384091 /* SampleData.swift */,
 				44E07B985CADB6E0B4B6D069 /* StorageService.swift */,
 				786310F264DB5643723C30F3 /* StoreService.swift */,
@@ -384,6 +394,7 @@
 		D6583E09D09E0D9328BB6526 /* Explore */ = {
 			isa = PBXGroup;
 			children = (
+				BA6A0F79585FF85230ACA757 /* AdventurePlannerView.swift */,
 				7F91EB7C7709DEBD9167F2DC /* ExploreView.swift */,
 				9A0269E080A13E4D39959C84 /* PlaceDetailView.swift */,
 			);
@@ -474,6 +485,7 @@
 				90080ED01EE002D32C04C263 /* FirebaseFirestore */,
 				9599CF5F1C78D28BF7DB6D7B /* FirebaseFunctions */,
 				48DF56816A9D1163254EBF1B /* FirebaseStorage */,
+				AC1246103887A2D4CC83F01A /* FirebaseMessaging */,
 			);
 			productName = Verdure;
 			productReference = 2BAFC0E298A26E3D3994F854 /* Verdure.app */;
@@ -569,6 +581,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				A4696D91E23BC564E0480440 /* AccountType.swift in Sources */,
+				BCB1D42D720F587C398688BD /* AdventurePlannerService.swift in Sources */,
+				031B1A9A522396A3D027E259 /* AdventurePlannerView.swift in Sources */,
 				33D33531905F5270B96D2943 /* AuthService.swift in Sources */,
 				C91DBD7CF231CD726DAD3290 /* AuthView.swift in Sources */,
 				39578ECFE7FFB1588E325F16 /* ClayKit.swift in Sources */,
@@ -600,6 +614,7 @@
 				9CDC1698E197C0C5F6D0A415 /* PlacesAPIService.swift in Sources */,
 				8382CD7BF30156541B90731F /* ProfileDetailViews.swift in Sources */,
 				3C085C148D129B61009A4F66 /* ProfileView.swift in Sources */,
+				2A8B5A090F01593B1C2021C2 /* PushService.swift in Sources */,
 				9E2AEA9CB69AFE314F5A14BD /* RarityBadge.swift in Sources */,
 				D1931D30FD04390E180C9D85 /* RewardConfirmationView.swift in Sources */,
 				8AD0116FB14C40E39BB45880 /* RewardsStoreView.swift in Sources */,
@@ -923,6 +938,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 02023A4EC18E5AA3F536D99A /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseFunctions;
+		};
+		AC1246103887A2D4CC83F01A /* FirebaseMessaging */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 02023A4EC18E5AA3F536D99A /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseMessaging;
 		};
 		E158D05D5E48685B178E12B5 /* FirebaseAuth */ = {
 			isa = XCSwiftPackageProductDependency;

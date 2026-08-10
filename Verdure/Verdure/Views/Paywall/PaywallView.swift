@@ -102,9 +102,22 @@ struct PaywallView: View {
 
     /// ONLY shipped features belong in this list — see the honest-copy policy above.
     ///
-    /// NOTE: the Verdure+ earn multiplier is deliberately ABSENT. Its server code
-    /// exists, but it stays inert until App Store entitlement verification is
-    /// live, and we do not sell what doesn't yet pay out.
+    /// NOTE: the Verdure+ earn multiplier is deliberately ABSENT, and the reason
+    /// has NARROWED but not gone away.
+    ///
+    /// Entitlement verification now exists: `functions/src/subscriptions.ts`
+    /// verifies the purchase with Apple and writes `users/{uid}.plusExpiresAt`,
+    /// which `earnMultiplier()` reads — and the E2E suite proves a member earns
+    /// 1.25x while a non-member and an expired member both earn 1.0x.
+    ///
+    /// What's still missing is DEPLOYMENT. Cloud Functions are not live (billing
+    /// is still Spark), so in production nothing writes that field and the
+    /// multiplier pays nothing. Two things unblock this line:
+    ///   1. `firebase deploy --only functions` on Blaze
+    ///   2. the Apple IAP secrets set (see subscriptions.ts SETUP)
+    /// When both are true, add the multiplier here AND to the App Store
+    /// description in the same commit — AppStore/LISTING.md carries the exact
+    /// copy and the same instruction, so the two can never drift apart.
     private let features: [PlusFeature] = [
         PlusFeature(icon: "gift.fill", title: "Premium Rewards",
                     detail: "Unlock the Gold & Platinum tiers — redeem $25 and $50 gift cards", kind: .gold),

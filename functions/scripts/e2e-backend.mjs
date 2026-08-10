@@ -393,6 +393,137 @@ async function main() {
   ok("rules: client CANNOT reset its own rate-limit counter",
      code2 === "permission-denied", `got ${code2}`);
 
+  // ────────────────────────────────────────────────────────────────────────
+  // VERDURE+ ENTITLEMENT
+  //
+  // These benefits shipped inert: hasActivePlus() reads users/{uid}.plusExpiresAt
+  // and NOTHING wrote it, so a paying member got the same 1.0x multiplier and the
+  // same "not available yet" on early-access drops as everyone else. Now that
+  // subscriptions.ts writes the field, these prove the benefits actually fire —
+  // and, just as importantly, that they DON'T fire for a non-member.
+  // ────────────────────────────────────────────────────────────────────────
+  console.log("\n── Verdure+ entitlement ──");
+
+  const plusUser = await signUp(`e2e-plus-${Date.now()}@verdure.test`, password);
+  const freeUser = await signUp(`e2e-free-${Date.now()}@verdure.test`, password);
+  const plusProof = `proofs/${plusUser.uid}/plus.jpg`;
+  const freeProof = `proofs/${freeUser.uid}/free.jpg`;
+  await uploadProof(plusProof, plusUser.idToken);
+  await uploadProof(freeProof, freeUser.idToken);
+
+  // Only the Admin SDK can write this — exactly how subscriptions.ts does it.
+  await db.doc(`users/${plusUser.uid}`).set(
+    { plusExpiresAt: new Date(Date.now() + 30 * 86400_000) }, { merge: true });
+
+  // Same event, same claim, different entitlement → different award.
+  await db.doc("events/e2e-plus-event").set({
+    ...event("E2E Plus Multiplier"), pointValue: 100, category: "Social",
+  });
+
+  r = await call("checkInToEvent", {
+    eventId: "e2e-plus-event", category: "Social", claimedPoints: 100,
+    proofPath: freeProof, lat: NEAR.lat, lng: NEAR.lng,
+  }, freeUser.idToken);
+  const freeAward = r.result?.awarded;
+  ok("non-member earns the base award (no multiplier)", freeAward === 100, `got ${freeAward}`);
+
+  r = await call("checkInToEvent", {
+    eventId: "e2e-plus-event", category: "Social", claimedPoints: 100,
+    proofPath: plusProof, lat: NEAR.lat, lng: NEAR.lng,
+  }, plusUser.idToken);
+  const plusAward = r.result?.awarded;
+  ok("Verdure+ member earns the 1.25x multiplier", plusAward === 125, `got ${plusAward}`);
+
+  // The multiplier must apply AFTER the category ceiling, never as a way to
+  // smuggle an inflated base value past the clamp.
+  await db.doc("events/e2e-plus-ceiling").set({
+    ...event("E2E Plus Ceiling"), pointValue: 999, category: "Market",  // ceiling 75
+  });
+  r = await call("checkInToEvent", {
+    eventId: "e2e-plus-ceiling", category: "Market", claimedPoints: 999,
+    proofPath: plusProof, lat: NEAR.lat, lng: NEAR.lng,
+  }, plusUser.idToken);
+  ok("multiplier applies after the category ceiling, not before",
+     r.result?.awarded === Math.floor(75 * 1.25), `got ${r.result?.awarded}`);
+
+  // Early access: patagonia-30-earth opens 18 days into the month with a 7-day
+  // Plus head start, so there is a window where only members may redeem.
+  const now = new Date();
+  const monthStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
+  const publicFrom = monthStart + 18 * 86400_000;
+  const plusFrom = publicFrom - 7 * 86400_000;
+  const inEarlyWindow = Date.now() >= plusFrom && Date.now() < publicFrom;
+
+  if (inEarlyWindow) {
+    await db.doc(`users/${plusUser.uid}`).set({ pointsBalance: 12000 }, { merge: true });
+    await db.doc(`users/${freeUser.uid}`).set({ pointsBalance: 12000 }, { merge: true });
+
+    r = await call("redeemReward", { rewardId: "patagonia-30-earth" }, freeUser.idToken);
+    ok("early-access drop is DENIED to a non-member",
+       r.error?.status === "PERMISSION_DENIED", JSON.stringify(r.error ?? r.result));
+
+    r = await call("redeemReward", { rewardId: "patagonia-30-earth" }, plusUser.idToken);
+    ok("early-access drop is ALLOWED for a Verdure+ member",
+       r.result?.redeemed === true, JSON.stringify(r.error ?? r.result));
+  } else {
+    // Skipped rather than silently passing — a green tick for a test that never
+    // ran is exactly the vacuous pass this suite exists to avoid.
+    console.log("  ⏭  early-access window not open today — window test skipped " +
+                `(opens ${new Date(plusFrom).toISOString().slice(0, 10)})`);
+  }
+
+  // An EXPIRED entitlement must read as no entitlement.
+  const expiredUser = await signUp(`e2e-expired-${Date.now()}@verdure.test`, password);
+  const expiredProof = `proofs/${expiredUser.uid}/e.jpg`;
+  await uploadProof(expiredProof, expiredUser.idToken);
+  await db.doc(`users/${expiredUser.uid}`).set(
+    { plusExpiresAt: new Date(Date.now() - 86400_000) }, { merge: true });
+  r = await call("checkInToEvent", {
+    eventId: "e2e-plus-event", category: "Social", claimedPoints: 100,
+    proofPath: expiredProof, lat: NEAR.lat, lng: NEAR.lng,
+  }, expiredUser.idToken);
+  ok("an expired Verdure+ entitlement grants no multiplier",
+     r.result?.awarded === 100, `got ${r.result?.awarded}`);
+
+  // A client must never be able to grant itself Plus.
+  code2 = await userWrite(`users/${freeUser.uid}`,
+    { plusExpiresAt: new Date(Date.now() + 86400_000) });
+  ok("rules: client CANNOT grant itself plusExpiresAt",
+     code2 === "permission-denied", `got ${code2}`);
+  code2 = await userWrite(`users/${freeUser.uid}`,
+    { plusOriginalTransactionId: "someone-elses-transaction" });
+  ok("rules: client CANNOT point itself at another Apple subscription",
+     code2 === "permission-denied", `got ${code2}`);
+
+  // ────────────────────────────────────────────────────────────────────────
+  // FULFILMENT QUEUE
+  //
+  // redeemReward debits points and enqueues a card. Until this release nothing
+  // read that queue, so every redemption took value and delivered nothing.
+  // ────────────────────────────────────────────────────────────────────────
+  console.log("\n── Gift-card fulfilment queue ──");
+
+  const buyer = await signUp(`e2e-buyer-${Date.now()}@verdure.test`, password);
+  await db.doc(`users/${buyer.uid}`).set({ pointsBalance: 30000 }, { merge: true });
+
+  r = await call("redeemReward", { rewardId: "starbucks-5" }, buyer.idToken);
+  ok("redeem succeeds and debits", r.result?.redeemed === true, JSON.stringify(r));
+
+  const fdoc = await db.doc(`fulfillments/${buyer.uid}_starbucks-5`).get();
+  const f = fdoc.data();
+  ok("a durable fulfilment row is written in the same transaction", fdoc.exists);
+  ok("fulfilment row starts pending with the points recorded",
+     f?.status === "pending" && f?.pointsSpent === 1000, JSON.stringify(f));
+  ok("fulfilment row carries a delivery address",
+     typeof f?.deliverToEmail === "string" && f.deliverToEmail.includes("@"),
+     String(f?.deliverToEmail));
+
+  // The queue is server-only: a client that could edit it could mark its own
+  // card "sent", or point the delivery at someone else's inbox.
+  code2 = await userWrite(`fulfillments/${buyer.uid}_starbucks-5`, { status: "sent" });
+  ok("rules: client CANNOT mark its own fulfilment sent",
+     code2 === "permission-denied", `got ${code2}`);
+
   console.log(`\n══ ${passed} passed, ${failed} failed ══`);
   process.exit(failed > 0 ? 1 : 0);
 }

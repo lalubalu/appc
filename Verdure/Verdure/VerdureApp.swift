@@ -3,8 +3,13 @@ import FirebaseCore
 
 @main
 struct VerdureApp: App {
+    // Required for remote push: SwiftUI exposes no hook for the APNs device
+    // token callback, and FCM can't route to a token it never sees.
+    @UIApplicationDelegateAdaptor(VerdureAppDelegate.self) private var appDelegate
+
     init() {
         FirebaseApp.configure()
+        PushService.shared.start()
     }
 
     var body: some Scene {

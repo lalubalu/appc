@@ -42,6 +42,21 @@ final class AccessibilityAuditTests: XCTestCase {
         try QA.audit(app, screen: "paywall")
     }
 
+    /// The Adventure Planner sheet. Audited WITHOUT generating a plan: the
+    /// planner needs a deployed Cloud Function, so a test that tried to produce
+    /// an itinerary would either hit the network or quietly assert nothing.
+    /// The controls the user meets first — duration chips and the CTA — are on
+    /// screen immediately and are what this checks.
+    func testAuditAdventurePlanner() throws {
+        let app = QA.launch(tab: "explore")
+        addTeardownBlock { app.terminate() }
+        let entry = QA.waitFor(app.buttons["Plan my adventure"].firstMatch,
+                               "adventure planner entry tile")
+        entry.tap()
+        QA.waitFor(app.staticTexts["How long have you got?"], "planner sheet")
+        try QA.audit(app, screen: "adventure-planner")
+    }
+
     func testAuditOnboardingFirstPage() throws {
         let app = XCUIApplication()
         app.launchArguments += ["-hasCompletedOnboarding", "NO", "-QADisableMotion", "YES"]
