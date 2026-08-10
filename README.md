@@ -91,7 +91,7 @@ cd functions && npm run test:units && npm run e2e
 | Suite | Count | Covers |
 |---|---|---|
 | Unit | 38 | Transactions, cloud-merge safety, gamification, Daily Gem, sanitizer, reward windows |
-| UI + a11y | 17 | Journeys across every tab + Apple accessibility audits on 9 screens |
+| UI + a11y | 24 | Journeys across every tab, Apple accessibility audits on 9 screens, and a text-size matrix (default + AccessibilityXL, light/dark) |
 | Backend E2E | 48 | Rules lockdown, check-in proof/GPS validation, Verdure+ entitlement, redemption, fulfilment queue, rate limiting |
 | Backend units | 23 | Which vendor responses refund vs. retry; `appAccountToken` determinism + golden vector — no emulator or vendor account needed |
 

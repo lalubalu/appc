@@ -310,11 +310,18 @@ struct ExploreView: View {
             ClaySectionHeader(index: "01", kicker: "This week", title: "Your Quests",
                               accent: Palette.gold.base)
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 14) {
+                // .top alignment + fixedSize(vertical:) is what makes the cards
+                // equal height: the row takes its ideal height from the tallest
+                // card, and each card's maxHeight: .infinity then fills it. At
+                // accessibility text sizes the tallest card is whichever quest
+                // has the longest description, and the rest match it instead of
+                // truncating or ending up ragged.
+                HStack(alignment: .top, spacing: 14) {
                     ForEach(Array(GamificationEngine.challenges(for: gameState).enumerated()), id: \.element.id) { i, c in
                         QuestCard(challenge: c, kind: [.teal, .gold, .spruce, .terracotta][i % 4])
                     }
                 }
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.vertical, 4)
             }
         }
@@ -400,6 +407,22 @@ struct ExploreView: View {
 private struct QuestCard: View {
     let challenge: Challenge
     let kind: ClayStyle.ClayAccentKind
+
+    // The card used to be a hard 196x184. That's fine at default text size and
+    // broken at accessibility sizes: the box couldn't grow, so the title and
+    // description truncated inside it ("Event Reg…", "Attend 3 events this…").
+    // Scaling the BOX with the text is the fix — a smaller minimumScaleFactor
+    // would only have shrunk the copy back to its original size, which defeats
+    // the point of asking for large text.
+    //
+    // Width is capped because these scroll horizontally on a phone: past ~320pt
+    // a single card fills the screen and stops looking scrollable, so there's
+    // no affordance that a second quest exists. Height is left uncapped — the
+    // section sits in a vertical scroll, so growing downward costs nothing.
+    @ScaledMetric(relativeTo: .body) private var baseWidth: CGFloat = 196
+
+    private var cardWidth: CGFloat { min(baseWidth, 320) }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .top) {
@@ -409,11 +432,21 @@ private struct QuestCard: View {
                                  color: kind.accent.base)
             }
             .padding(.bottom, Spacing.md)
+            // Wrap to two lines before shrinking. A quest title that reads
+            // "Event Reg…" is indistinguishable from any other quest starting
+            // with the same word, which is the whole problem being fixed.
             Text(challenge.title).font(VType.display(16, .semibold)).foregroundStyle(Palette.ink)
+                .lineLimit(2).minimumScaleFactor(0.8)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            // 3 lines rather than 2: the taller scaled card has the room, and at
+            // default text size these descriptions only ever run to two, so this
+            // changes nothing below accessibility sizes.
             Text(challenge.description).font(VType.body(12)).foregroundStyle(Palette.inkSoft)
-                .lineLimit(2).fixedSize(horizontal: false, vertical: true)
+                .lineLimit(3).minimumScaleFactor(0.8)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 2)
-            Spacer(minLength: Spacing.md)
+            Spacer(minLength: Spacing.sm)
             HStack {
                 XPBadge(xp: challenge.xpReward)
                 Spacer()
@@ -421,7 +454,18 @@ private struct QuestCard: View {
             }
         }
         .padding(Spacing.md)
-        .frame(width: 196, height: 184, alignment: .topLeading)
+        // Height is NOT scaled and NOT fixed.
+        //
+        // Scaling it left a big empty gap at accessibility sizes (the box grew
+        // by the text ratio, the text needed less); fixing it was the original
+        // truncation bug. Instead: a 184pt floor so the default layout is
+        // unchanged, then `maxHeight: .infinity` so every card stretches to
+        // whichever sibling is tallest — the row stays uniform without anyone
+        // hardcoding how tall the tallest one is. The equalising comes from
+        // `.fixedSize(vertical:)` on the enclosing HStack, which bounds the
+        // .infinity to the row's ideal height instead of the scroll view's.
+        .frame(width: cardWidth, alignment: .topLeading)
+        .frame(minHeight: 184, maxHeight: .infinity, alignment: .topLeading)
         .claySurface(.surface, radius: Radius.md, elevation: 0.9)
         .overlay(alignment: .top) {
             Capsule().fill(kind.accent.faceGradient).frame(height: 5)

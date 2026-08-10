@@ -59,6 +59,24 @@ final class TextSizeMatrixTests: XCTestCase {
         try matrix(tab: "explore", anchor: "Explore", dark: false)
     }
 
+    /// The DEFAULT text size baseline.
+    ///
+    /// Without this the matrix only ever shows the accessibility end, so a fix
+    /// that rescues XL by wrecking the normal layout looks like a clean pass.
+    /// The quest cards in particular are content-hugging with a 184pt floor —
+    /// this is what proves that floor still holds at default size, where the
+    /// overwhelming majority of users actually are.
+    func testExploreAtDefaultTextSize() throws {
+        let app = QA.launch(tab: "explore")
+        addTeardownBlock { app.terminate() }
+        QA.waitFor(app.staticTexts["Explore"], "explore anchor at default text size")
+        capture(app, "explore-default")
+        for step in 1...3 {
+            app.swipeUp()
+            capture(app, "explore-default-scroll\(step)")
+        }
+    }
+
     func testExploreAtAccessibilityXLDark() throws {
         try matrix(tab: "explore", anchor: "Explore", dark: true)
     }
