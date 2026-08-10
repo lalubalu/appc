@@ -12,7 +12,31 @@
 | Suite | Result |
 |---|---|
 | Unit (`VerdureTests`) | **38/38** |
-| UI journeys + a11y audits (`VerdureUITests`) | **17/17** — includes a new audit for the Adventure Planner sheet |
+| UI journeys + a11y audits (`VerdureUITests`) | **23/23** — includes an audit for the Adventure Planner sheet and a new **text-size matrix** |
+
+### Dynamic Type is checked by the matrix, NOT by the audits
+
+`QA.audit` deliberately excludes the visual audit types (dynamic type, contrast,
+clipping) — they blow the audit engine's time budget on these dense clay
+screens. So **a green audit run is not evidence that a layout survives
+accessibility text sizes.** `TextSizeMatrixTests` is the actual check: it
+captures each changed screen at `UICTContentSizeCategoryAccessibilityXL`, light
+and dark, stepping down one swipe at a time (two swipes at once skipped a whole
+section of Explore the first time it ran). Screenshots are XCTAttachments:
+
+```bash
+xcrun xcresulttool export attachments --path <result>.xcresult --output-path shots/
+```
+
+**Found and fixed by looking at the output:** the hero stat tile truncated
+"day streak" → "day str…" at XL. The value scaled, the unit didn't. VoiceOver
+was unaffected (the tile is one combined element), so nothing automated would
+ever have caught it.
+
+**Still open (pre-existing, not from this cycle):** quest cards truncate at XL —
+"Event Reg…", "Attend 3 events this…". They're a fixed-height two-across grid,
+so the fix is a layout change rather than a scale factor, and it's out of scope
+for this pass. Screenshots are in the matrix output.
 | Backend E2E (emulators) | **48/48** — up from 37; adds Verdure+ entitlement (multiplier on/off/expired, early-access gating), the rules that stop a client granting itself Plus or re-pointing its Apple subscription, and the fulfilment queue's shape + lockdown |
 | Backend units (`npm run test:units`) | **23/23** — no emulator or vendor account needed. Fulfilment: which HTTP outcomes refund vs. retry (stubs `fetch`). Verdure+: `appAccountToken` determinism, with a **golden vector** so a change to the derivation fails here instead of silently de-entitling every existing subscriber. |
 | Red team (`npm run redteam`) | see below |

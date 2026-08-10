@@ -75,6 +75,7 @@
 		D1FC30331239EED083EDFF4C /* LocationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEBC782328C28AF430767CD4 /* LocationManager.swift */; };
 		D1FDF825E59771F0108E99F2 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 0DE7746BD26FC744CB9F9052 /* PrivacyInfo.xcprivacy */; };
 		D8F3CFEC200FF24E182F3713 /* NotificationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DFBFC44B8F8126080EA2194 /* NotificationsView.swift */; };
+		DF1D9186BFF5F04F431C7988 /* TextSizeMatrixTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33C5B5EE5074325C5941700F /* TextSizeMatrixTests.swift */; };
 		E787B0F3D42D15C53C1B9A27 /* ExploreView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F91EB7C7709DEBD9167F2DC /* ExploreView.swift */; };
 		E7F872E997D7F08418276AA0 /* Rubik-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 63CF83506D67AB715494A196 /* Rubik-Medium.ttf */; };
 		EF3E1857F9BBB36768778D30 /* GameStateManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F78B4B0C2A812A0AB3F50868 /* GameStateManagerTests.swift */; };
@@ -119,6 +120,7 @@
 		29157D7AF46A04CCA52AE9DB /* ClayMotion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClayMotion.swift; sourceTree = "<group>"; };
 		2BAFC0E298A26E3D3994F854 /* Verdure.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Verdure.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		2D7249F69C54A8490C112737 /* Rubik-Light.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Rubik-Light.ttf"; sourceTree = "<group>"; };
+		33C5B5EE5074325C5941700F /* TextSizeMatrixTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextSizeMatrixTests.swift; sourceTree = "<group>"; };
 		341DA15FA2B7C4910C824D7F /* SharedComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedComponents.swift; sourceTree = "<group>"; };
 		3EE8DEBB376ECBD578D6F796 /* CollectionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionModels.swift; sourceTree = "<group>"; };
 		44E07B985CADB6E0B4B6D069 /* StorageService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageService.swift; sourceTree = "<group>"; };
@@ -242,6 +244,7 @@
 				B8519A30F108AACEC233804A /* AccessibilityAuditTests.swift */,
 				03A7624DC05E120CBE8C96D2 /* JourneyTests.swift */,
 				FDDEB345EACDCB6B3551F734 /* QAHelpers.swift */,
+				33C5B5EE5074325C5941700F /* TextSizeMatrixTests.swift */,
 			);
 			path = VerdureUITests;
 			sourceTree = "<group>";
@@ -561,6 +564,7 @@
 				65D6EA9BF11623F3EF66A7ED /* AccessibilityAuditTests.swift in Sources */,
 				0CC32ACF6D62DA1CD17B34BC /* JourneyTests.swift in Sources */,
 				86A44ABDC32E7131ADAA8A07 /* QAHelpers.swift in Sources */,
+				DF1D9186BFF5F04F431C7988 /* TextSizeMatrixTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

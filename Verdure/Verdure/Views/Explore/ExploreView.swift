@@ -166,7 +166,14 @@ struct ExploreView: View {
             Spacer(minLength: 0)
             Text(value).font(VType.num(28, .bold)).foregroundStyle(Palette.ink).monospacedDigit()
                 .lineLimit(1).minimumScaleFactor(0.5)
-            Text(unit).font(VType.body(11, .medium)).foregroundStyle(Palette.inkSoft).lineLimit(1)
+            // The value already scales; the unit did not, so at accessibility
+            // text sizes "day streak" truncated to "day str…" inside this
+            // fixed-height tile. VoiceOver was unaffected (the tile is a single
+            // combined element) — but a sighted user at XL couldn't tell a day
+            // streak from a day stretch. Scaling rather than wrapping because
+            // the 78pt height is fixed and a second line would clip instead.
+            Text(unit).font(VType.body(11, .medium)).foregroundStyle(Palette.inkSoft)
+                .lineLimit(1).minimumScaleFactor(0.6)
         }
         .accessibilityElement(children: .combine)
         .frame(maxWidth: .infinity, alignment: .leading)
