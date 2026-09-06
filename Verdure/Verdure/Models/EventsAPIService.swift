@@ -160,7 +160,9 @@ final class EventsAPIService {
             "imagePlaceholder": category.icon,
             "pointValue": pointValue,
             "creatorID": currentUser.uid,
-            "createdAt": FieldValue.serverTimestamp()
+            "createdAt": FieldValue.serverTimestamp(),
+            // Moderation flag — required on create by the rules, server-owned after.
+            "hidden": false
         ]
         if let venueCoordinate {
             data["latitude"] = venueCoordinate.latitude
@@ -422,7 +424,9 @@ final class EventsAPIService {
 
         do {
             let now = Timestamp(date: Date())
+            // hidden == false is required by the read rules (see FirestoreService).
             let snapshot = try await db.collection("events")
+                .whereField("hidden", isEqualTo: false)
                 .whereField("date", isGreaterThanOrEqualTo: now)
                 .order(by: "date")
                 .limit(to: maxEvents)

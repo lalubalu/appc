@@ -17,48 +17,15 @@ import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { setGlobalOptions } from "firebase-functions/v2";
 import { defineSecret } from "firebase-functions/params";
-import { initializeApp } from "firebase-admin/app";
-import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
+import { FieldValue } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
 import { getStorage } from "firebase-admin/storage";
+import {
+  db, inEmulator, safeString, parseCoord, distanceMeters,
+  enforceRateLimit, hasActivePlus, assertNotSuspended,
+} from "./common.js";
 
-initializeApp();
-const db = getFirestore();
 setGlobalOptions({ region: "us-central1", maxInstances: 10 });
-
-// ── Attendance-evidence helpers ─────────────────────────────────────────────
-
-/** Great-circle distance in meters (haversine). */
-function distanceMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371000;
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a = Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(a));
-}
-
-/**
- * Coerce caller-supplied input to a string, safely.
- *
- * `String(x)` THROWS on a hostile payload — `{"toString": "x"}` makes toString
- * non-callable, so the coercion raises TypeError, the callable dies, and the
- * caller gets INTERNAL. That's an unhandled crash reachable by anyone with a
- * token: a cheap denial-of-service and a leak that we failed unexpectedly
- * rather than rejected deliberately. Anything that isn't already a primitive
- * string is simply not a string, so treat it as absent.
- */
-function safeString(v: unknown, fallback = ""): string {
-  return typeof v === "string" ? v : fallback;
-}
-
-/** Parse + range-check a coordinate component; NaN → undefined. */
-function parseCoord(v: unknown, max: number): number | undefined {
-  const n = Number(v);
-  if (!Number.isFinite(n) || Math.abs(n) > max) return undefined;
-  return n;
-}
 
 // Client gate is 500 ft (~152 m); the server allows generous GPS slop on top —
 // anything beyond this is not "at the event".
@@ -82,99 +49,6 @@ const CATEGORY_MAX_POINTS: Record<string, number> = {
   Cleanup: 200, Sports: 150, Social: 100, Workshop: 150, Market: 75,
   Festival: 250, Hackathon: 200, Meetup: 100, Volunteer: 200,
 };
-
-// ── Rate limiting at the trust boundary ─────────────────────────────────────
-//
-// Every callable below is reachable directly at
-//   POST /<project>/<region>/<name>
-// with any signed-in user's token. That path bypasses ALL of the app's gates —
-// the 500 ft proximity check, the "already checked in" button state, the
-// affordability check on the rewards screen — because those live in the iOS
-// client and this endpoint is not the iOS client.
-//
-// Idempotency already stops the same event/place/reward being farmed twice, so
-// this isn't the anti-cheat control; it bounds *volume*. Without it a script
-// can hammer these endpoints as fast as the network allows: burning Firestore
-// writes (real money on Blaze), flooding /attendance and /fulfillments, and
-// hunting for a race in the transactions.
-//
-// Per-user rather than global: a global ceiling would let one abuser lock every
-// honest user out. Limits sit far above real human behaviour — nobody attends
-// 10 events an hour — so a genuine burst never touches them.
-interface RateLimit { max: number; windowMs: number; }
-
-// Ceilings count REJECTED calls too — otherwise invalid requests are free and
-// an attacker just sends malformed ones. That means a limit has to tolerate a
-// human fumbling (mis-tap, not enough points, tried a locked drop) as well as
-// succeeding, so these sit an order of magnitude above real use rather than
-// hugging it. Correctness is not their job: double-spend is already impossible
-// via idempotency and the balance check inside each transaction. Their job is
-// volume — a script hammering these endpoints does thousands per hour, not tens.
-const RATE_LIMITS: Record<string, RateLimit> = {
-  checkInToEvent: { max: 20, windowMs: 60 * 60 * 1000 },
-  collectPlace:   { max: 60, windowMs: 60 * 60 * 1000 },
-  redeemReward:   { max: 15, windowMs: 60 * 60 * 1000 },
-};
-
-/**
- * Consume one unit of a user's budget for `action`, or throw.
- *
- * Runs in a transaction so parallel calls can't both read the same count and
- * each decide they're under the cap. Counters live in `rateLimits`, a
- * server-only collection the Firestore rules deny to clients — a client that
- * could edit its own counter could erase its own limit.
- */
-async function enforceRateLimit(uid: string, action: string): Promise<void> {
-  const limit = RATE_LIMITS[action];
-  if (!limit) return;
-
-  const ref = db.collection("rateLimits").doc(`${uid}_${action}`);
-  await db.runTransaction(async (tx) => {
-    const snap = await tx.get(ref);
-    const data = snap.data();
-    const now = Date.now();
-
-    const startedAt: number = typeof data?.windowStart?.toMillis === "function"
-      ? data.windowStart.toMillis()
-      : 0;
-    const expired = now - startedAt >= limit.windowMs;
-    const count: number = expired ? 0 : (Number(data?.count) || 0);
-
-    if (count >= limit.max) {
-      const retryInSec = Math.ceil((startedAt + limit.windowMs - now) / 1000);
-      throw new HttpsError(
-        "resource-exhausted",
-        `Too many ${action} requests. Try again in about ${Math.ceil(retryInSec / 60)} minute(s).`
-      );
-    }
-
-    tx.set(ref, {
-      uid,
-      action,
-      count: count + 1,
-      windowStart: expired ? Timestamp.fromMillis(now) : (data?.windowStart ?? Timestamp.fromMillis(now)),
-      updatedAt: FieldValue.serverTimestamp(),
-    }, { merge: true });
-  });
-}
-
-// ── Verdure+ entitlement (server-verified only) ─────────────────────────────
-//
-// SECURITY: a client's claim that it is subscribed is NEVER trusted for
-// server-side value. The only source of truth is `users/{uid}.plusExpiresAt`,
-// which Firestore rules deny to clients — it can be written exclusively by the
-// Admin SDK. Until the App Store Server API / Server Notifications handler
-// lands and starts writing it, this returns false for everyone, so the
-// benefits below are correct-but-inert rather than exploitable.
-async function hasActivePlus(uid: string): Promise<boolean> {
-  const snap = await db.collection("users").doc(uid).get();
-  const expiresAt = snap.data()?.plusExpiresAt;
-  if (!expiresAt) return false;
-  const ms = typeof expiresAt?.toMillis === "function"
-    ? expiresAt.toMillis()
-    : Number(expiresAt);
-  return Number.isFinite(ms) && ms > Date.now();
-}
 
 // ── Daily earning ceiling (economic backstop) ───────────────────────────────
 //
@@ -292,6 +166,7 @@ export const checkInToEvent = onCall(async (req) => {
   const uid = req.auth?.uid;
   if (!uid) throw new HttpsError("unauthenticated", "Sign in to check in.");
   await enforceRateLimit(uid, "checkInToEvent");
+  await assertNotSuspended(uid);
 
   const eventId = safeString(req.data?.eventId).slice(0, 200);
   const category = safeString(req.data?.category, "Social");
@@ -426,6 +301,7 @@ export const collectPlace = onCall(async (req) => {
   const uid = req.auth?.uid;
   if (!uid) throw new HttpsError("unauthenticated", "Sign in to collect.");
   await enforceRateLimit(uid, "collectPlace");
+  await assertNotSuspended(uid);
 
   const placeId = safeString(req.data?.placeId).slice(0, 200);
   const claimed = Math.max(0, Math.floor(Number(req.data?.claimedPoints ?? 0)));
@@ -480,6 +356,7 @@ export const redeemReward = onCall(async (req) => {
   const uid = req.auth?.uid;
   if (!uid) throw new HttpsError("unauthenticated", "Sign in to redeem.");
   await enforceRateLimit(uid, "redeemReward");
+  await assertNotSuspended(uid);
 
   const rewardId = safeString(req.data?.rewardId).slice(0, 100);
   const limited = LIMITED_TIME_REWARDS[rewardId];
@@ -559,8 +436,6 @@ export const redeemReward = onCall(async (req) => {
  * eventarc trigger registration (tools/jar version skew) and this trigger isn't
  * part of the E2E surface — only the callables are.
  */
-const inEmulator = process.env.FUNCTIONS_EMULATOR === "true";
-
 export const onPostCreated: unknown = inEmulator ? undefined
   : onDocumentCreated("posts/{postId}", async (event) => {
   const post = event.data?.data();
@@ -650,8 +525,6 @@ const PROXY_ALLOWLIST: Record<string, (params: Record<string, string>) => string
   },
 };
 
-RATE_LIMITS.externalFetch = { max: 120, windowMs: 60 * 60 * 1000 };
-
 export const externalFetch = onCall({
   secrets: [RECREATION_GOV_KEY, NPS_API_KEY],
 }, async (req) => {
@@ -708,3 +581,11 @@ export { linkSubscription, appStoreNotifications, refreshMySubscription, getAppA
 // Grounded in real nearby places: the model chooses from a candidate allowlist
 // and any stop it invents is dropped server-side. See adventure.ts.
 export { planAdventure } from "./adventure.js";
+
+// ── Content moderation ──────────────────────────────────────────────────────
+// Report flow, auto-hide threshold, 24-hour SLA sweep and staff decisions.
+// See moderation.ts for the model; firestore.rules for the visibility guarantee.
+export {
+  reportContent, moderateContent, moderationSweep, runModerationSweep,
+  listModerationQueue, backfillModerationFlags,
+} from "./moderation.js";

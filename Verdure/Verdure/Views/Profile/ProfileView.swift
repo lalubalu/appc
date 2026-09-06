@@ -20,6 +20,7 @@ struct ProfileView: View {
     @State private var showAllChallenges = false
     @State private var showAbout = false
     @State private var showNotifSettings = false
+    @State private var showSafety = false
     @State private var selectedBadge: Badge?
     @State private var selectedChallenge: Challenge?
     @State private var heroAppeared = false
@@ -348,7 +349,11 @@ struct ProfileView: View {
                 }
                 .buttonStyle(.plain)
                 rowDivider
-                settingsRow(icon: "lock.fill", label: "Privacy", accent: .teal) { chevron }
+                Button { Haptics.tap(); showSafety = true } label: {
+                    settingsRow(icon: "shield.lefthalf.filled", label: "Safety & Blocking", accent: .teal) { chevron }
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Report policy, blocked members, and how to reach us.")
                 rowDivider
                 Button { Haptics.tap(); showAbout = true } label: {
                     settingsRow(icon: "info.circle.fill", label: "About Verdure", accent: .terracotta) { chevron }
@@ -380,6 +385,7 @@ struct ProfileView: View {
                 Button("Cancel", role: .cancel) {}
             }
             .sheet(isPresented: $showOrganizerVerify) { OrganizerVerificationView() }
+            .sheet(isPresented: $showSafety) { SafetyView() }
             .sheet(isPresented: $showPaywall) {
                 PaywallView()
                     .presentationDetents([.large]).presentationDragIndicator(.visible)
@@ -414,4 +420,5 @@ struct ProfileView: View {
         .environment(GameStateManager())
         .environment(AuthService())
         .environment(StoreService())
+        .environment(ModerationService())
 }

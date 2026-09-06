@@ -123,7 +123,47 @@ final class FunctionsService: Sendable {
         return data["plus"] as? Bool ?? false
     }
 
+    // MARK: - Moderation (App Review 1.2)
+
+    /// File a report against a post, event, organizer or user. The server queues
+    /// it, auto-hides the content at the reporter threshold, and guarantees a
+    /// decision within 24 hours (see functions/src/moderation.ts).
+    func reportContent(targetType: String, targetId: String, reason: String, details: String) async throws -> Bool {
+        let data = try await Self.callPreservingMessages("reportContent", [
+            "targetType": targetType, "targetId": targetId, "reason": reason, "details": details,
+        ])
+        return data["reported"] as? Bool ?? false
+    }
+
+    // MARK: - Account lifecycle
+
+    /// Permanently delete the signed-in account and everything it owns. The
+    /// server does the deletion (Firestore, Storage, Auth) so nothing can be
+    /// left behind by a client that crashes halfway through.
+    func deleteAccount() async throws {
+        _ = try await Self.callPreservingMessages("deleteAccount", [:])
+    }
+
     // MARK: - Plumbing
+
+    /// Like `call`, but keeps the server's own message for the business-rule
+    /// failures (`failed-precondition`, `permission-denied`, `not-found`) instead
+    /// of translating them into the points-specific wording `mapError` uses.
+    private static func callPreservingMessages(_ name: String, _ payload: [String: any Sendable]) async throws -> [String: Any] {
+        do {
+            let result = try await Functions.functions().httpsCallable(name).call(payload)
+            return result.data as? [String: Any] ?? [:]
+        } catch let error as NSError {
+            if error.domain == FunctionsErrorDomain {
+                switch FunctionsErrorCode(rawValue: error.code) {
+                case .failedPrecondition, .permissionDenied, .notFound, .invalidArgument, .resourceExhausted:
+                    throw ServerCallError.server(error.localizedDescription)
+                default: break
+                }
+            }
+            throw mapError(error)
+        }
+    }
 
     /// Runs a callable and returns its result dictionary. Both the payload and the
     /// result dictionary live entirely inside this nonisolated function's region.

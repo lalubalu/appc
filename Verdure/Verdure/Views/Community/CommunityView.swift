@@ -3,6 +3,7 @@ import SwiftUI
 struct CommunityView: View {
     @Environment(FirestoreService.self) private var firestore
     @Environment(AuthService.self) private var authService
+    @Environment(ModerationService.self) private var moderation
     @State private var posts: [CommunityPost] = []
     @State private var loadedRemote = false
     @State private var newPostText = ""
@@ -12,7 +13,10 @@ struct CommunityView: View {
     /// Posts shown in the feed: real Firestore posts when any exist; the sample
     /// starter feed only as a cold-start placeholder (never mixed together).
     private var feedPosts: [CommunityPost] {
-        posts.isEmpty ? SampleData.communityPosts : posts
+        let source = posts.isEmpty ? SampleData.communityPosts : posts
+        // Blocked authors never render, even before the server-side copy of the
+        // block has propagated — the local cache decides instantly.
+        return source.filter { !moderation.isBlocked($0.authorID) }
     }
     private var isShowingSamples: Bool { posts.isEmpty }
 
@@ -118,9 +122,10 @@ struct CommunityView: View {
                     StoryRing(initials: author.initials, name: author.name, accent: accent, isYou: false)
                         .onTapGesture {
                             Haptics.soft()
+                            let match = feedPosts.first { $0.authorInitials == author.initials }
                             selectedProfile = CommunityProfile(
-                                name: feedPosts.first { $0.authorInitials == author.initials }?.authorName ?? author.name,
-                                initials: author.initials, accent: accent)
+                                name: match?.authorName ?? author.name,
+                                initials: author.initials, accent: accent, uid: match?.authorID)
                         }
                         .accessibilityElement(children: .combine)
                         .accessibilityLabel("View \(author.name)'s posts")
@@ -167,7 +172,8 @@ struct CommunityView: View {
                         Haptics.soft()
                         selectedProfile = CommunityProfile(name: post.authorName,
                                                            initials: post.authorInitials,
-                                                           accent: kind(for: i).accent)
+                                                           accent: kind(for: i).accent,
+                                                           uid: post.authorID)
                     } onLike: {
                         // Real like: persists to Firestore (rules allow +1 on likeCount).
                         if let docID = post.docID {
@@ -347,6 +353,11 @@ private struct PostCard: View {
                 .accessibilityLabel("\(post.authorName), posted at \(post.placeName)")
                 Spacer()
                 Text(post.timeAgo).font(VType.body(12, .medium)).foregroundStyle(Palette.inkFaint)
+                // Report / Block — only on real (Firestore) posts; samples have no id.
+                if let docID = post.docID {
+                    ContentActionsMenu(target: .post, targetID: docID, targetLabel: "this post",
+                                       author: post.authorID.map { (uid: $0, name: post.authorName) })
+                }
             }
 
             Text(post.content).font(VType.body(15)).foregroundStyle(Palette.ink).lineSpacing(3)
@@ -407,6 +418,7 @@ private struct PostCard: View {
     CommunityView()
         .environment(FirestoreService())
         .environment(AuthService())
+        .environment(ModerationService())
 }
 
 // MARK: - Community member profile (tap a story / post author)
@@ -416,6 +428,7 @@ struct CommunityProfile: Identifiable {
     let name: String
     let initials: String
     let accent: ClayAccent
+    var uid: String? = nil   // Firebase uid when known — enables Block / Report
 }
 
 /// Honest member sheet: shows only what we actually know — the member's posts
@@ -424,6 +437,9 @@ struct CommunityProfileSheet: View {
     let profile: CommunityProfile
     var posts: [CommunityPost] = []
     @Environment(\.dismiss) private var dismiss
+    @Environment(ModerationService.self) private var moderation
+    @State private var showReport = false
+    @State private var showBlockConfirm = false
 
     var body: some View {
         NavigationStack {
@@ -440,6 +456,49 @@ struct CommunityProfileSheet: View {
                         Text(posts.count == 1 ? "1 post in the neighborhood feed"
                                               : "\(posts.count) posts in the neighborhood feed")
                             .font(VType.body(13, .medium)).foregroundStyle(Palette.inkSoft)
+                    }
+
+                    if let uid = profile.uid {
+                        HStack(spacing: 10) {
+                            Button { Haptics.tap(); showReport = true } label: {
+                                Label("Report", systemImage: "flag")
+                                    .font(VType.body(13, .semibold)).foregroundStyle(Palette.ink)
+                                    .padding(.horizontal, 14).padding(.vertical, 10)
+                                    .background(ClayBackground(style: .surface, radius: Radius.chip, elevation: 0.5))
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Report \(profile.name)")
+                            if moderation.isBlocked(uid) {
+                                Button { Haptics.tap(); Task { _ = await moderation.unblock(uid: uid) } } label: {
+                                    Label("Unblock", systemImage: "hand.raised.slash")
+                                        .font(VType.body(13, .semibold)).foregroundStyle(Palette.ink)
+                                        .padding(.horizontal, 14).padding(.vertical, 10)
+                                        .background(ClayBackground(style: .surface, radius: Radius.chip, elevation: 0.5))
+                                }
+                                .buttonStyle(.plain)
+                            } else {
+                                Button { Haptics.tap(); showBlockConfirm = true } label: {
+                                    Label("Block", systemImage: "hand.raised")
+                                        .font(VType.body(13, .semibold)).foregroundStyle(Palette.danger)
+                                        .padding(.horizontal, 14).padding(.vertical, 10)
+                                        .background(ClayBackground(style: .surface, radius: Radius.chip, elevation: 0.5))
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("Block \(profile.name)")
+                            }
+                        }
+                        .sheet(isPresented: $showReport) {
+                            ReportSheet(target: .user, targetID: uid, targetLabel: "this member",
+                                        blockCandidate: (uid: uid, name: profile.name))
+                        }
+                        .confirmationDialog("Block \(profile.name)?", isPresented: $showBlockConfirm, titleVisibility: .visible) {
+                            Button("Block", role: .destructive) {
+                                Task { _ = await moderation.block(uid: uid, displayName: profile.name); Haptics.success(); dismiss() }
+                            }
+                            Button("Cancel", role: .cancel) {}
+                        } message: {
+                            Text("You won't see each other's posts, events or RSVPs.")
+                        }
                     }
 
                     if posts.isEmpty {

@@ -49,6 +49,21 @@ service cloud.firestore {
     match /rateLimits/{docId} {
       allow read, write: if false;
     }
+    // Moderation. Reports name their reporter and the queue carries staff
+    // decisions; both are written only by the reportContent / moderateContent
+    // callables. A client that could read /reports could learn who reported it;
+    // one that could write /moderationQueue could dismiss its own report.
+    match /reports/{docId} {
+      allow read, write: if false;
+    }
+    match /moderationQueue/{docId} {
+      allow read, write: if false;
+    }
+    // Staff roster. Set out-of-band with the Admin SDK — nothing a client sends
+    // can put a uid here.
+    match /admins/{docId} {
+      allow read, write: if false;
+    }
 
     // ──────────────────────────────────────────────
     // LIKE LEDGER: /postLikes/{postId}_{uid}
@@ -94,8 +109,30 @@ service cloud.firestore {
                     && noForbiddenFieldChanges()
                     && noServerOwnedFieldChanges();
 
-      // Users cannot delete their own document (admin-only operation)
+      // Users cannot delete their own document directly — account deletion goes
+      // through the deleteAccount callable, which removes EVERYTHING the account
+      // owns (posts, events, attendance, photos, queued fulfilments), not just
+      // this document.
       allow delete: if false;
+
+      // ── Blocks: /users/{userId}/blocks/{blockedUid} ──
+      // Owner-only. The document id IS the blocked uid, and the `uid` field must
+      // repeat it so collection-group queries (used server-side to compute the
+      // reverse direction) cannot be pointed at someone else. Every social
+      // surface treats a block as symmetric; the server enforces that, the client
+      // merely hides.
+      match /blocks/{blockedUid} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId)
+                      && blockedUid != userId
+                      && request.resource.data.uid == blockedUid
+                      && (!('displayName' in request.resource.data)
+                          || (request.resource.data.displayName is string
+                              && request.resource.data.displayName.size() <= 100))
+                      && request.resource.data.keys().hasOnly(['uid', 'createdAt', 'displayName']);
+        allow update: if false;
+        allow delete: if isOwner(userId);
+      }
     }
 
     // ──────────────────────────────────────────────
@@ -103,19 +140,31 @@ service cloud.firestore {
     // ──────────────────────────────────────────────
     match /events/{eventId} {
 
-      // Any authenticated user can read events
-      allow read: if request.auth != null;
+      // MODERATION VISIBILITY. `hidden` is a server-owned flag (auto-hide at the
+      // report threshold, or a staff decision). Hidden events are served only to
+      // their creator — so they can see it was hidden — never to anyone else.
+      // "Rules are not filters": a LIST must constrain hidden == false itself,
+      // which is exactly what the client query does.
+      allow get: if request.auth != null
+                 && (resource.data.hidden == false
+                     || resource.data.creatorID == request.auth.uid);
+      allow list: if request.auth != null
+                  && resource.data.hidden == false;
 
-      // Any authenticated user can create an event (must include their UID as creatorID)
+      // Any authenticated user can create an event (must include their UID as
+      // creatorID). It must be born visible: a client cannot pre-set moderation
+      // state in either direction.
       allow create: if request.auth != null
                     && request.resource.data.creatorID == request.auth.uid
-                    && validEventDocument(request.resource.data);
+                    && validEventDocument(request.resource.data)
+                    && moderationFlagsAtCreate(request.resource.data);
 
-      // Only the creator can update their event
+      // Only the creator can update their event — and never its moderation flags.
       allow update: if request.auth != null
                     && resource.data.creatorID == request.auth.uid
                     && request.resource.data.creatorID == request.auth.uid
-                    && validEventDocument(request.resource.data);
+                    && validEventDocument(request.resource.data)
+                    && noModerationFlagChanges();
 
       // Only the creator can delete their event
       allow delete: if request.auth != null
@@ -126,13 +175,21 @@ service cloud.firestore {
     // COMMUNITY POSTS: /posts/{postId}
     // ──────────────────────────────────────────────
     match /posts/{postId} {
-      // Any authenticated user can read the feed.
-      allow read: if request.auth != null;
+      // Any authenticated user can read the feed — minus hidden posts, which only
+      // their author may still see (see /events for the visibility model).
+      allow get: if request.auth != null
+                 && (resource.data.hidden == false
+                     || resource.data.authorID == request.auth.uid);
+      allow list: if request.auth != null
+                  && resource.data.hidden == false;
 
-      // Authors can create their own posts (must stamp their UID).
+      // Authors can create their own posts (must stamp their UID), born visible.
+      // A suspended account (moderation outcome) may read but not post.
       allow create: if request.auth != null
                     && request.resource.data.authorID == request.auth.uid
-                    && validPostDocument(request.resource.data);
+                    && validPostDocument(request.resource.data)
+                    && moderationFlagsAtCreate(request.resource.data)
+                    && !isSuspended(request.auth.uid);
 
       // Posts are immutable EXCEPT likes, and a like must be ACCOUNTED FOR.
       //
@@ -162,8 +219,32 @@ service cloud.firestore {
       let validContent = data.content is string && data.content.size() >= 1 && data.content.size() <= 1000;
       let validAuthor = data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 100;
       let validPlace = !('placeName' in data) || (data.placeName is string && data.placeName.size() <= 200);
-      let allowed = ['authorID', 'authorName', 'authorInitials', 'placeName', 'content', 'createdAt', 'likeCount'];
+      let allowed = ['authorID', 'authorName', 'authorInitials', 'placeName', 'content', 'createdAt', 'likeCount',
+                     // Server-owned moderation state (see moderationFlagsAtCreate / noModerationFlagChanges)
+                     'hidden', 'hiddenAt', 'removed', 'removedAt'];
       return validContent && validAuthor && validPlace && data.keys().hasOnly(allowed);
+    }
+
+    // ── Moderation flags ──
+    // Content must be created visible and un-removed; only the Admin SDK
+    // (reportContent's auto-hide, moderateContent, the 24h sweep) changes these.
+    function moderationFlagsAtCreate(data) {
+      return data.hidden == false
+          && !('hiddenAt' in data)
+          && !('removed' in data)
+          && !('removedAt' in data);
+    }
+
+    function noModerationFlagChanges() {
+      return !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['hidden', 'hiddenAt', 'removed', 'removedAt']);
+    }
+
+    // A suspended account (server-set by moderateContent) keeps read access but
+    // may not publish. Missing profile doc → not suspended.
+    function isSuspended(uid) {
+      let path = /databases/$(database)/documents/users/$(uid);
+      return exists(path) && get(path).data.get('suspended', false) == true;
     }
 
 
@@ -222,7 +303,9 @@ service cloud.firestore {
         // the purchase. Listed here for the reason spelled out above: the moment
         // the server stamps a key this list doesn't know, hasOnly() starts
         // failing and the user can never write their own document again.
-        'plusProductId', 'plusOriginalTransactionId', 'plusStatus', 'plusUpdatedAt'
+        'plusProductId', 'plusOriginalTransactionId', 'plusStatus', 'plusUpdatedAt',
+        // Moderation outcome (server-owned): a suspended account may read, not act.
+        'suspended', 'suspendedAt'
       ];
       let noExtraFields = data.keys().hasOnly(allowedFields);
 
@@ -288,7 +371,9 @@ service cloud.firestore {
         'title', 'description', 'organizer', 'date', 'time',
         'locationName', 'attendeeCount', 'maxAttendees',
         'category', 'imagePlaceholder', 'pointValue',
-        'creatorID', 'createdAt', 'latitude', 'longitude'
+        'creatorID', 'createdAt', 'latitude', 'longitude',
+        // Server-owned moderation state
+        'hidden', 'hiddenAt', 'removed', 'removedAt'
       ];
       let noExtraFields = data.keys().hasOnly(allowedFields);
 
@@ -315,7 +400,10 @@ service cloud.firestore {
                    // else's subscription and have refreshMySubscription
                    // faithfully re-grant it.
                    'plusProductId', 'plusOriginalTransactionId',
-                   'plusStatus', 'plusUpdatedAt']);
+                   'plusStatus', 'plusUpdatedAt',
+                   // Moderation outcome — a client must not be able to lift
+                   // its own suspension.
+                   'suspended', 'suspendedAt']);
     }
 
     // On create, server-owned fields must be absent or zero/empty — a fresh client
@@ -330,7 +418,8 @@ service cloud.firestore {
           && !('plusExpiresAt' in data)
           && !('plusOriginalTransactionId' in data)
           && !('plusProductId' in data)
-          && !('plusStatus' in data);
+          && !('plusStatus' in data)
+          && !('suspended' in data);
     }
 
     // Prevent changing fields that should be immutable after creation

@@ -6,6 +6,7 @@ struct EventsView: View {
     @Environment(GameStateManager.self) private var gameState
     @Environment(LocationManager.self) private var locationManager
     @Environment(EventsAPIService.self) private var eventsService
+    @Environment(ModerationService.self) private var moderation
     @State private var selectedEvent: Event? = nil
     @State private var showCreateEvent = false
     @State private var showSaved = false
@@ -19,7 +20,9 @@ struct EventsView: View {
     private var accountType: AccountType { AccountType(rawValue: accountTypeRaw) ?? .visitor }
 
     private var sourceEvents: [Event] {
-        eventsService.events.isEmpty ? SampleData.events : eventsService.events
+        let source = eventsService.events.isEmpty ? SampleData.events : eventsService.events
+        // Events from blocked organizers never render (mutual block, App Review 1.2).
+        return source.filter { !moderation.isBlocked($0.creatorID) }
     }
 
     // MARK: Personalization ("For You")
@@ -784,15 +787,21 @@ private struct EventDetailSheet: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
-                        Button {
-                            withAnimation(.spring(response: 0.35, dampingFraction: 0.6)) {
-                                gameState.toggleSaved(event)
+                        HStack(spacing: 0) {
+                            Button {
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.6)) {
+                                    gameState.toggleSaved(event)
+                                }
+                            } label: {
+                                Image(systemName: gameState.isSaved(event.id) ? "bookmark.fill" : "bookmark")
+                                    .font(.system(size: 16, weight: .bold))
+                                    .foregroundStyle(gameState.isSaved(event.id) ? Palette.gold.base : Palette.inkSoft)
+                                    .symbolEffect(.bounce, value: gameState.isSaved(event.id))
                             }
-                        } label: {
-                            Image(systemName: gameState.isSaved(event.id) ? "bookmark.fill" : "bookmark")
-                                .font(.system(size: 16, weight: .bold))
-                                .foregroundStyle(gameState.isSaved(event.id) ? Palette.gold.base : Palette.inkSoft)
-                                .symbolEffect(.bounce, value: gameState.isSaved(event.id))
+                            .accessibilityLabel(gameState.isSaved(event.id) ? "Saved" : "Save event")
+                            // Report this event / block its organizer (App Review 1.2).
+                            ContentActionsMenu(target: .event, targetID: event.id, targetLabel: "this event",
+                                               author: event.creatorID.map { (uid: $0, name: event.organizer) })
                         }
                     }
                 }
@@ -1118,6 +1127,8 @@ private struct InterestPickerSheet: View {
         .environment(GameStateManager())
         .environment(LocationManager())
         .environment(EventsAPIService())
+        .environment(ModerationService())
+        .environment(AuthService())
 }
 
 // MARK: - Saved / bookmarked events

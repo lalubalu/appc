@@ -186,6 +186,7 @@ struct CommunityPost: Identifiable {
     let commentCount: Int
     let imagePlaceholder: String?
     var docID: String? = nil   // Firestore document ID — nil for local/sample posts (likes need it)
+    var authorID: String? = nil // Firebase uid of the author — drives Block/Report (nil for samples)
 }
 
 // MARK: - User Profile

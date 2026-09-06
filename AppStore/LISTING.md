@@ -137,6 +137,18 @@ diagnostics, or advertising data.
 > To exercise the flow, use Xcode's location simulation to set a location at one
 > of the listed event venues, then attach any photo.
 >
+> **User-generated content & moderation (guideline 1.2)**
+> Community posts, organizer events and member profiles each carry a ••• menu
+> with **Report** (nine reason categories) and **Block**. Reports are reviewed by
+> a person within 24 hours; content is hidden automatically once three
+> different people report it, and anything unreviewed at the 24-hour mark is
+> removed by a scheduled job (`moderationSweep`). Blocking is mutual and
+> enforced server-side. Blocked members can be managed in Profile › Settings ›
+> Safety & Blocking, which also publishes our contact address for concerns:
+> **support@verdure.app**. To exercise the flow, report any post from a second
+> test account — the reporter sees a confirmation and the reviewer queue
+> receives the item.
+>
 > **About the subscription**
 > Verdure+ unlocks the Gold/Platinum reward tiers, early access to limited-time
 > drops, and a profile badge. Everything else in the app is free. The paywall

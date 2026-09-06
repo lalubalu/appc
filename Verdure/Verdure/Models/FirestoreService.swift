@@ -154,6 +154,9 @@ final class FirestoreService {
                 "placeName": sanitizeString(placeName, maxLength: 200),
                 "content": body,
                 "likeCount": 0,
+                // Moderation flag. The rules REQUIRE it on create (born visible) and
+                // make it server-owned afterwards — see firestore.rules.
+                "hidden": false,
                 "createdAt": FieldValue.serverTimestamp()
             ])
             return true
@@ -166,7 +169,11 @@ final class FirestoreService {
     /// on read since other users' content is untrusted.
     func fetchRecentPosts(limit: Int = 30) async -> [CommunityPost] {
         do {
+            // `hidden == false` is not just a preference: the read rules refuse to
+            // serve hidden posts to anyone but their author, and "rules are not
+            // filters" — a query that could match a hidden post is denied outright.
             let snap = try await db.collection("posts")
+                .whereField("hidden", isEqualTo: false)
                 .order(by: "createdAt", descending: true)
                 .limit(to: limit)
                 .getDocuments()
@@ -186,7 +193,8 @@ final class FirestoreService {
                     likeCount: (d["likeCount"] as? Int) ?? 0,
                     commentCount: 0,
                     imagePlaceholder: nil,
-                    docID: doc.documentID
+                    docID: doc.documentID,
+                    authorID: d["authorID"] as? String
                 )
             }
         } catch {

@@ -21,7 +21,7 @@ import { initializeApp as clientInit } from "firebase/app";
 import { getAuth, connectAuthEmulator, signInWithEmailAndPassword } from "firebase/auth";
 import {
   getFirestore as clientFirestore, connectFirestoreEmulator,
-  doc, setDoc, updateDoc, increment, serverTimestamp, collection, query, getDocs, writeBatch,
+  doc, setDoc, updateDoc, deleteDoc, getDoc, increment, serverTimestamp, collection, query, where, getDocs, writeBatch,
 } from "firebase/firestore";
 
 const PROJECT = "connectify-19dd8";
@@ -45,6 +45,21 @@ const cauth = getAuth(capp);
 connectAuthEmulator(cauth, "http://127.0.0.1:9099", { disableWarnings: true });
 const cdb = clientFirestore(capp);
 connectFirestoreEmulator(cdb, "127.0.0.1", 8899);
+
+/**
+ * A second rules-checked client context, signed in as a different user.
+ * Needed wherever a test must prove what user B can (not) see — the default
+ * `cdb` context belongs to the first e2e user for the whole run.
+ */
+async function clientAs(email, pw, name) {
+  const app = clientInit({ projectId: PROJECT, apiKey: "fake-api-key" }, name);
+  const auth = getAuth(app);
+  connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
+  const fdb = clientFirestore(app);
+  connectFirestoreEmulator(fdb, "127.0.0.1", 8899);
+  await signInWithEmailAndPassword(auth, email, pw);
+  return fdb;
+}
 
 let passed = 0, failed = 0;
 function ok(name, cond, extra = "") {
@@ -250,7 +265,7 @@ async function main() {
     await setDoc(doc(cdb, "posts/e2e-post-1"), {
       authorID: uid, authorName: "E2E User", authorInitials: "EU",
       placeName: "E2E Venue", content: "hello neighborhood",
-      likeCount: 0, createdAt: serverTimestamp(),
+      likeCount: 0, hidden: false, createdAt: serverTimestamp(),
     });
     code2 = "ok";
   } catch (e) { code2 = e.code ?? String(e); }
@@ -523,6 +538,159 @@ async function main() {
   code2 = await userWrite(`fulfillments/${buyer.uid}_starbucks-5`, { status: "sent" });
   ok("rules: client CANNOT mark its own fulfilment sent",
      code2 === "permission-denied", `got ${code2}`);
+
+  // ────────────────────────────────────────────────────────────────────────
+  // CONTENT MODERATION (App Review 1.2)
+  //
+  // Report → queue → auto-hide at 3 distinct reporters → staff decision or the
+  // 24-hour sweep. Visibility is enforced by the rules (hidden content is
+  // served only to its author), the flags are server-owned, and the queue is
+  // invisible to clients.
+  // ────────────────────────────────────────────────────────────────────────
+  console.log("\n── Content moderation ──");
+
+  const authorEmail = `e2e-author-${Date.now()}@verdure.test`;
+  const author = await signUp(authorEmail, password);
+  const rep1 = await signUp(`e2e-rep1-${Date.now()}@verdure.test`, password);
+  const rep2 = await signUp(`e2e-rep2-${Date.now()}@verdure.test`, password);
+  const rep3 = await signUp(`e2e-rep3-${Date.now()}@verdure.test`, password);
+  const staff = await signUp(`e2e-staff-${Date.now()}@verdure.test`, password);
+  await db.doc(`admins/${staff.uid}`).set({ role: "moderator", addedAt: new Date() });
+
+  const postId = `e2e-mod-post-${Date.now()}`;
+  await db.doc(`posts/${postId}`).set({
+    authorID: author.uid, authorName: "Author", authorInitials: "AU",
+    placeName: "Park", content: "questionable content", likeCount: 0,
+    hidden: false, createdAt: new Date(),
+  });
+
+  const readAs = async (fdb, path) => {
+    try { return (await getDoc(doc(fdb, path))).exists() ? "ok" : "missing"; } catch (e) { return e.code; }
+  };
+
+  // The client (signed in as the first e2e user) can see it.
+  let visible = await readAs(cdb, `posts/${postId}`);
+  ok("moderation: a visible post is readable", visible === "ok", `got ${visible}`);
+
+  r = await call("reportContent", { targetType: "post", targetId: postId, reason: "spam" }, author.idToken);
+  ok("moderation: cannot report your own content", r.error?.status === "FAILED_PRECONDITION", JSON.stringify(r));
+
+  r = await call("reportContent", { targetType: "post", targetId: postId, reason: "nonsense" }, rep1.idToken);
+  ok("moderation: unknown reason rejected", r.error?.status === "INVALID_ARGUMENT", JSON.stringify(r));
+
+  r = await call("reportContent", { targetType: "post", targetId: postId, reason: "spam", details: "looks like an ad" }, rep1.idToken);
+  ok("moderation: first report is queued, content stays visible",
+     r.result?.reported === true && r.result?.hidden === false, JSON.stringify(r));
+
+  r = await call("reportContent", { targetType: "post", targetId: postId, reason: "spam" }, rep1.idToken);
+  ok("moderation: same reporter twice is idempotent (one account can't reach the threshold alone)",
+     r.result?.alreadyReported === true && r.result?.hidden === false, JSON.stringify(r));
+  let qdoc = (await db.doc(`moderationQueue/post_${postId}`).get()).data();
+  ok("moderation: queue counts distinct reporters (1)", qdoc?.reportCount === 1 && qdoc?.status === "open", JSON.stringify(qdoc));
+  ok("moderation: queue item carries a 24h SLA deadline",
+     typeof qdoc?.slaDeadline?.toMillis === "function" &&
+     Math.abs(qdoc.slaDeadline.toMillis() - qdoc.firstReportedAt.toMillis() - 86_400_000) < 1000);
+
+  await call("reportContent", { targetType: "post", targetId: postId, reason: "harassment" }, rep2.idToken);
+  r = await call("reportContent", { targetType: "post", targetId: postId, reason: "hate" }, rep3.idToken);
+  ok("moderation: third distinct reporter auto-hides the content", r.result?.hidden === true, JSON.stringify(r));
+  const hiddenPost = (await db.doc(`posts/${postId}`).get()).data();
+  ok("moderation: target document is flagged hidden", hiddenPost?.hidden === true);
+
+  visible = await readAs(cdb, `posts/${postId}`);
+  ok("rules: hidden post is NOT readable by other users", visible === "permission-denied", `got ${visible}`);
+
+  // The author still sees their own hidden post (so they know it was hidden).
+  const authorDb = await clientAs(authorEmail, password, "author");
+  visible = await readAs(authorDb, `posts/${postId}`);
+  ok("rules: the author CAN still read their own hidden post", visible === "ok", `got ${visible}`);
+
+  // Feeds must be able to exclude hidden content with a query.
+  let listCode;
+  try {
+    const snap = await getDocs(query(collection(cdb, "posts"), where("hidden", "==", false)));
+    listCode = snap.docs.some((d) => d.id === postId) ? "leaked" : "ok";
+  } catch (e) { listCode = e.code; }
+  ok("rules: feed query (hidden == false) excludes the hidden post", listCode === "ok", `got ${listCode}`);
+
+  // Flags are server-owned.
+  code2 = await userWrite(`posts/e2e-post-1`, { hidden: true });
+  ok("rules: client cannot hide/unhide a post", code2 === "permission-denied", `got ${code2}`);
+  let created;
+  try {
+    await setDoc(doc(cdb, `posts/e2e-prehidden-${Date.now()}`), {
+      authorID: uid, authorName: "E2E User", authorInitials: "EU", placeName: "X",
+      content: "sneaky", likeCount: 0, hidden: true, createdAt: serverTimestamp(),
+    });
+    created = "ok";
+  } catch (e) { created = e.code; }
+  ok("rules: a post cannot be created pre-hidden", created === "permission-denied", `got ${created}`);
+  try {
+    await setDoc(doc(cdb, `posts/e2e-noflag-${Date.now()}`), {
+      authorID: uid, authorName: "E2E User", authorInitials: "EU", placeName: "X",
+      content: "no flag", likeCount: 0, createdAt: serverTimestamp(),
+    });
+    created = "ok";
+  } catch (e) { created = e.code; }
+  ok("rules: a post must be created with hidden: false (so feeds can filter)", created === "permission-denied", `got ${created}`);
+
+  // Queue + reports are invisible to clients.
+  for (const coll of ["reports", "moderationQueue", "admins"]) {
+    let c; try { await getDocs(query(collection(cdb, coll))); c = "ok"; } catch (e) { c = e.code; }
+    ok(`rules: client CANNOT read /${coll}`, c === "permission-denied", `got ${c}`);
+  }
+
+  // Staff gate.
+  r = await call("moderateContent", { queueId: `post_${postId}`, action: "dismiss" }, rep1.idToken);
+  ok("moderation: a non-staff user cannot moderate", r.error?.status === "PERMISSION_DENIED", JSON.stringify(r));
+  r = await call("listModerationQueue", { status: "open" }, staff.idToken);
+  ok("moderation: staff can list the open queue",
+     Array.isArray(r.result?.items) && r.result.items.some((i) => i.queueId === `post_${postId}`), JSON.stringify(r).slice(0, 200));
+
+  r = await call("moderateContent", { queueId: `post_${postId}`, action: "dismiss" }, staff.idToken);
+  ok("moderation: staff dismiss restores visibility",
+     r.result?.status === "dismissed" && (await db.doc(`posts/${postId}`).get()).data()?.hidden === false, JSON.stringify(r));
+
+  // 24-hour guarantee: re-report to reopen, then simulate the deadline passing.
+  await call("reportContent", { targetType: "post", targetId: postId, reason: "spam" }, plusUser.idToken);
+  qdoc = (await db.doc(`moderationQueue/post_${postId}`).get()).data();
+  ok("moderation: a dismissed item re-opens on a new report",
+     qdoc?.status === "open" && qdoc?.hidden === false, JSON.stringify(qdoc));
+  r = await call("runModerationSweep", {}, staff.idToken);
+  ok("moderation: sweep before the deadline changes nothing", r.result?.removed === 0, JSON.stringify(r));
+  await db.doc(`moderationQueue/post_${postId}`).set({ slaDeadline: new Date(Date.now() - 60_000) }, { merge: true });
+  r = await call("runModerationSweep", {}, staff.idToken);
+  const swept = (await db.doc(`posts/${postId}`).get()).data();
+  ok("moderation: unreviewed content is removed once the 24h deadline passes",
+     r.result?.removed === 1 && swept?.removed === true && swept?.hidden === true && swept?.content === "[removed by moderation]",
+     JSON.stringify({ r, swept }));
+  r = await call("runModerationSweep", {}, staff.idToken);
+  ok("moderation: the sweep is idempotent", r.result?.removed === 0, JSON.stringify(r));
+
+  // Suspension: a removed *account* can read but not act.
+  r = await call("reportContent", { targetType: "user", targetId: author.uid, reason: "harassment" }, rep1.idToken);
+  ok("moderation: users can be reported (never auto-hidden)", r.result?.reported === true && r.result?.hidden === false, JSON.stringify(r));
+  r = await call("moderateContent", { queueId: `user_${author.uid}`, action: "remove" }, staff.idToken);
+  const suspended = (await db.doc(`users/${author.uid}`).get()).data();
+  ok("moderation: staff can suspend an account", suspended?.suspended === true, JSON.stringify(suspended));
+  await uploadProof(`proofs/${author.uid}/p.jpg`, author.idToken);
+  r = await call("checkInToEvent", { eventId: "e2e-event-1", category: "Volunteer", claimedPoints: 200,
+    proofPath: `proofs/${author.uid}/p.jpg`, lat: NEAR.lat, lng: NEAR.lng }, author.idToken);
+  ok("moderation: a suspended account cannot earn", r.error?.status === "PERMISSION_DENIED", JSON.stringify(r));
+  code2 = await userWrite(`users/${author.uid}`, { suspended: false });
+  ok("rules: a client cannot lift its own suspension", code2 === "permission-denied", `got ${code2}`);
+
+  // ── Blocks ──
+  console.log("\n── Blocks ──");
+  let bcode;
+  try { await setDoc(doc(cdb, `users/${uid}/blocks/${rep1.uid}`), { uid: rep1.uid, createdAt: serverTimestamp() }); bcode = "ok"; } catch (e) { bcode = e.code; }
+  ok("rules: a user can block another user", bcode === "ok", `got ${bcode}`);
+  try { await setDoc(doc(cdb, `users/${rep1.uid}/blocks/${uid}`), { uid, createdAt: serverTimestamp() }); bcode = "ok"; } catch (e) { bcode = e.code; }
+  ok("rules: a user cannot write into someone else's block list", bcode === "permission-denied", `got ${bcode}`);
+  try { await setDoc(doc(cdb, `users/${uid}/blocks/${rep2.uid}`), { uid: rep3.uid, createdAt: serverTimestamp() }); bcode = "ok"; } catch (e) { bcode = e.code; }
+  ok("rules: block doc id must match its uid field", bcode === "permission-denied", `got ${bcode}`);
+  try { await deleteDoc(doc(cdb, `users/${uid}/blocks/${rep1.uid}`)); bcode = "ok"; } catch (e) { bcode = e.code; }
+  ok("rules: a user can unblock", bcode === "ok", `got ${bcode}`);
 
   console.log(`\n══ ${passed} passed, ${failed} failed ══`);
   process.exit(failed > 0 ? 1 : 0);
