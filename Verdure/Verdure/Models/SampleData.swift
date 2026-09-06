@@ -2,9 +2,46 @@ import Foundation
 import SwiftUI
 import CoreLocation
 
-// MARK: - Sample Data (placeholders for backend integration)
+// MARK: - Sample Data (QA fixtures ONLY — never shown in a shipping build)
+//
+// HONEST-DATA POLICY. A fabricated park or event that a user can collect or
+// check in to is the same failure as a fabricated rating: it awards points for
+// something that does not exist. So:
+//
+//   1. Sample places/events/posts are injected ONLY when `isEnabled` is true,
+//      which requires a DEBUG build *and* the `-QAOfflineData YES` launch
+//      argument the UI-test harness passes (see QAData). In a Release build the
+//      branch is compiled out — there is no code path that shows them.
+//   2. Even under the QA harness, `GameStateManager` refuses to check in to or
+//      collect anything whose id is a sample id (`isSample(id:)`), so no
+//      fabricated place or event is collectible under any code path.
+//   3. Live screens show honest empty states instead (see EmptyStateCard).
+//
+// `rewards` and `gemFacts` are NOT fabricated content — the reward catalog is
+// the real client-side catalog (mirrored by REWARD_COSTS on the server) and the
+// gem facts are curated copy. They are unaffected by `isEnabled`.
 
 enum SampleData {
+
+    /// True only for the DEBUG UI-test/screenshot harness. Release: always false.
+    static var isEnabled: Bool {
+        #if DEBUG
+        return QAData.offline
+        #else
+        return false
+        #endif
+    }
+
+    /// Every id that belongs to fixture content. Checked at the earn boundary.
+    static let sampleIDs: Set<String> = {
+        var ids = Set<String>()
+        for p in places { ids.insert(p.id) }
+        for e in events { ids.insert(e.id) }
+        for c in collectiblePlaces { ids.insert(c.id) }
+        return ids
+    }()
+
+    static func isSample(id: String) -> Bool { sampleIDs.contains(id) }
 
     // MARK: Places
 

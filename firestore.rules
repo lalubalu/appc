@@ -64,6 +64,17 @@ service cloud.firestore {
     match /admins/{docId} {
       allow read, write: if false;
     }
+    // Ingestion telemetry. Run logs and coverage reports are operational data
+    // written by the scheduled jobs; the treasury holds spend + quota counters.
+    match /ingestRuns/{docId} {
+      allow read, write: if false;
+    }
+    match /supplyReports/{docId} {
+      allow read, write: if false;
+    }
+    match /treasury/{docId} {
+      allow read, write: if false;
+    }
 
     // ──────────────────────────────────────────────
     // LIKE LEDGER: /postLikes/{postId}_{uid}

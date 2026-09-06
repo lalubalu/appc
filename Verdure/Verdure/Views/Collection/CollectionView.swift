@@ -7,9 +7,7 @@ struct CollectionView: View {
     @State private var selectedCollectible: CollectiblePlace? = nil
     @State private var filterRarity: PlaceRarity? = nil
 
-    private var allCollectibles: [CollectiblePlace] {
-        placesService.collectiblePlaces.isEmpty ? SampleData.collectiblePlaces : placesService.collectiblePlaces
-    }
+    private var allCollectibles: [CollectiblePlace] { placesService.collectiblePlaces }
     private var displayedPlaces: [CollectiblePlace] {
         guard let rarity = filterRarity else { return allCollectibles }
         return allCollectibles.filter { $0.rarity == rarity }
@@ -135,6 +133,14 @@ struct CollectionView: View {
         let right = items.enumerated().filter { $0.offset % 2 == 1 }.map(\.element)
         return VStack(alignment: .leading, spacing: Spacing.md) {
             SectionHeader(title: "Collectidex").padding(.horizontal, Spacing.md)
+            if items.isEmpty {
+                EmptyStateCard(icon: "map",
+                               title: allCollectibles.isEmpty ? "No places loaded yet" : "Nothing in this rarity yet",
+                               message: allCollectibles.isEmpty
+                                   ? "Real parks, trails and gardens appear here once your location is on and nearby places have loaded."
+                                   : "Explore a little further to find places of this rarity.")
+                    .padding(.horizontal, Spacing.md)
+            }
             HStack(alignment: .top, spacing: 14) {
                 VStack(spacing: 14) {
                     ForEach(left) { gemTile($0) }

@@ -14,9 +14,7 @@ struct ExploreView: View {
     @State private var forYou = true
     @AppStorage("interestCategories") private var interestCategoriesRaw = ""
 
-    private var sourcePlaces: [Place] {
-        placesService.places.isEmpty ? SampleData.places : placesService.places
-    }
+    private var sourcePlaces: [Place] { placesService.places }
     private var interests: Set<PlaceCategory> {
         Set(interestCategoriesRaw.split(separator: ",").compactMap { PlaceCategory(rawValue: String($0)) })
     }
@@ -397,7 +395,7 @@ struct ExploreView: View {
     }
 
     private func isCollected(_ place: Place) -> Bool {
-        let id = placesService.collectible(for: place)?.id ?? SampleData.collectible(for: place)?.id ?? ""
+        let id = placesService.collectible(for: place)?.id ?? ""
         return gameState.isCollected(id)
     }
 }

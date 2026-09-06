@@ -13,12 +13,14 @@ struct CommunityView: View {
     /// Posts shown in the feed: real Firestore posts when any exist; the sample
     /// starter feed only as a cold-start placeholder (never mixed together).
     private var feedPosts: [CommunityPost] {
-        let source = posts.isEmpty ? SampleData.communityPosts : posts
+        // Fixture posts exist only for the DEBUG QA harness; live builds show
+        // the honest empty state until real neighbours post.
+        let source = (posts.isEmpty && SampleData.isEnabled) ? SampleData.communityPosts : posts
         // Blocked authors never render, even before the server-side copy of the
         // block has propagated — the local cache decides instantly.
         return source.filter { !moderation.isBlocked($0.authorID) }
     }
-    private var isShowingSamples: Bool { posts.isEmpty }
+    private var isShowingSamples: Bool { posts.isEmpty && SampleData.isEnabled }
 
     /// Load real community posts from Firestore (requires auth for reads).
     private func loadPosts() async {
@@ -95,6 +97,9 @@ struct CommunityView: View {
                 if isShowingSamples {
                     Text("Starter stories — yours will replace them")
                         .font(VType.body(13, .medium)).foregroundStyle(Palette.inkSoft)
+                } else if posts.isEmpty {
+                    Text(loadedRemote ? "Nobody has posted nearby yet" : "Loading the neighborhood…")
+                        .font(VType.body(13, .medium)).foregroundStyle(Palette.inkSoft)
                 } else {
                     CountUp(value: posts.count).font(VType.num(14, .bold)).foregroundStyle(Palette.ink)
                     Text(posts.count == 1 ? "recent post nearby" : "recent posts nearby")
@@ -164,6 +169,12 @@ struct CommunityView: View {
 
     private var feed: some View {
         LazyVStack(spacing: 18) {
+            if feedPosts.isEmpty && loadedRemote {
+                EmptyStateCard(icon: "bubble.left.and.bubble.right",
+                               title: "Be the first to post",
+                               message: "Share a place you found, a trail worth the walk, or an event worth showing up for. Real neighbours, real posts — nothing here is staged.")
+                    .padding(.horizontal, Spacing.md)
+            }
             ForEach(Array(feedPosts.enumerated()), id: \.element.id) { i, post in
                 HStack(spacing: 0) {
                     if i % 2 == 1 { Spacer(minLength: 26) }

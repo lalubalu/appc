@@ -31,7 +31,7 @@ final class CloudMergeTests: XCTestCase {
         UserDefaults.standard.set(true, forKey: "gameStateSeeded_v2")
     }
 
-    private func sampleEvent() -> Event { SampleData.events[0] }   // 200 pts
+    private func sampleEvent() -> Event { TestFixtures.event }     // 200 pts (own id — samples can't earn)
 
     /// The exact production scenario today: Functions undeployed, so the user
     /// doc has 0 points while the device holds real optimistic earnings.
@@ -104,8 +104,8 @@ final class CloudMergeTests: XCTestCase {
     /// Collected-place IDs always survive a merge (superset semantics).
     func testMergeKeepsSupersetOfIdentifiers() {
         let state = GameStateManager()
-        _ = state.collectPlace(SampleData.collectiblePlaces[0])
-        let localID = SampleData.collectiblePlaces[0].id
+        _ = state.collectPlace(TestFixtures.collectible)
+        let localID = TestFixtures.collectible.id
 
         let cloud = CloudGameState(
             collectedPlaceIDs: ["cloud-only-place"], checkedInEventIDs: ["cloud-only-event"],

@@ -38,9 +38,12 @@ final class GameStateManagerTests: XCTestCase {
 
     private func freshManager() -> GameStateManager { GameStateManager() }
 
-    private var sampleEvent: Event { SampleData.events[0] }          // 200-pt hackathon
-    private var samplePlace: CollectiblePlace { SampleData.collectiblePlaces[0] }
-    private var sampleReward: Reward { SampleData.rewards[0] }       // 1000-pt bronze
+    // Fixtures use their OWN ids: SampleData ids are refused at the earn boundary
+    // (fabricated content can never earn), so a test that used them would prove
+    // nothing.
+    private var sampleEvent: Event { TestFixtures.event }            // 200-pt hackathon
+    private var samplePlace: CollectiblePlace { TestFixtures.collectible }
+    private var sampleReward: Reward { SampleData.rewards[0] }       // cheapest catalog entry
 
     // MARK: Check-in
 
@@ -105,15 +108,25 @@ final class GameStateManagerTests: XCTestCase {
 
     // MARK: Redeem (signed-out local path — server path needs live Functions)
 
-    func testRedeemDeductsExactlyOnce() async {
+    func testRedeemSignedOutIsRefusedNotFaked() async {
+        // The old "demo mode" deducted points locally and delivered nothing —
+        // a fabricated reward. Signed out, redemption must be refused outright.
         let state = freshManager()
         state.pointsBalance = sampleReward.pointCost + 250
 
         let result = await state.redeemReward(sampleReward)
 
-        XCTAssertEqual(result, .success)
-        XCTAssertEqual(state.pointsBalance, 250)
-        XCTAssertTrue(state.isRedeemed(sampleReward.id))
+        XCTAssertEqual(result, .signInRequired)
+        XCTAssertEqual(state.pointsBalance, sampleReward.pointCost + 250, "no points may move without a server")
+        XCTAssertFalse(state.isRedeemed(sampleReward.id))
+    }
+
+    func testSampleContentCanNeverEarn() {
+        let state = freshManager()
+        XCTAssertEqual(state.checkInEvent(SampleData.events[0]), 0)
+        XCTAssertEqual(state.collectPlace(SampleData.collectiblePlaces[0]), 0)
+        XCTAssertEqual(state.pointsBalance, 0)
+        XCTAssertTrue(state.pendingOps.isEmpty, "fixture ids must never reach the server queue")
     }
 
     func testRedeemRejectsInsufficientPoints() async {

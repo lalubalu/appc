@@ -37,7 +37,7 @@ struct PlaceDetailView: View {
     }
 
     private var collectible: CollectiblePlace? {
-        placesService.collectible(for: place) ?? SampleData.collectible(for: place)
+        placesService.collectible(for: place)
     }
     private var isCollected: Bool {
         guard let c = collectible else { return false }

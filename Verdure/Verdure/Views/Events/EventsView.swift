@@ -20,9 +20,10 @@ struct EventsView: View {
     private var accountType: AccountType { AccountType(rawValue: accountTypeRaw) ?? .visitor }
 
     private var sourceEvents: [Event] {
-        let source = eventsService.events.isEmpty ? SampleData.events : eventsService.events
+        // The service already holds QA fixtures under the DEBUG harness; a live
+        // build with nothing nearby shows the honest empty deck instead.
         // Events from blocked organizers never render (mutual block, App Review 1.2).
-        return source.filter { !moderation.isBlocked($0.creatorID) }
+        eventsService.events.filter { !moderation.isBlocked($0.creatorID) }
     }
 
     // MARK: Personalization ("For You")
@@ -385,16 +386,22 @@ struct EventsView: View {
         .frame(height: 430)
     }
 
+    /// Honest empty state. Distinguishes "nothing loaded" (a real-data gap — we
+    /// never paper over it with fixtures) from "your filter matched nothing".
     private var emptyDeck: some View {
         VStack(spacing: Spacing.md) {
             ClayIconTile(systemImage: "calendar.badge.exclamationmark", kind: .gold, size: 60, radius: Radius.md)
-            Text("No events match")
+            Text(sourceEvents.isEmpty ? "No events loaded yet" : "No events match")
                 .font(VType.display(18, .semibold)).foregroundStyle(Palette.ink)
-            Text(searchText.isEmpty ? "Try a different category." : "Try a different search or category.")
+            Text(sourceEvents.isEmpty
+                 ? (eventsService.lastError ?? "We only show real events from real sources. Pull to refresh, or check back soon — new events are ingested every hour.")
+                 : (searchText.isEmpty ? "Try a different category." : "Try a different search or category."))
                 .font(VType.body(13)).foregroundStyle(Palette.inkSoft).multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .frame(maxWidth: .infinity).frame(height: 300)
+        .frame(maxWidth: .infinity).frame(minHeight: 300)
         .padding(.horizontal, Spacing.lg)
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: - Upcoming timeline (glowing vertical line)

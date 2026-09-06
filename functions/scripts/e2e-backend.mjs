@@ -783,6 +783,133 @@ async function main() {
   ok("deleted: the Firebase Auth user", authGone);
   ok("untouched: other people's content survives", !(await gone("posts/e2e-post-1")) && !(await gone("events/e2e-event-2")));
 
+  // ────────────────────────────────────────────────────────────────────────
+  // EVENT INGESTION — ingest-and-own (Part 2 §1)
+  //
+  // The admin-only runIngest payload mode pushes already-normalized records
+  // through the SAME store code the scheduled fetchers use, so dedupe,
+  // staleness, geographic scoping and the client's read path are proven on
+  // the emulator without a vendor call. No user request here reaches upstream.
+  // ────────────────────────────────────────────────────────────────────────
+  console.log("\n── Event ingestion (ingest-and-own) ──");
+
+  const inTwoWeeks = new Date(Date.now() + 14 * 86_400_000);
+  const iso = (d, plusMin = 0) => new Date(d.getTime() + plusMin * 60_000).toISOString();
+  const A = { source: "ticketmaster", sourceEventId: "tmA1", title: "The Cleveland Orchestra: Beethoven at Blossom",
+    start: iso(inTwoWeeks), locationName: "Blossom Music Center", latitude: 41.1876, longitude: -81.5527,
+    category: "Festival", isFree: false, priceMin: 25, website: "https://www.ticketmaster.com/e/A1" };
+  const C = { source: "ticketmaster", sourceEventId: "tmC1", title: "Guardians vs. Tigers",
+    start: iso(inTwoWeeks, 24 * 60), locationName: "Progressive Field", latitude: 41.4962, longitude: -81.6852,
+    category: "Sports", isFree: false, priceMin: 12 };
+  const OUT_OF_AREA = { source: "ticketmaster", sourceEventId: "tmFAR", title: "Columbus Thing",
+    start: iso(inTwoWeeks), locationName: "Nationwide Arena", latitude: 39.9692, longitude: -83.0061 };
+
+  r = await call("runIngest", { source: "ticketmaster", payload: [A, C, OUT_OF_AREA] }, rep1.idToken);
+  ok("ingest: a non-staff user cannot run ingestion", r.error?.status === "PERMISSION_DENIED", JSON.stringify(r));
+
+  r = await call("runIngest", { areaId: "cleveland-oh", source: "ticketmaster", payload: [A, C, OUT_OF_AREA] }, staff.idToken);
+  let res = r.result?.results?.[0];
+  ok("ingest: payload run creates the in-area records and skips the out-of-area one",
+     res?.created === 2 && res?.skipped === 1 && res?.errors?.length === 0, JSON.stringify(res));
+  ok("ingest: documents carry provenance + visibility flags",
+     await (async () => {
+       const d = (await db.doc("events/ticketmaster-tmA1").get()).data();
+       return d?.source === "ticketmaster" && d?.active === true && d?.hidden === false && d?.broadcast === true
+         && Array.isArray(d?.sourceKeys) && d.sourceKeys.includes("ticketmaster:tmA1") && d?.areaId === "cleveland-oh"
+         && d?.creatorID === "system:ingest" && d?.pointValue === 250;
+     })());
+  ok("ingest: out-of-area record was never written", !(await db.doc("events/ticketmaster-tmFAR").get()).exists);
+
+  // Cross-source duplicate: LibCal lists the same concert with a differently
+  // punctuated title, 30 minutes later, venue string with the city appended.
+  const B = { source: "libcal", sourceEventId: "LibCal-8758-999", title: "Cleveland Orchestra — Beethoven At Blossom!",
+    start: iso(inTwoWeeks, 30), locationName: "Blossom Music Center, Cuyahoga Falls",
+    description: "A much richer description of the concert from the library's calendar listing.",
+    website: "https://cpl.libcal.com/event/999" };
+  r = await call("runIngest", { areaId: "cleveland-oh", source: "libcal", payload: [B] }, staff.idToken);
+  res = r.result?.results?.[0];
+  ok("ingest: cross-source duplicate is MERGED, not created", res?.merged === 1 && res?.created === 0, JSON.stringify(res));
+  const mergedDoc = (await db.doc("events/ticketmaster-tmA1").get()).data();
+  ok("ingest: merged doc records both feeds in sources[] / sourceKeys[]",
+     mergedDoc?.sources?.length === 2 && mergedDoc.sourceKeys.includes("libcal:LibCal-8758-999"), JSON.stringify(mergedDoc?.sources));
+  ok("ingest: merge keeps the richer description and the primary's price",
+     (mergedDoc?.description ?? "").includes("richer description") && mergedDoc?.isFree === false && mergedDoc?.priceMin === 25);
+  ok("ingest: no second document was created for the duplicate", !(await db.doc("events/libcal-LibCal-8758-999").get()).exists);
+
+  // Re-running the same feed is idempotent (updates, no new docs).
+  r = await call("runIngest", { areaId: "cleveland-oh", source: "libcal", payload: [B] }, staff.idToken);
+  res = r.result?.results?.[0];
+  ok("ingest: re-seeing a merged source updates in place", res?.updated === 1 && res?.created === 0 && res?.merged === 0, JSON.stringify(res));
+
+  // THE CLIENT READS FIRESTORE ONLY — with exactly the query the app uses.
+  const appQuery = query(collection(cdb, "events"),
+    where("hidden", "==", false), where("active", "==", true), where("broadcast", "==", true),
+    where("date", ">=", new Date()));
+  let visibleIds = [];
+  try { visibleIds = (await getDocs(appQuery)).docs.map((d) => d.id); } catch (e) { visibleIds = [`ERR:${e.code}`]; }
+  ok("client: the app's Firestore query returns the ingested events (no upstream call)",
+     visibleIds.includes("ticketmaster-tmA1") && visibleIds.includes("ticketmaster-tmC1"), JSON.stringify(visibleIds));
+  code2 = await userWrite("events/ticketmaster-tmA1", { pointValue: 1000 });
+  ok("rules: clients cannot edit ingested events", code2 === "permission-denied", `got ${code2}`);
+  try { await deleteDoc(doc(cdb, "events/ticketmaster-tmA1")); code2 = "ok"; } catch (e) { code2 = e.code; }
+  ok("rules: clients cannot delete ingested events", code2 === "permission-denied", `got ${code2}`);
+
+  // STALENESS: the feed stops listing A (cancelled). Not seen for 3 cycles → inactive.
+  r = await call("runIngest", { areaId: "cleveland-oh", source: "ticketmaster", payload: [C] }, staff.idToken);
+  res = r.result?.results?.[0];
+  let aDoc = (await db.doc("events/ticketmaster-tmA1").get()).data();
+  ok("staleness: first miss increments missedCycles but keeps the event active",
+     res?.markedStale === 1 && aDoc?.missedCycles === 1 && aDoc?.active === true, JSON.stringify({ res, missed: aDoc?.missedCycles }));
+  await call("runIngest", { areaId: "cleveland-oh", source: "ticketmaster", payload: [C] }, staff.idToken);
+  r = await call("runIngest", { areaId: "cleveland-oh", source: "ticketmaster", payload: [C] }, staff.idToken);
+  res = r.result?.results?.[0];
+  aDoc = (await db.doc("events/ticketmaster-tmA1").get()).data();
+  ok("staleness: third consecutive miss deactivates (never deletes) the event",
+     res?.deactivated === 1 && aDoc?.active === false && aDoc?.inactiveAt, JSON.stringify({ res, active: aDoc?.active }));
+  try { visibleIds = (await getDocs(appQuery)).docs.map((d) => d.id); } catch (e) { visibleIds = [`ERR:${e.code}`]; }
+  ok("client: a deactivated event disappears from the app query while C remains",
+     !visibleIds.includes("ticketmaster-tmA1") && visibleIds.includes("ticketmaster-tmC1"), JSON.stringify(visibleIds));
+
+  // A feed outage (zero records) must NOT age the corpus.
+  const cBefore = (await db.doc("events/ticketmaster-tmC1").get()).data()?.missedCycles ?? 0;
+  r = await call("runIngest", { areaId: "cleveland-oh", source: "ticketmaster", payload: [] }, staff.idToken);
+  const cAfter = (await db.doc("events/ticketmaster-tmC1").get()).data()?.missedCycles ?? 0;
+  ok("staleness: an empty fetch marks nothing stale (outage ≠ cancellations)",
+     r.result?.results?.[0]?.markedStale === 0 && cAfter === cBefore, JSON.stringify(r.result));
+
+  // A reappearing event is reactivated.
+  await call("runIngest", { areaId: "cleveland-oh", source: "ticketmaster", payload: [A, C] }, staff.idToken);
+  aDoc = (await db.doc("events/ticketmaster-tmA1").get()).data();
+  ok("staleness: an event that reappears is reactivated with a clean counter",
+     aDoc?.active === true && aDoc?.missedCycles === 0, JSON.stringify({ active: aDoc?.active, missed: aDoc?.missedCycles }));
+
+  // Every run is logged, and supply telemetry lands in /treasury.
+  const runs = await db.collection("ingestRuns").where("source", "==", "ticketmaster").get();
+  ok("ingest: every run writes an ingestRuns record", runs.size >= 5, `runs=${runs.size}`);
+  const month = new Date().toISOString().slice(0, 7);
+  const treasury = (await db.doc(`treasury/${month}`).get()).data();
+  ok("ingest: /treasury carries per-source supply counters",
+     (treasury?.supply?.["ticketmaster.runs"] ?? 0) >= 5 && (treasury?.supply?.["libcal.fetched"] ?? 0) >= 2, JSON.stringify(treasury?.supply));
+
+  // Coverage report (Part 2 §1e) — computed server-side, admin-only.
+  r = await call("getSupplyReport", { areaId: "cleveland-oh" }, rep1.idToken);
+  ok("supply: report is staff-only", r.error?.status === "PERMISSION_DENIED");
+  r = await call("getSupplyReport", { areaId: "cleveland-oh" }, staff.idToken);
+  const rep = r.result;
+  ok("supply: report counts active upcoming events by source and multi-source merges",
+     rep?.totalActiveUpcoming >= 2 && rep?.bySource?.ticketmaster >= 2 && rep?.byAnySource?.libcal >= 1 && rep?.multiSourceEvents >= 1,
+     JSON.stringify(rep && { t: rep.totalActiveUpcoming, s: rep.bySource, any: rep.byAnySource, m: rep.multiSourceEvents }));
+  ok("supply: 'not in Google' share is measured (no serpapi source → counts as not-in-Google)",
+     typeof rep?.notInGoogleShare === "number" && rep.notInGoogleShare === 1, String(rep?.notInGoogleShare));
+  ok("supply: targets are reported honestly (300+ not met on a 2-event emulator)",
+     rep?.meets?.total === false && rep?.targets?.total === 300);
+  ok("rules: clients cannot read /ingestRuns or /supplyReports",
+     await (async () => { try { await getDocs(query(collection(cdb, "ingestRuns"))); return false; } catch (e) { return e.code === "permission-denied"; } })()
+     && await (async () => { try { await getDocs(query(collection(cdb, "supplyReports"))); return false; } catch (e) { return e.code === "permission-denied"; } })());
+  r = await call("listLaunchAreas", {}, rep1.idToken);
+  ok("areas: any signed-in user can list launch areas (to explain coverage honestly)",
+     Array.isArray(r.result?.areas) && r.result.areas[0]?.id === "cleveland-oh", JSON.stringify(r.result));
+
   console.log(`\n══ ${passed} passed, ${failed} failed ══`);
   process.exit(failed > 0 ? 1 : 0);
 }

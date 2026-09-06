@@ -90,6 +90,8 @@ struct RewardsStoreView: View {
                 redeemError = "Not enough points yet — attend more events to earn more."
             case .offline:
                 redeemError = "You're offline. Connect to the internet to redeem rewards."
+            case .signInRequired:
+                redeemError = "Sign in to redeem rewards. Gift cards are delivered to your account's email."
             case .failed(let message):
                 redeemError = message
             }

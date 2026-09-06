@@ -440,7 +440,10 @@ final class PlacesAPIService {
         return Date().timeIntervalSince1970 - ts < cacheTTL
     }
 
+    /// QA harness only (DEBUG + `-QAOfflineData YES`). In every other build this
+    /// is a no-op and the screens render their honest empty states.
     private func useSampleFallback() {
+        guard SampleData.isEnabled else { return }
         places = SampleData.places
         collectiblePlaces = SampleData.collectiblePlaces
     }

@@ -413,6 +413,8 @@ final class GameStateManager {
     func checkInEvent(_ event: Event, proofPhoto: Data? = nil,
                       userCoordinate: CLLocationCoordinate2D? = nil) -> Int {
         guard !isCheckedIn(event.id) else { return 0 }
+        // Fixture content can never earn — not even under the QA harness.
+        guard !SampleData.isSample(id: event.id) else { return 0 }
         checkedInEventIDs.insert(event.id)
         let pts = event.pointValue
         pointsBalance += pts
@@ -466,6 +468,8 @@ final class GameStateManager {
     func collectPlace(_ collectible: CollectiblePlace,
                       userCoordinate: CLLocationCoordinate2D? = nil) -> Int {
         guard !isCollected(collectible.id) else { return 0 }
+        // Fixture content can never earn — not even under the QA harness.
+        guard !SampleData.isSample(id: collectible.id) else { return 0 }
         collectedPlaceIDs.insert(collectible.id)
         let pts = collectible.pointValue
         pointsBalance += pts
@@ -489,6 +493,7 @@ final class GameStateManager {
         case alreadyRedeemed
         case notEnoughPoints
         case offline
+        case signInRequired
         case failed(String)
     }
 
@@ -506,10 +511,10 @@ final class GameStateManager {
         defer { isRedeeming = false }
 
         guard let fx = functionsService else {
-            // Signed-out demo mode: local-only redemption.
-            pointsBalance -= reward.pointCost
-            redeemedRewardIDs.insert(reward.id)
-            return .success
+            // No account → no fulfilment is possible. Pretending to redeem (the
+            // old "demo mode") took points and delivered nothing, which is a
+            // fabricated reward. Say so instead.
+            return .signInRequired
         }
 
         // Land any queued earns first so the server balance is current.

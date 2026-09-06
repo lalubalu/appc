@@ -16,7 +16,6 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { setGlobalOptions } from "firebase-functions/v2";
-import { defineSecret } from "firebase-functions/params";
 import { FieldValue } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
 import { getStorage } from "firebase-admin/storage";
@@ -24,6 +23,7 @@ import {
   db, inEmulator, safeString, parseCoord, distanceMeters,
   enforceRateLimit, hasActivePlus, assertNotSuspended,
 } from "./common.js";
+import { RECREATION_GOV_KEY, NPS_API_KEY } from "./secrets.js";
 
 setGlobalOptions({ region: "us-central1", maxInstances: 10 });
 
@@ -503,8 +503,7 @@ export const sendEventReminders = onSchedule("every day 09:00", async () => {
 // while working locally where the values come from a shell env. The migration
 // note below tells you to set these secrets; without these declarations that
 // instruction silently does nothing.
-const RECREATION_GOV_KEY = defineSecret("RECREATION_GOV_KEY");
-const NPS_API_KEY = defineSecret("NPS_API_KEY");
+// Declared once in secrets.ts and shared with the ingestion jobs.
 
 const PROXY_ALLOWLIST: Record<string, (params: Record<string, string>) => string | null> = {
   // Recreation.gov facilities near a point.
@@ -594,3 +593,11 @@ export {
 // One callable removes everything the account owns, Storage included, and the
 // Auth user last. See account.ts for what is deleted vs. anonymised and why.
 export { deleteAccount } from "./account.js";
+
+// ── Event ingestion (ingest-and-own) ────────────────────────────────────────
+// Scheduled jobs write the normalized /events store; the app reads Firestore
+// only. See ingest/index.ts and ingest/areas.ts (launch areas + verified feeds).
+export {
+  ingestTicketed, ingestCivic, runIngest,
+  supplyReportWeekly, getSupplyReport, listLaunchAreas,
+} from "./ingest/index.js";

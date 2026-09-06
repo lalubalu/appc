@@ -17,6 +17,9 @@ import { HttpsError } from "firebase-functions/v2/https";
 
 if (!getApps().length) initializeApp();
 export const db = getFirestore();
+// Normalized event records carry optional fields; Firestore rejects `undefined`
+// unless told to drop it. Must be set before the first operation on `db`.
+try { db.settings({ ignoreUndefinedProperties: true }); } catch { /* already initialised */ }
 
 /** True under the Local Emulator Suite — used to skip triggers the emulator can't host. */
 export const inEmulator = process.env.FUNCTIONS_EMULATOR === "true";

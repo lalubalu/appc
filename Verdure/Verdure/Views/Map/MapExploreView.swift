@@ -14,9 +14,7 @@ struct MapExploreView: View {
     @State private var celebrationCollectible: CollectiblePlace? = nil
     @State private var celebrationPoints = 0
 
-    private var collectiblePlaces: [CollectiblePlace] {
-        placesService.collectiblePlaces.isEmpty ? SampleData.collectiblePlaces : placesService.collectiblePlaces
-    }
+    private var collectiblePlaces: [CollectiblePlace] { placesService.collectiblePlaces }
     private var nearbyUncollected: [CollectiblePlace] {
         gameState.uncollected(from: collectiblePlaces, nearbyOnly: true, userLocation: locationManager.userLocation)
     }
@@ -196,7 +194,7 @@ struct MapExploreView: View {
     // MARK: - Selected place card
 
     private func selectedPlaceCard(_ place: Place) -> some View {
-        let collectible = placesService.collectible(for: place) ?? SampleData.collectible(for: place)
+        let collectible = placesService.collectible(for: place)
         let collected = collectible.map { gameState.isCollected($0.id) } ?? false
         let nearby = collectible?.isNearby(from: locationManager.userLocation) ?? false
         let distance = collectible.map { locationManager.formattedDistance(to: $0.coordinate) } ?? place.distance

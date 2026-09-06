@@ -513,7 +513,10 @@ final class EventsAPIService {
 
     // MARK: - Helpers
 
+    /// QA harness only (DEBUG + `-QAOfflineData YES`). In every other build this
+    /// is a no-op and the screens render their honest empty states.
     private func useSampleFallback() {
+        guard SampleData.isEnabled else { return }
         events = SampleData.events
     }
 

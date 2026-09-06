@@ -1,0 +1,51 @@
+// Live smoke test for the ingestion fetchers — READ-ONLY, no Firestore writes.
+//
+//   TICKETMASTER_KEY=... NPS_API_KEY=... node scripts/ingest-smoke.mjs
+//
+// Proves each source that remains in the tree actually returns real data for
+// the launch area today (Part 2 §1 "done when": every provider remaining can be
+// demonstrated returning real data). SerpApi is deliberately NOT called here —
+// every call spends monthly quota — its mapper is covered by unit tests.
+//
+// Prints one line per source: count, a sample title, and how many records
+// carry coordinates. Exit code 1 if any configured source returns zero.
+
+import { CLEVELAND } from "../lib/ingest/areas.js";
+import { fetchTicketmaster } from "../lib/ingest/sources/ticketmaster.js";
+import { fetchIcsFeed } from "../lib/ingest/sources/icsfeed.js";
+import { fetchLibCal } from "../lib/ingest/sources/libcal.js";
+import { fetchLocalist } from "../lib/ingest/sources/localist.js";
+import { fetchNps } from "../lib/ingest/sources/nps.js";
+
+const area = CLEVELAND;
+let failures = 0;
+
+function report(name, records) {
+  const withCoords = records.filter((r) => typeof r.latitude === "number").length;
+  const free = records.filter((r) => r.isFree).length;
+  const sample = records[0] ? `"${records[0].title}" @ ${records[0].locationName} (${records[0].start.toISOString().slice(0, 16)})` : "—";
+  const cats = {};
+  for (const r of records) cats[r.category] = (cats[r.category] ?? 0) + 1;
+  console.log(`${records.length ? "✅" : "❌"} ${name}: ${records.length} events, ${withCoords} with coords, ${free} free · ${sample}`);
+  console.log(`     categories: ${JSON.stringify(cats)}`);
+  if (!records.length) failures++;
+}
+
+async function run(name, fn) {
+  try { report(name, await fn()); }
+  catch (e) { failures++; console.log(`❌ ${name}: ${e.message}`); }
+}
+
+console.log(`── Live ingest smoke — ${area.name} (${area.radiusMiles} mi) ──`);
+if (process.env.TICKETMASTER_KEY) {
+  await run("ticketmaster", () => fetchTicketmaster(area, process.env.TICKETMASTER_KEY));
+} else console.log("⏭  ticketmaster: TICKETMASTER_KEY not set");
+for (const feed of area.libcal) await run(`libcal · ${feed.name}`, () => fetchLibCal(area, feed));
+for (const cal of area.localist) await run(`localist · ${cal.name}`, () => fetchLocalist(area, cal.host, cal.name));
+if (process.env.NPS_API_KEY) {
+  await run("nps", () => fetchNps(area, process.env.NPS_API_KEY));
+} else console.log("⏭  nps: NPS_API_KEY not set");
+for (const feed of area.ics) await run(`ics · ${feed.name}`, () => fetchIcsFeed(area, feed, "ics"));
+
+console.log(failures ? `\n${failures} source(s) returned nothing or failed` : "\nall configured sources returned real data");
+process.exit(failures ? 1 : 0);
