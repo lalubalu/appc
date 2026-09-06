@@ -257,10 +257,15 @@ struct PaywallView: View {
         }
     }
 
+    /// Subscription disclosure required by App Review 3.1.2: length, that the
+    /// price shown is the price charged, auto-renewal, and live Terms/Privacy links.
     private var footer: some View {
-        Text("Auto-renews until cancelled. Manage in App Store settings.\nPrices shown in your local currency at checkout.")
-            .font(VType.body(11)).foregroundStyle(Palette.inkFaint)
-            .multilineTextAlignment(.center).lineSpacing(2)
+        VStack(spacing: 8) {
+            Text("Verdure+ Monthly renews every \(Legal.Subscription.monthlyLength); Verdure+ Yearly renews every \(Legal.Subscription.yearlyLength). Payment is charged to your Apple ID at confirmation and the subscription renews automatically at the price shown unless cancelled at least 24 hours before the period ends. Manage or cancel in App Store settings.")
+                .font(VType.scaledBody(11, relativeTo: .caption2)).foregroundStyle(Palette.inkFaint)
+                .multilineTextAlignment(.center).lineSpacing(2)
+            LegalLinksRow()
+        }
     }
 }
 

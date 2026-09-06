@@ -175,6 +175,8 @@ struct AuthView: View {
                 .disabled(isSubmitting)
                 .opacity(isSubmitting ? 0.6 : 1)
                 .overlay { if isSubmitting { ProgressView().tint(Palette.spruce.onColor) } }
+
+            LegalLinksRow(prefix: "By continuing you agree to Verdure's")
         }
         .padding(Spacing.lg)
         .background(ClayBackground(style: .surface, radius: Radius.lg, elevation: 1.2))

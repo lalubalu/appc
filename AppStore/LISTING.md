@@ -94,9 +94,15 @@ outdoors,parks,trails,hiking,walk,nature,community,events,local,explore,rewards,
 
 | Field | Value |
 |---|---|
-| Support URL | `https://<domain>/support` — page built (`/support`) |
-| Marketing URL | *(the Verdure Website in this repo, once deployed)* |
-| Privacy Policy URL | `https://<domain>/privacy` — page built (`/privacy`) |
+| Support URL | `https://verdure.app/support` — page built (`/support`) |
+| Marketing URL | `https://verdure.app` *(the Verdure Website in this repo, once deployed)* |
+| Privacy Policy URL | `https://verdure.app/privacy` — page built (`/privacy`) |
+| Terms of Use (EULA) | Apple's standard EULA, plus `https://verdure.app/terms` — page built (`/terms`) |
+
+The domain is set in one place in the app (`Legal.siteBase` in
+`Verdure/Verdure/Models/Legal.swift`). Both documents also ship **inside the
+binary** (`LegalView`), linked from the paywall, the sign-up form and Profile ›
+Settings › Terms & Privacy — so the links are live even before DNS is.
 
 ---
 
@@ -149,6 +155,19 @@ diagnostics, or advertising data.
 > test account — the reporter sees a confirmation and the reviewer queue
 > receives the item.
 >
+> **Account deletion (guideline 5.1.1(v))**
+> Profile › Settings › Delete Account. A server function removes the profile,
+> points, collection, posts, events and their attendee lists, RSVPs, GPS
+> attendance records, queued gift cards, proof photos in Storage and finally the
+> Firebase Auth user. Delivered gift cards are kept in anonymised form as a
+> financial record. Covered by the backend E2E suite.
+>
+> **Terms of Use & Privacy Policy (guideline 3.1.2)**
+> Both are bundled in the app and tappable from the paywall (under the purchase
+> button), the sign-up form, and Profile › Settings › Terms & Privacy. The
+> paywall states price, subscription length and the auto-renewal terms; prices
+> are rendered from the StoreKit product objects, never hardcoded.
+>
 > **About the subscription**
 > Verdure+ unlocks the Gold/Platinum reward tiers, early access to limited-time
 > drops, and a profile badge. Everything else in the app is free. The paywall
@@ -188,7 +207,10 @@ Captured at Apple's required 6.9" size (1320 × 2868) in `screenshots/6.9-inch/`
 ## Pre-submission blockers
 
 - [x] **Privacy Policy page** — built at `/privacy` on the marketing site
+- [x] **Terms of Use page** — built at `/terms`; the app bundles the same text
 - [x] **Support page** — built at `/support` (both linked from the footer)
+- [x] **In-app account deletion** — `deleteAccount` callable + Settings flow
+- [x] **UGC moderation** — report, block, 24h review SLA, published contact
 - [ ] **Deploy the marketing site** so those two URLs actually resolve, then
       paste the live URLs into App Store Connect
 - [ ] Create the two subscriptions in App Store Connect

@@ -17,6 +17,8 @@
 import http from "node:http";
 import { initializeApp as adminInit } from "firebase-admin/app";
 import { getFirestore as adminFirestore } from "firebase-admin/firestore";
+import { getAuth as adminAuth } from "firebase-admin/auth";
+import { getStorage as adminStorage } from "firebase-admin/storage";
 import { initializeApp as clientInit } from "firebase/app";
 import { getAuth, connectAuthEmulator, signInWithEmailAndPassword } from "firebase/auth";
 import {
@@ -34,9 +36,13 @@ const BUCKET = process.env.STORAGE_BUCKET || `${PROJECT}.firebasestorage.app`;
 const STORAGE = `http://127.0.0.1:9199/v0/b/${BUCKET}/o`;
 
 process.env.FIRESTORE_EMULATOR_HOST = "127.0.0.1:8899";
+// Admin Auth + Storage must also point at the emulators (deleteAccount asserts
+// the Auth user and the proof photo are actually gone).
+process.env.FIREBASE_AUTH_EMULATOR_HOST = "127.0.0.1:9099";
+process.env.FIREBASE_STORAGE_EMULATOR_HOST = "127.0.0.1:9199";
 
 // ── admin (gRPC, bypasses rules — for seeding + audit reads) ────────────────
-adminInit({ projectId: PROJECT });
+adminInit({ projectId: PROJECT, storageBucket: BUCKET });
 const db = adminFirestore();
 
 // ── client SDK (gRPC, rules-checked — for lockdown tests) ───────────────────
@@ -691,6 +697,91 @@ async function main() {
   ok("rules: block doc id must match its uid field", bcode === "permission-denied", `got ${bcode}`);
   try { await deleteDoc(doc(cdb, `users/${uid}/blocks/${rep1.uid}`)); bcode = "ok"; } catch (e) { bcode = e.code; }
   ok("rules: a user can unblock", bcode === "ok", `got ${bcode}`);
+
+  // ────────────────────────────────────────────────────────────────────────
+  // ACCOUNT DELETION (App Review 5.1.1(v))
+  //
+  // Seed one account with a footprint in every collection that can name it,
+  // delete it through the callable, and prove the footprint is gone: no
+  // document, no photo, no queued fulfilment, no attendee record, no orphaned
+  // event. Delivered gift cards are the one thing kept — anonymised.
+  // ────────────────────────────────────────────────────────────────────────
+  console.log("\n── Account deletion ──");
+
+  const delEmail = `e2e-del-${Date.now()}@verdure.test`;
+  const del = await signUp(delEmail, password);
+  const delDb = await clientAs(delEmail, password, "del");
+  const bystander2 = await signUp(`e2e-del-bystander-${Date.now()}@verdure.test`, password);
+
+  // Profile doc via the client (rules-checked, like the app does).
+  await setDoc(doc(delDb, `users/${del.uid}`), {
+    displayName: "Delete Me", email: delEmail, interests: ["Parks"],
+    collectedPlaceIDs: [], createdAt: serverTimestamp(), lastUpdated: serverTimestamp(),
+  });
+  await setDoc(doc(delDb, `users/${del.uid}/blocks/${bystander2.uid}`), { uid: bystander2.uid, createdAt: serverTimestamp() });
+  // Content.
+  await setDoc(doc(delDb, `posts/e2e-del-post`), {
+    authorID: del.uid, authorName: "Delete Me", authorInitials: "DM", placeName: "Park",
+    content: "my post", likeCount: 0, hidden: false, createdAt: serverTimestamp(),
+  });
+  const likeBatch = writeBatch(delDb);
+  likeBatch.update(doc(delDb, "posts/e2e-post-1"), { likeCount: increment(1) });
+  likeBatch.set(doc(delDb, `postLikes/e2e-post-1_${del.uid}`), { postId: "e2e-post-1", uid: del.uid, createdAt: serverTimestamp() });
+  await likeBatch.commit();
+  await setDoc(doc(delDb, `events/e2e-del-event`), {
+    title: "Deleter's Event", organizer: "Delete Me", date: new Date("2026-12-01T17:00:00Z"),
+    time: "12:00 PM", locationName: "Venue", attendeeCount: 1, category: "Social",
+    imagePlaceholder: "cup.and.saucer.fill", pointValue: 100, creatorID: del.uid,
+    createdAt: serverTimestamp(), hidden: false,
+  });
+  // Someone RSVP'd to their event; they RSVP'd to someone else's (server-written rows).
+  await db.doc(`events/e2e-del-event/attendees/${bystander2.uid}`).set({ uid: bystander2.uid, createdAt: new Date() });
+  await db.doc(`events/e2e-event-2/attendees/${del.uid}`).set({ uid: del.uid, createdAt: new Date() });
+  await db.doc(`events/e2e-event-2`).set({ attendeeCount: 5 }, { merge: true });
+  // Evidence + money.
+  const delProof = `proofs/${del.uid}/p.jpg`;
+  await uploadProof(delProof, del.idToken);
+  r = await call("checkInToEvent", { eventId: "e2e-event-2", category: "Volunteer", claimedPoints: 200,
+    proofPath: delProof, lat: NEAR.lat, lng: NEAR.lng }, del.idToken);
+  ok("deletion setup: account has a real check-in (attendance row)", r.result?.awarded === 200, JSON.stringify(r));
+  await db.doc(`fulfillments/${del.uid}_starbucks-5`).set({ uid: del.uid, rewardId: "starbucks-5", pointsSpent: 1000,
+    status: "pending", deliverToEmail: delEmail, requestedAt: new Date() });
+  await db.doc(`fulfillments/${del.uid}_dunkin-5`).set({ uid: del.uid, rewardId: "dunkin-5", pointsSpent: 1000,
+    status: "sent", deliverToEmail: delEmail, requestedAt: new Date(), vendorOrderId: "ord_123" });
+  // A report they filed, and their profile picture.
+  await call("reportContent", { targetType: "post", targetId: "e2e-post-1", reason: "spam" }, del.idToken);
+  const beforeAttendance = await db.collection("attendance").where("uid", "==", del.uid).get();
+  ok("deletion setup: attendance + rate-limit rows exist", beforeAttendance.size >= 1);
+
+  // ── Delete ──
+  r = await call("deleteAccount", {}, del.idToken);
+  ok("deleteAccount succeeds", r.result?.deleted === true, JSON.stringify(r));
+
+  const gone = async (path) => !(await db.doc(path).get()).exists;
+  ok("deleted: profile document", await gone(`users/${del.uid}`));
+  ok("deleted: block list", await gone(`users/${del.uid}/blocks/${bystander2.uid}`));
+  ok("deleted: their post", await gone("posts/e2e-del-post"));
+  ok("deleted: their like ledger row", await gone(`postLikes/e2e-post-1_${del.uid}`));
+  ok("deleted: their event (no orphan)", await gone("events/e2e-del-event"));
+  ok("deleted: attendee list under their event", await gone(`events/e2e-del-event/attendees/${bystander2.uid}`));
+  ok("deleted: their RSVP on someone else's event", await gone(`events/e2e-event-2/attendees/${del.uid}`));
+  ok("deleted: attendee count decremented honestly",
+     (await db.doc("events/e2e-event-2").get()).data()?.attendeeCount === 4);
+  ok("deleted: attendance (GPS) rows", (await db.collection("attendance").where("uid", "==", del.uid).get()).empty);
+  ok("deleted: rate-limit counters", (await db.collection("rateLimits").where("uid", "==", del.uid).get()).empty);
+  ok("deleted: queued (pending) fulfilment", await gone(`fulfillments/${del.uid}_starbucks-5`));
+  const sentRow = (await db.doc(`fulfillments/${del.uid}_dunkin-5`).get()).data();
+  ok("kept but anonymised: a DELIVERED gift card (financial record, no PII)",
+     !!sentRow && sentRow.uid === null && sentRow.deliverToEmail === null && sentRow.vendorOrderId === "ord_123",
+     JSON.stringify(sentRow));
+  const theirReport = (await db.doc(`reports/post_e2e-post-1_${del.uid}`).get()).data();
+  ok("anonymised: reports they filed lose the reporter identity", theirReport?.reporterUid === "deleted-account", JSON.stringify(theirReport));
+  const [proofStillThere] = await adminStorage().bucket(BUCKET).file(delProof).exists();
+  ok("deleted: proof photo in Storage", proofStillThere === false);
+  let authGone = false;
+  try { await adminAuth().getUser(del.uid); } catch (e) { authGone = String(e.code ?? e).includes("user-not-found"); }
+  ok("deleted: the Firebase Auth user", authGone);
+  ok("untouched: other people's content survives", !(await gone("posts/e2e-post-1")) && !(await gone("events/e2e-event-2")));
 
   console.log(`\n══ ${passed} passed, ${failed} failed ══`);
   process.exit(failed > 0 ? 1 : 0);

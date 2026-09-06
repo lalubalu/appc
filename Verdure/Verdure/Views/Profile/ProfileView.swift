@@ -12,7 +12,11 @@ struct ProfileView: View {
     @Environment(GameStateManager.self) private var gameState
     @Environment(AuthService.self) private var authService
     @Environment(StoreService.self) private var store
+    @Environment(ModerationService.self) private var moderation
     @State private var showRewardsStore = false
+    @State private var showDeleteConfirm = false
+    @State private var isDeletingAccount = false
+    @State private var deleteAccountError: String?
     @State private var showPaywall = false
     @State private var showSignOutConfirm = false
     @State private var showOrganizerVerify = false
@@ -21,6 +25,7 @@ struct ProfileView: View {
     @State private var showAbout = false
     @State private var showNotifSettings = false
     @State private var showSafety = false
+    @State private var showLegal = false
     @State private var selectedBadge: Badge?
     @State private var selectedChallenge: Challenge?
     @State private var heroAppeared = false
@@ -355,6 +360,12 @@ struct ProfileView: View {
                 .buttonStyle(.plain)
                 .accessibilityHint("Report policy, blocked members, and how to reach us.")
                 rowDivider
+                Button { Haptics.tap(); showLegal = true } label: {
+                    settingsRow(icon: "doc.text.fill", label: "Terms & Privacy", accent: .spruce) { chevron }
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Terms of Use and Privacy Policy.")
+                rowDivider
                 Button { Haptics.tap(); showAbout = true } label: {
                     settingsRow(icon: "info.circle.fill", label: "About Verdure", accent: .terracotta) { chevron }
                 }
@@ -386,9 +397,77 @@ struct ProfileView: View {
             }
             .sheet(isPresented: $showOrganizerVerify) { OrganizerVerificationView() }
             .sheet(isPresented: $showSafety) { SafetyView() }
+            .sheet(isPresented: $showLegal) { LegalView() }
+
+            deleteAccountButton
             .sheet(isPresented: $showPaywall) {
                 PaywallView()
                     .presentationDetents([.large]).presentationDragIndicator(.visible)
+            }
+        }
+    }
+
+    // MARK: - Delete account (App Review 5.1.1(v))
+    //
+    // Deletion is a server callable: it removes the profile, posts, events and
+    // their attendee lists, RSVPs, GPS audit rows, queued gift cards, the proof
+    // photos in Storage, and finally the Firebase Auth user — so nothing the
+    // account owned survives a client that crashes mid-way. Only then does the
+    // app wipe its local state.
+
+    private var deleteAccountButton: some View {
+        VStack(spacing: 8) {
+            Button { Haptics.rigid(); showDeleteConfirm = true } label: {
+                HStack(spacing: 9) {
+                    if isDeletingAccount {
+                        ProgressView().tint(Palette.inkSoft)
+                    } else {
+                        Image(systemName: "trash").font(.system(size: 14, weight: .bold))
+                    }
+                    Text(isDeletingAccount ? "Deleting your account…" : "Delete Account")
+                        .font(VType.body(14, .semibold))
+                }
+                .foregroundStyle(Palette.inkSoft)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 13)
+            }
+            .buttonStyle(.plain)
+            .disabled(isDeletingAccount || !authService.isAuthenticated)
+            .opacity(authService.isAuthenticated ? 1 : 0.5)
+            .accessibilityHint("Permanently deletes your account and all of your data.")
+            .confirmationDialog("Delete your Verdure account?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+                Button("Delete Everything", role: .destructive) { deleteAccount() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This permanently removes your profile, points, collection, posts, events, RSVPs, photos and any gift cards still waiting to be sent. Delivered gift cards are unaffected. This cannot be undone.")
+            }
+            if let deleteAccountError {
+                Text(deleteAccountError)
+                    .font(VType.body(12, .medium)).foregroundStyle(Palette.danger)
+                    .multilineTextAlignment(.center)
+                    .accessibilityLabel("Error: \(deleteAccountError)")
+            }
+        }
+    }
+
+    private func deleteAccount() {
+        guard !isDeletingAccount else { return }
+        isDeletingAccount = true
+        deleteAccountError = nil
+        Task {
+            do {
+                try await FunctionsService().deleteAccount()
+                // The server has already removed the Auth user; clear everything local.
+                gameState.disconnectCloud()
+                gameState.resetAll()
+                moderation.clearLocal()
+                authService.signOut()
+                isDeletingAccount = false
+                AccessibilityNotification.Announcement("Your account has been deleted.").post()
+                withAnimation { hasCompletedOnboarding = false }
+            } catch {
+                isDeletingAccount = false
+                deleteAccountError = error.localizedDescription
             }
         }
     }

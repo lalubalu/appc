@@ -589,3 +589,8 @@ export {
   reportContent, moderateContent, moderationSweep, runModerationSweep,
   listModerationQueue, backfillModerationFlags,
 } from "./moderation.js";
+
+// ── Account deletion (App Review 5.1.1(v)) ──────────────────────────────────
+// One callable removes everything the account owns, Storage included, and the
+// Auth user last. See account.ts for what is deleted vs. anonymised and why.
+export { deleteAccount } from "./account.js";
