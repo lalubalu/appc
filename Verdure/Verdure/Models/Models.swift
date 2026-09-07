@@ -30,7 +30,7 @@ struct Place: Identifiable, Hashable {
     static func == (lhs: Place, rhs: Place) -> Bool { lhs.id == rhs.id }
 }
 
-enum PlaceCategory: String, CaseIterable, Identifiable {
+enum PlaceCategory: String, CaseIterable, Identifiable, Codable {
     case parks = "Parks"
     case trails = "Trails"
     case gardens = "Gardens"

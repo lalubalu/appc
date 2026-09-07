@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct OnboardingView: View {
+    @Environment(DiscoveryFilters.self) private var filters
     @Binding var hasCompletedOnboarding: Bool
     @Environment(AuthService.self) private var authService
     @State private var currentPage = 0
@@ -209,7 +210,34 @@ struct OnboardingView: View {
                 }
             }
             .padding(.horizontal, Spacing.lg)
+
+            radiusPicker
         }
+    }
+
+    /// "How far will you go?" — the same persisted radius every browse surface filters by.
+    private var radiusPicker: some View {
+        VStack(spacing: 10) {
+            Text("How far will you go?")
+                .font(VType.body(14, .semibold)).foregroundStyle(Palette.ink)
+            HStack(spacing: 8) {
+                ForEach(DiscoveryFilterState.radiusChoices, id: \.self) { miles in
+                    Button {
+                        Haptics.soft()
+                        withAnimation(.spring(response: 0.3)) { filters.state.radiusMiles = miles }
+                    } label: {
+                        ClayChip(text: "\(Int(miles)) mi", selected: filters.state.radiusMiles == miles, accent: Palette.spruce)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(Int(miles)) miles")
+                    .accessibilityAddTraits(filters.state.radiusMiles == miles ? [.isSelected] : [])
+                }
+            }
+            Text("You can change this any time from the filter button.")
+                .font(VType.body(11)).foregroundStyle(Palette.inkFaint)
+        }
+        .padding(.horizontal, Spacing.lg)
+        .accessibilityElement(children: .contain)
     }
 
     // MARK: - Auth
@@ -375,4 +403,5 @@ private struct InterestTile: View {
 #Preview {
     OnboardingView(hasCompletedOnboarding: .constant(false))
         .environment(AuthService())
+        .environment(DiscoveryFilters())
 }

@@ -46,7 +46,8 @@ import { onDocumentWritten } from "firebase-functions/v2/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret, defineString } from "firebase-functions/params";
-import { getFirestore, FieldValue } from "firebase-admin/firestore";
+import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
+import { recordDollarsFulfilled, releaseCashCommitment } from "./economy.js";
 
 const db = () => getFirestore();
 
@@ -251,6 +252,7 @@ async function processFulfilment(fulfilmentId: string): Promise<void> {
       email: typeof d.deliverToEmail === "string" ? d.deliverToEmail : "",
       pointsSpent: Number(d.pointsSpent) || 0,
       attempts: (Number(d.attempts) || 0) + 1,
+      requestedAt: d.requestedAt?.toMillis ? (d.requestedAt as Timestamp) : undefined,
     };
   });
 
@@ -308,6 +310,8 @@ async function processFulfilment(fulfilmentId: string): Promise<void> {
       sendingSince: null,
       lastError: null,
     }, { merge: true });
+    // Treasury: dollars actually delivered (committed → fulfilled).
+    await recordDollarsFulfilled(claim.rewardId, claim.requestedAt);
     return;
   }
 
@@ -319,6 +323,9 @@ async function processFulfilment(fulfilmentId: string): Promise<void> {
     // only automatic credit in the system, and it exists so a vendor outage
     // can never quietly pocket someone's balance.
     await refund(claim.uid, claim.rewardId, claim.pointsSpent);
+    // The card never went out: release the committed dollars and the member's
+    // slice of the rolling ceiling along with the points.
+    await releaseCashCommitment(claim.uid, claim.rewardId, claim.requestedAt);
     await ref.set({
       status: "failed",
       sendingSince: null,

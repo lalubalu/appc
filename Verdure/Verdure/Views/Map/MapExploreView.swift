@@ -5,6 +5,8 @@ struct MapExploreView: View {
     @Environment(GameStateManager.self) private var gameState
     @Environment(LocationManager.self) private var locationManager
     @Environment(PlacesAPIService.self) private var placesService
+    @Environment(DiscoveryFilters.self) private var filters
+    @State private var search = SearchDebouncer()
     @State private var position: MapCameraPosition = .automatic
     @State private var selectedPlace: Place? = nil
     @State private var showList = false
@@ -14,7 +16,10 @@ struct MapExploreView: View {
     @State private var celebrationCollectible: CollectiblePlace? = nil
     @State private var celebrationPoints = 0
 
-    private var collectiblePlaces: [CollectiblePlace] { placesService.collectiblePlaces }
+    /// Pins, deck and list honour the same persisted filters + search as every other surface.
+    private var collectiblePlaces: [CollectiblePlace] {
+        filters.apply(to: placesService.collectiblePlaces, query: search.debounced, userLocation: locationManager.userLocation)
+    }
     private var nearbyUncollected: [CollectiblePlace] {
         gameState.uncollected(from: collectiblePlaces, nearbyOnly: true, userLocation: locationManager.userLocation)
     }
@@ -118,6 +123,7 @@ struct MapExploreView: View {
             VStack(spacing: 12) {
                 mapButton(icon: "location.fill") { centerOnUser() }
                 mapButton(icon: "list.bullet") { Haptics.soft(); showList.toggle() }
+                FilterButton(mode: .places)
             }
             .breathing(scale: 1.03, duration: 3.4)
         }
@@ -293,6 +299,14 @@ struct MapExploreView: View {
                     }
                 }
                 .padding(Spacing.md)
+            }
+            // The map hides its navigation bar, so the standard search field lives
+            // here in the list sheet; the map's pins follow the same query.
+            .searchable(text: Bindable(search).text, placement: .navigationBarDrawer(displayMode: .always),
+                        prompt: "Search places on the map")
+            .onSubmit(of: .search) { search.commit(into: filters) }
+            .onChange(of: collectiblePlaces.count) { _, count in
+                AccessibilityNotification.Announcement("\(count) \(count == 1 ? "place" : "places")").post()
             }
             .background(VerdureBackground())
             .navigationTitle("All Places").navigationBarTitleDisplayMode(.inline)
@@ -474,4 +488,5 @@ private struct Triangle: Shape {
         .environment(GameStateManager())
         .environment(LocationManager())
         .environment(PlacesAPIService())
+        .environment(DiscoveryFilters())
 }

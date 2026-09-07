@@ -37,6 +37,7 @@ struct RootView: View {
     @State private var storeService = StoreService()
     @State private var moderationService = ModerationService()
     @State private var socialService = SocialService()
+    @State private var discoveryFilters = DiscoveryFilters()
     @State private var dailyGemFact: GemFact?
 
     var body: some View {
@@ -52,6 +53,7 @@ struct RootView: View {
                     .environment(storeService)
                     .environment(moderationService)
                     .environment(socialService)
+                    .environment(discoveryFilters)
                     .onAppear {
                         locationManager.requestPermission()
                         connectServicesIfNeeded()
@@ -85,6 +87,7 @@ struct RootView: View {
             } else {
                 OnboardingView(hasCompletedOnboarding: $hasCompletedOnboarding)
                     .environment(authService)
+                    .environment(discoveryFilters)
             }
         }
         .preferredColorScheme(prefersDarkMode ? .dark : .light)

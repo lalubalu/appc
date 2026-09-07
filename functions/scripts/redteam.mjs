@@ -236,8 +236,8 @@ async function main() {
     }, capUser.idToken);
     totalAwarded += res.result?.awarded ?? 0;
   }
-  expectBlocked("daily earning ceiling caps total value extracted",
-    totalAwarded <= 2000, `earned ${totalAwarded} in one day`);
+  expectBlocked("daily earning ceiling caps total value extracted (600/day)",
+    totalAwarded <= 600, `earned ${totalAwarded} in one day`);
 
   // ══ 2. ATTENDANCE EVIDENCE ══
   console.log("\n── Attendance evidence ──");

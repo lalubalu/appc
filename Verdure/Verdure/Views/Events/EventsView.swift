@@ -8,14 +8,16 @@ struct EventsView: View {
     @Environment(EventsAPIService.self) private var eventsService
     @Environment(ModerationService.self) private var moderation
     @Environment(SocialService.self) private var social
+    @Environment(DiscoveryFilters.self) private var filters
+    @State private var search = SearchDebouncer()
     @State private var selectedEvent: Event? = nil
     @State private var showCreateEvent = false
     @State private var showSaved = false
     @State private var showCalendar = false
     @State private var showInterestPicker = false
-    @State private var selectedCategory: EventCategory? = nil
-    @State private var searchText = ""
-    @FocusState private var searchFocused: Bool
+    /// Single-select chips write into the shared, persisted filter state.
+    private var selectedCategory: EventCategory? { filters.state.eventCategories.count == 1 ? filters.state.eventCategories.first : nil }
+    private var searchText: String { search.debounced }
     @AppStorage("interestCategories") private var interestCategoriesRaw = ""
 
     private var sourceEvents: [Event] {
@@ -45,19 +47,10 @@ struct EventsView: View {
             .prefix(6)
             .map { $0 }
     }
+    /// Category, date range, free/paid, radius, search and sort — all local, all
+    /// persisted. A cold-cache search never triggers a network call.
     private var filteredEvents: [Event] {
-        var result = sourceEvents
-        if let cat = selectedCategory { result = result.filter { $0.category == cat } }
-        let q = searchText.trimmingCharacters(in: .whitespaces)
-        if !q.isEmpty {
-            result = result.filter {
-                $0.title.localizedCaseInsensitiveContains(q) ||
-                $0.organizer.localizedCaseInsensitiveContains(q) ||
-                $0.locationName.localizedCaseInsensitiveContains(q) ||
-                $0.category.rawValue.localizedCaseInsensitiveContains(q)
-            }
-        }
-        return result
+        filters.apply(to: sourceEvents, query: searchText, userLocation: locationManager.userLocation)
     }
     private var hasActiveSearch: Bool { !searchText.trimmingCharacters(in: .whitespaces).isEmpty }
     /// Events shown in the deck/timeline. A category filter never blanks the screen —
@@ -87,6 +80,13 @@ struct EventsView: View {
                 .padding(.bottom, 110)
             }
             .background(VerdureBackground())
+            .searchable(text: Bindable(search).text, placement: .navigationBarDrawer(displayMode: .always),
+                        prompt: "Search events, hosts, places")
+            .onSubmit(of: .search) { search.commit(into: filters) }
+            .onChange(of: displayEvents.count) { _, count in
+                // VoiceOver hears the result count whenever a filter or search changes it.
+                AccessibilityNotification.Announcement("\(count) \(count == 1 ? "event" : "events")").post()
+            }
             .refreshable {
                 await eventsService.refresh(around: locationManager.userCoordinate)
                 await social.loadFriendsGoing(for: displayEvents.prefix(50).map(\.id), force: true)
@@ -308,39 +308,28 @@ struct EventsView: View {
             .background(ClayBackground(style: .accent(.evergreen), radius: Radius.lg, elevation: 1.1))
             .accessibilityElement(children: .combine)
 
-            // Search
+            // Recent searches (local only) + filter/sort entry + live result count.
+            RecentSearchesRow { q in search.text = q; search.commit(into: filters) }
+                .padding(.horizontal, -Spacing.md)
             HStack(spacing: 10) {
-                Image(systemName: "magnifyingglass").font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Palette.inkSoft)
-                TextField("Search events, hosts, places…", text: $searchText)
-                    .font(VType.body(15)).foregroundStyle(Palette.ink)
-                    .autocorrectionDisabled()
-                    .focused($searchFocused)
-                    .frame(minHeight: 44)
-                if !searchText.isEmpty {
-                    Button { searchText = "" } label: {
-                        Image(systemName: "xmark.circle.fill").foregroundStyle(Palette.inkFaint)
-                    }
-                }
+                Text("\(displayEvents.count) \(displayEvents.count == 1 ? "event" : "events")\(filters.state.eventSort == .soonest ? "" : " · \(filters.state.eventSort.label.lowercased())")")
+                    .font(VType.body(12, .semibold)).foregroundStyle(Palette.inkSoft)
+                    .accessibilityHidden(true)   // announced on change instead
+                Spacer()
+                FilterButton(mode: .events)
             }
-            .padding(.horizontal, 16)
-            .background(ClayBackground(style: .inset, radius: Radius.sm))
-            // The entire clay well focuses the field — a ≥44pt real-world target.
-            // (SwiftUI reports only the text rect to the a11y audit; see QAHelpers.)
-            .contentShape(Rectangle())
-            .onTapGesture { searchFocused = true }
 
-            // Tappable category filter row
+            // Tappable category filter row (single-select shortcut into the same filter state)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 10) {
                     CategoryPill(label: "All", icon: "square.grid.2x2.fill",
-                                 tint: Palette.spruce.base, isSelected: selectedCategory == nil) {
-                        withAnimation(.spring(response: 0.35)) { selectedCategory = nil }
+                                 tint: Palette.spruce.base, isSelected: filters.state.eventCategories.isEmpty) {
+                        withAnimation(.spring(response: 0.35)) { filters.state.eventCategories = [] }
                     }
                     ForEach(EventCategory.allCases) { cat in
                         CategoryPill(label: cat.rawValue, icon: cat.icon, tint: cat.accent.base,
                                      isSelected: selectedCategory == cat) {
-                            withAnimation(.spring(response: 0.35)) { selectedCategory = cat }
+                            withAnimation(.spring(response: 0.35)) { filters.state.eventCategories = [cat] }
                         }
                     }
                 }
@@ -1246,6 +1235,7 @@ private struct InterestPickerSheet: View {
         .environment(ModerationService())
         .environment(AuthService())
         .environment(SocialService())
+        .environment(DiscoveryFilters())
 }
 
 // MARK: - Saved / bookmarked events

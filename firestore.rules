@@ -75,6 +75,15 @@ service cloud.firestore {
     match /treasury/{docId} {
       allow read, write: if false;
     }
+    // Partner perks + their code pools are served through listRewardsCatalog /
+    // redeemReward so Verdure+ early-access visibility is decided server-side.
+    // The code pool must never be readable: it IS the reward.
+    match /partnerPerks/{perkId} {
+      allow read, write: if false;
+      match /codes/{codeId} {
+        allow read, write: if false;
+      }
+    }
 
     // ──────────────────────────────────────────────
     // LIKE LEDGER: /postLikes/{postId}_{uid}
@@ -158,6 +167,13 @@ service cloud.firestore {
       // Created by inviteToEvent; status changes go through rsvpToEvent /
       // respondToInvite so the sender is told the outcome. Owner-readable.
       match /invites/{inviteId} {
+        allow read: if isOwner(userId);
+        allow write: if false;
+      }
+
+      // ── Perk codes: /users/{userId}/perkCodes/{perkId} ──
+      // The member's copy of a redeemed partner code. Written by redeemReward.
+      match /perkCodes/{perkId} {
         allow read: if isOwner(userId);
         allow write: if false;
       }
@@ -448,7 +464,9 @@ service cloud.firestore {
         // follow counts are written by the callables only.
         'savedEventIDs', 'activityPrivacy', 'rsvpEventIDs', 'followerCount', 'followingCount',
         // Set by createOrganizer; points at the profile this account owns.
-        'organizerId'
+        'organizerId',
+        // Economy ledgers written only by redeemReward / the earn callables.
+        'redemptionBudget', 'lastEarnMonth'
       ];
       let noExtraFields = data.keys().hasOnly(allowedFields);
 
@@ -569,7 +587,10 @@ service cloud.firestore {
                    'suspended', 'suspendedAt',
                    // Social state owned by the callables: a client that could
                    // write rsvpEventIDs could fake attendance; counts must add up.
-                   'rsvpEventIDs', 'followerCount', 'followingCount', 'organizerId']);
+                   'rsvpEventIDs', 'followerCount', 'followingCount', 'organizerId',
+                   // The rolling 12-month cash ledger — a client that could edit
+                   // it could reset its own ceiling.
+                   'redemptionBudget', 'lastEarnMonth']);
     }
 
     // On create, server-owned fields must be absent or zero/empty — a fresh client
@@ -588,7 +609,8 @@ service cloud.firestore {
           && !('suspended' in data)
           && (!('rsvpEventIDs' in data) || (data.rsvpEventIDs is list && data.rsvpEventIDs.size() == 0))
           && (!('followerCount' in data) || data.followerCount == 0)
-          && (!('followingCount' in data) || data.followingCount == 0);
+          && (!('followingCount' in data) || data.followingCount == 0)
+          && !('redemptionBudget' in data);
     }
 
     // Prevent changing fields that should be immutable after creation

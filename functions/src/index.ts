@@ -24,6 +24,7 @@ import {
   enforceRateLimit, hasActivePlus, assertNotSuspended,
 } from "./common.js";
 import { RECREATION_GOV_KEY, NPS_API_KEY } from "./secrets.js";
+import { DAILY_POINT_CAP, PLUS_POINT_MULTIPLIER, recordPointsIssued } from "./economy.js";
 
 setGlobalOptions({ region: "us-central1", maxInstances: 10 });
 
@@ -57,15 +58,14 @@ const CATEGORY_MAX_POINTS: Record<string, number> = {
 // control that still holds if a future change reopens a farming path nobody
 // spotted — worst case becomes "a slow leak" instead of "unlimited gift cards".
 //
-// Sized from real behaviour, not from the limit: the most active plausible day
-// is a couple of events (~500) plus a walk collecting places (~300), so ~800.
-// 2000 is ~2.5x that, which no genuine user reaches and which caps a determined
-// abuser at roughly a $50 card every ten days instead of every hour.
+// DAILY_POINT_CAP = 600 (economy.ts). At 7,000 points per dollar a member
+// farming the cap earns 750/day × 30.5 ≈ 22,900 points ≈ $3.27/month against
+// $4.24 of net revenue — the cap only became a real abuse ceiling once the
+// earn rate was fixed (at the old 1,200:1 rate the same behaviour cost $19).
 //
 // Deliberately a CLAMP, not a rejection: the check-in still succeeds and still
 // counts toward streaks, challenges and badges — only the points stop. A real
 // user who somehow hit the ceiling keeps their attendance record.
-const DAILY_POINT_CAP = 2000;
 
 function utcDayKey(now = new Date()): string {
   return now.toISOString().slice(0, 10);   // yyyy-mm-dd
@@ -89,66 +89,10 @@ function dailyEarnUpdate(data: FirebaseFirestore.DocumentData | undefined, award
   return { dailyEarnDay: today, dailyEarnPoints: earned + awarded };
 }
 
-/** Verdure+ earn multiplier. 1.0 for everyone until entitlements are verified. */
-const PLUS_POINT_MULTIPLIER = 1.25;
 
 async function earnMultiplier(uid: string): Promise<number> {
   return (await hasActivePlus(uid)) ? PLUS_POINT_MULTIPLIER : 1.0;
 }
-
-// ── Reward catalog ──────────────────────────────────────────────────────────
-//
-// Costs plus optional limited-time windows. `plusEarlyAccessDays` lets verified
-// Verdure+ members redeem before the public opening; the window itself is
-// enforced here so a patched client cannot redeem a closed drop.
-
-interface RewardRule {
-  cost: number;
-  /** ISO date the drop opens to everyone. */
-  availableFrom?: string;
-  /** ISO date the drop closes for everyone. */
-  availableUntil?: string;
-  /** Days of Verdure+ head start before `availableFrom`. */
-  plusEarlyAccessDays?: number;
-}
-
-/** Start of the current month, matching the client's SampleData anchor. */
-function monthAnchor(days: number): string {
-  const now = new Date();
-  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString();
-}
-
-const LIMITED_TIME_REWARDS: Record<string, RewardRule> = {
-  "rei-15-trail-season": {
-    cost: 4000,
-    availableFrom: monthAnchor(0),
-    availableUntil: monthAnchor(28),
-  },
-  "patagonia-30-earth": {
-    cost: 9000,
-    availableFrom: monthAnchor(18),
-    availableUntil: monthAnchor(40),
-    plusEarlyAccessDays: 7,
-  },
-};
-
-const REWARD_COSTS: Record<string, number> = {
-  // Bronze (1000 pts)
-  "starbucks-5": 1000,
-  "dunkin-5": 1000,
-  // Silver (2500 pts)
-  "amazon-10": 2500,
-  "target-10": 2500,
-  "chipotle-10": 2500,
-  // Gold (7500 pts)
-  "amazon-25": 7500,
-  "nike-25": 7500,
-  // Platinum (20000 pts)
-  "apple-50": 20000,
-  "rei-50": 20000,
-};
 
 /**
  * checkInToEvent — record an attendance and award points, server-side & idempotent.
@@ -278,6 +222,7 @@ export const checkInToEvent = onCall(async (req) => {
       pointsBalance: balance + granted,
       lifetimePoints: lifetime + granted,
       ...dailyEarnUpdate(data, granted),
+      ...recordPointsIssued(tx, data, granted),   // /treasury pointsIssued + distinct earners
       lastUpdated: FieldValue.serverTimestamp(),
     }, { merge: true });
     return {
@@ -339,6 +284,7 @@ export const collectPlace = onCall(async (req) => {
       pointsBalance: balance + granted,
       lifetimePoints: lifetime + granted,
       ...dailyEarnUpdate(data, granted),
+      ...recordPointsIssued(tx, data, granted),
       lastUpdated: FieldValue.serverTimestamp(),
     }, { merge: true });
     return {
@@ -346,85 +292,6 @@ export const collectPlace = onCall(async (req) => {
       newBalance: balance + granted, newLifetime: lifetime + granted,
       dailyCapReached: granted < award,
     };
-  });
-});
-
-/**
- * redeemReward — deduct points and mark a reward redeemed, server-side & idempotent.
- */
-export const redeemReward = onCall(async (req) => {
-  const uid = req.auth?.uid;
-  if (!uid) throw new HttpsError("unauthenticated", "Sign in to redeem.");
-  await enforceRateLimit(uid, "redeemReward");
-  await assertNotSuspended(uid);
-
-  const rewardId = safeString(req.data?.rewardId).slice(0, 100);
-  const limited = LIMITED_TIME_REWARDS[rewardId];
-  const cost = limited?.cost ?? REWARD_COSTS[rewardId];
-  if (!rewardId || cost === undefined) {
-    throw new HttpsError("invalid-argument", "Unknown reward.");
-  }
-
-  // Limited-time drops: enforce the window server-side so a patched client
-  // can't redeem before it opens or after it closes.
-  if (limited) {
-    const now = Date.now();
-    if (limited.availableUntil && now >= Date.parse(limited.availableUntil)) {
-      throw new HttpsError("failed-precondition", "This reward is no longer available.");
-    }
-    if (limited.availableFrom) {
-      const publicFrom = Date.parse(limited.availableFrom);
-      const earlyMs = (limited.plusEarlyAccessDays ?? 0) * 86_400_000;
-      const plusFrom = publicFrom - earlyMs;
-      if (now < plusFrom) {
-        throw new HttpsError("failed-precondition", "This reward isn't available yet.");
-      }
-      // Inside the early window → Verdure+ members only (server-verified).
-      if (now < publicFrom && !(await hasActivePlus(uid))) {
-        throw new HttpsError("permission-denied", "Verdure+ early access — opens to everyone soon.");
-      }
-    }
-  }
-
-  const userRef = db.collection("users").doc(uid);
-  return db.runTransaction(async (tx) => {
-    const snap = await tx.get(userRef);
-    const data = snap.data() ?? {};
-    const redeemed: string[] = data.redeemedRewardIDs ?? [];
-    const balance = Number(data.pointsBalance) || 0;
-
-    if (redeemed.includes(rewardId)) throw new HttpsError("already-exists", "Already redeemed.");
-    if (balance < cost) throw new HttpsError("failed-precondition", "Not enough points.");
-
-    tx.set(userRef, {
-      redeemedRewardIDs: FieldValue.arrayUnion(rewardId),
-      pointsBalance: balance - cost,
-      lastUpdated: FieldValue.serverTimestamp(),
-    }, { merge: true });
-
-    // FULFILMENT QUEUE.
-    //
-    // The gift-card vendor (Tango/Tremendous) isn't wired up yet, and a
-    // redemption that only debits points would take value and give nothing
-    // back. So the debit and a durable fulfilment request are written in the
-    // SAME transaction: every redemption is recoverable and nothing can be
-    // silently lost, whether it's fulfilled by an API call later or by hand.
-    //
-    // Deterministic id => the queue is idempotent even if this ever re-runs.
-    const fulfilmentRef = db.collection("fulfillments")
-      .doc(`${uid}_${rewardId}`.replace(/[\/#?%]/g, "-").slice(0, 900));
-    tx.set(fulfilmentRef, {
-      uid,
-      rewardId,
-      pointsSpent: cost,
-      status: "pending",          // pending → sent | failed (set by the fulfiller)
-      requestedAt: FieldValue.serverTimestamp(),
-      deliverToEmail: req.auth?.token?.email ?? null,
-      vendor: null,               // filled in when a provider is integrated
-      vendorOrderId: null,
-    }, { merge: true });
-
-    return { redeemed: true, remaining: balance - cost };
   });
 });
 
@@ -611,3 +478,12 @@ export { followUser, rsvpToEvent, inviteToEvent, respondToInvite, friendsGoing }
 // Unverified organizers may create, not broadcast; approval is a staff action
 // enforced server-side and mirrored onto every event they own. See organizers.ts.
 export { createOrganizer, approveOrganizer, listOrganizerApplications, createEvent, myOrganizer } from "./organizers.js";
+
+// ── Reward economy (Part 3) ─────────────────────────────────────────────────
+// 7,000 pts ≈ $1; cash cards are Verdure+ only with a $25 rolling-12-month
+// ceiling and a $200/month global cap + kill switch; partner perks are the
+// primary redemption surface. See economy.ts for the derivation of every number.
+export {
+  redeemReward, listRewardsCatalog, upsertPartnerPerk, seedPartnerPerks,
+  reconcileTreasury, resetTreasuryKillSwitch,
+} from "./economy.js";

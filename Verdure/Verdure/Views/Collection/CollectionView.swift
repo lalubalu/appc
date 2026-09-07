@@ -5,12 +5,15 @@ struct CollectionView: View {
     @Environment(PlacesAPIService.self) private var placesService
     @State private var showRewardsStore = false
     @State private var selectedCollectible: CollectiblePlace? = nil
-    @State private var filterRarity: PlaceRarity? = nil
+    @Environment(DiscoveryFilters.self) private var filters
+    @Environment(LocationManager.self) private var locationManager
+    @State private var search = SearchDebouncer()
+    /// Single-select rarity chips write into the shared, persisted filter state.
+    private var filterRarity: PlaceRarity? { filters.state.rarities.count == 1 ? filters.state.rarities.first : nil }
 
     private var allCollectibles: [CollectiblePlace] { placesService.collectiblePlaces }
     private var displayedPlaces: [CollectiblePlace] {
-        guard let rarity = filterRarity else { return allCollectibles }
-        return allCollectibles.filter { $0.rarity == rarity }
+        filters.apply(to: allCollectibles, query: search.debounced, userLocation: locationManager.userLocation)
     }
     private var progress: Double { gameState.collectionProgress(total: allCollectibles.count) }
 
@@ -25,6 +28,12 @@ struct CollectionView: View {
                 }
                 .padding(.top, Spacing.lg)
                 .padding(.bottom, 110)
+            }
+            .searchable(text: Bindable(search).text, placement: .navigationBarDrawer(displayMode: .automatic),
+                        prompt: "Search your collectidex")
+            .onSubmit(of: .search) { search.commit(into: filters) }
+            .onChange(of: displayedPlaces.count) { _, count in
+                AccessibilityNotification.Announcement("\(count) \(count == 1 ? "place" : "places")").post()
             }
             .background(VerdureBackground())
             .sheet(isPresented: $showRewardsStore) { RewardsStoreView().environment(gameState) }
@@ -93,15 +102,16 @@ struct CollectionView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 10) {
                 CategoryPill(label: "All", icon: "square.grid.2x2.fill",
-                             tint: Palette.spruce.base, isSelected: filterRarity == nil) {
-                    withAnimation(.spring(response: 0.35)) { filterRarity = nil }
+                             tint: Palette.spruce.base, isSelected: filters.state.rarities.isEmpty) {
+                    withAnimation(.spring(response: 0.35)) { filters.state.rarities = [] }
                 }
                 ForEach(PlaceRarity.allCases) { rarity in
                     CategoryPill(label: rarity.rawValue, icon: rarity.icon, tint: rarity.accent.base,
                                  isSelected: filterRarity == rarity) {
-                        withAnimation(.spring(response: 0.35)) { filterRarity = rarity }
+                        withAnimation(.spring(response: 0.35)) { filters.state.rarities = [rarity] }
                     }
                 }
+                FilterButton(mode: .places)
             }
             .padding(.horizontal, Spacing.md).padding(.vertical, 2)
         }
@@ -359,4 +369,6 @@ private struct CollectibleDetailSheet: View {
     CollectionView()
         .environment(GameStateManager())
         .environment(PlacesAPIService())
+        .environment(LocationManager())
+        .environment(DiscoveryFilters())
 }

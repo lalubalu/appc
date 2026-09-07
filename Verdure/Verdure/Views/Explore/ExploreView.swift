@@ -6,11 +6,12 @@ struct ExploreView: View {
     @Environment(AuthService.self) private var authService
     @Environment(LocationManager.self) private var locationManager
     @Environment(SocialService.self) private var social
+    @Environment(DiscoveryFilters.self) private var filters
+    @State private var search = SearchDebouncer()
     @State private var showGem = false
     @State private var showPlanner = false
     @State private var showNotifications = false
-    @State private var placeSearch = ""
-    @FocusState private var searchFocused: Bool
+    private var placeSearch: String { search.debounced }
     @State private var placeFilter: PlaceCategory? = nil
     @State private var forYou = true
     @AppStorage("interestCategories") private var interestCategoriesRaw = ""
@@ -27,13 +28,12 @@ struct ExploreView: View {
     /// "For You" recommends only the user's chosen interest categories; "All" / a category
     /// chip shows everything. (Per feedback: don't recommend unchosen groups, but still list them.)
     private var filteredPlaces: [Place] {
-        sourcePlaces.filter { p in
-            let matchesFilter: Bool
-            if let cat = placeFilter { matchesFilter = p.category == cat }
-            else if forYou && showForYou { matchesFilter = interests.contains(p.category) }
-            else { matchesFilter = true }
-            let matchesSearch = placeSearch.isEmpty || p.name.localizedCaseInsensitiveContains(placeSearch)
-            return matchesFilter && matchesSearch
+        // Persisted filters (radius, category) + search, all local; then the
+        // screen's own For You / chip narrowing on top.
+        filters.apply(to: sourcePlaces, query: placeSearch, userLocation: locationManager.userLocation).filter { p in
+            if let cat = placeFilter { return p.category == cat }
+            if forYou && showForYou { return interests.contains(p.category) }
+            return true
         }
     }
     private var level: Int { gameState.level }
@@ -57,6 +57,12 @@ struct ExploreView: View {
                 .padding(.bottom, 110)
             }
             .background(VerdureBackground())
+            .searchable(text: Bindable(search).text, placement: .navigationBarDrawer(displayMode: .automatic),
+                        prompt: "Search nearby places")
+            .onSubmit(of: .search) { search.commit(into: filters) }
+            .onChange(of: filteredPlaces.count) { _, count in
+                AccessibilityNotification.Announcement("\(count) \(count == 1 ? "place" : "places")").post()
+            }
             .navigationDestination(for: Place.self) { PlaceDetailView(place: $0) }
             .sheet(isPresented: $showPlanner) {
                 // Cupertino is the app's documented default when there's no fix
@@ -333,24 +339,16 @@ struct ExploreView: View {
             ClaySectionHeader(index: "02", kicker: "Around you", title: "Nearby Places",
                               accent: Palette.teal.base)
 
-            // Search
+            // Search lives in the navigation bar (.searchable); recents + filters here.
             HStack(spacing: 10) {
-                Image(systemName: "magnifyingglass").font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Palette.inkSoft)
-                TextField("Search nearby places…", text: $placeSearch)
-                    .font(VType.body(14)).foregroundStyle(Palette.ink).autocorrectionDisabled()
-                    .focused($searchFocused)
-                    .frame(minHeight: 44)
-                if !placeSearch.isEmpty {
-                    Button { placeSearch = "" } label: {
-                        Image(systemName: "xmark.circle.fill").foregroundStyle(Palette.inkFaint)
-                    }
-                }
+                Text("\(filteredPlaces.count) \(filteredPlaces.count == 1 ? "place" : "places") within \(Int(filters.state.radiusMiles)) mi")
+                    .font(VType.body(12, .semibold)).foregroundStyle(Palette.inkSoft)
+                    .accessibilityHidden(true)   // announced on change instead
+                Spacer()
+                FilterButton(mode: .places)
             }
-            .padding(.horizontal, Spacing.md)
-            .background(ClayBackground(style: .inset, radius: Radius.md))
-            .contentShape(Rectangle())
-            .onTapGesture { searchFocused = true }
+            RecentSearchesRow { q in search.text = q; search.commit(into: filters) }
+                .padding(.horizontal, -Spacing.md)
 
             // Filter chips — "For You" (interests) is the default recommendation set.
             ScrollView(.horizontal, showsIndicators: false) {
@@ -535,4 +533,5 @@ private struct NearbyCard: View {
         .environment(AuthService())
         .environment(LocationManager())
         .environment(SocialService())
+        .environment(DiscoveryFilters())
 }

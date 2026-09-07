@@ -241,17 +241,23 @@ async function main() {
   r = await call("collectPlace", { placeId: "osm-999", claimedPoints: 50 }, idToken);
   ok("duplicate collect is a no-op", r.result?.alreadyCollected === true, JSON.stringify(r));
 
-  // T11 — redeem with insufficient points → rejected (balance 500 < 1000)
+  // T11 — cash gift cards are a Verdure+ benefit: a free member is refused BEFORE
+  // any points check (free members earn partner perks instead).
   r = await call("redeemReward", { rewardId: "starbucks-5" }, idToken);
-  ok("redeem with insufficient points rejected", r.error?.status === "FAILED_PRECONDITION", JSON.stringify(r));
+  ok("redeem: a FREE member cannot redeem a cash card", r.error?.status === "PERMISSION_DENIED", JSON.stringify(r));
 
-  // Earn to 1000 via two more external check-ins (Festival ceiling 250 × 2).
-  await call("checkInToEvent", { eventId: "serp-e2e-external-2", category: "Festival", claimedPoints: 250, proofPath, lat: NEAR.lat, lng: NEAR.lng }, idToken);
-  await call("checkInToEvent", { eventId: "serp-e2e-external-3", category: "Festival", claimedPoints: 250, proofPath, lat: NEAR.lat, lng: NEAR.lng }, idToken);
+  // Grant a verified entitlement the only legitimate way (Admin SDK = what the
+  // App Store notification handler does). Balance is 500 < 35,000.
+  await db.doc(`users/${uid}`).set({ plusExpiresAt: new Date(Date.now() + 86_400_000) }, { merge: true });
+  r = await call("redeemReward", { rewardId: "starbucks-5" }, idToken);
+  ok("redeem with insufficient points rejected (35,000 needed at 7,000 pts/$)", r.error?.status === "FAILED_PRECONDITION", JSON.stringify(r));
+
+  // Fund the balance (server-side) to exactly one $5 card.
+  await db.doc(`users/${uid}`).set({ pointsBalance: 35000 }, { merge: true });
 
   // T12 — redeem success
   r = await call("redeemReward", { rewardId: "starbucks-5" }, idToken);
-  ok("redeem succeeds and returns remaining", r.result?.redeemed === true && r.result?.remaining === 0, JSON.stringify(r));
+  ok("redeem succeeds and returns remaining", r.result?.redeemed === true && r.result?.remaining === 0 && r.result?.kind === "cash", JSON.stringify(r));
 
   // T13 — double redeem → rejected
   r = await call("redeemReward", { rewardId: "starbucks-5" }, idToken);
@@ -307,44 +313,42 @@ async function main() {
   ok("rules: client CANNOT grant itself Verdure+ (plusExpiresAt denied)",
      code2 === "permission-denied", `got ${code2}`);
 
-  // "patagonia-30-earth" opens publicly on day 18 of the month with 7 days of
-  // Plus early access (day 11). Behaviour depends on today's date, so assert the
-  // branch that actually applies rather than pretending the clock is fixed.
-  const dayOfMonth = new Date().getUTCDate();
+  // Retired rewards (amazon-25, nike-25, apple-50, rei-50, the seasonal drops)
+  // stay in the catalog as INACTIVE records — visible to code, never redeemable.
+  // At the sustainable earn rate they are 2–4-year goals: honest-copy policy.
+  await db.doc(`users/${uid}`).set({ pointsBalance: 400000 }, { merge: true });
   r = await call("redeemReward", { rewardId: "patagonia-30-earth" }, idToken);
-  const err = r.error?.status;
-  if (dayOfMonth < 11) {
-    ok("limited drop before early window rejected", err === "FAILED_PRECONDITION", JSON.stringify(r));
-  } else if (dayOfMonth < 18) {
-    // Inside the Plus-only window and this user has no verified entitlement.
-    ok("limited drop in early window denied to non-Plus", err === "PERMISSION_DENIED", JSON.stringify(r));
-  } else {
-    // Publicly open — so it should fail on points, not availability.
-    ok("limited drop publicly open (fails on points, not window)",
-       err === "FAILED_PRECONDITION" && /enough points/i.test(r.error?.message ?? ""), JSON.stringify(r));
-  }
+  ok("retired seasonal drop is not redeemable even by a funded Plus member",
+     r.error?.status === "FAILED_PRECONDITION" && /catalog/i.test(r.error?.message ?? ""), JSON.stringify(r));
+  r = await call("redeemReward", { rewardId: "apple-50" }, idToken);
+  ok("retired $50 card is not redeemable", r.error?.status === "FAILED_PRECONDITION", JSON.stringify(r));
+  await db.doc(`users/${uid}`).set({ pointsBalance: 0 }, { merge: true });
 
-  // Grant a verified entitlement the only legitimate way (Admin SDK = what the
-  // App Store notification handler will do) and confirm early access opens up.
-  await db.doc(`users/${uid}`).set(
-    { plusExpiresAt: new Date(Date.now() + 86_400_000) }, { merge: true });
-  await db.doc(`users/${uid}`).set({ pointsBalance: 12000 }, { merge: true });
-  r = await call("redeemReward", { rewardId: "patagonia-30-earth" }, idToken);
-  if (dayOfMonth < 11) {
-    ok("verified Plus still cannot redeem before the early window",
-       r.error?.status === "FAILED_PRECONDITION", JSON.stringify(r));
-  } else {
-    ok("verified Plus redeems limited drop (early access honoured)",
-       r.result?.redeemed === true, JSON.stringify(r));
-  }
-
-  // The Verdure+ earn multiplier: base award is clamped to the category ceiling
-  // FIRST (Festival = 250), then multiplied — so 250 → floor(250 × 1.25) = 312.
-  // This user now has a verified entitlement from the step above.
+  // DAILY_POINT_CAP = 600: this user already earned 500 today, so a 312-point
+  // award is clamped to the 100 that remain — the cap is a CLAMP, the check-in
+  // still counts. (At the old 2,000 cap this same call paid out in full.)
   r = await call("checkInToEvent", {
     eventId: "serp-e2e-plus-multiplier", category: "Festival",
     claimedPoints: 99999, proofPath, lat: NEAR.lat, lng: NEAR.lng,
   }, idToken);
+  ok("daily cap (600): a member at 500 today receives only the remaining 100, check-in still counts",
+     r.result?.awarded === 100 && r.result?.dailyCapReached === true && r.result?.alreadyCheckedIn === false, JSON.stringify(r));
+  r = await call("checkInToEvent", {
+    eventId: "serp-e2e-plus-capped", category: "Festival",
+    claimedPoints: 250, proofPath, lat: NEAR.lat, lng: NEAR.lng,
+  }, idToken);
+  ok("daily cap (600): at the cap, further check-ins award 0 but are still recorded",
+     r.result?.awarded === 0 && r.result?.dailyCapReached === true && r.result?.alreadyCheckedIn === false, JSON.stringify(r));
+
+  // The Verdure+ earn multiplier on a FRESH member: base award clamped to the
+  // category ceiling FIRST (Festival = 250), then multiplied → floor(312.5) = 312.
+  const freshPlus = await signUp(`e2e-freshplus-${Date.now()}@verdure.test`, password);
+  await uploadProof(`proofs/${freshPlus.uid}/p.jpg`, freshPlus.idToken);
+  await db.doc(`users/${freshPlus.uid}`).set({ plusExpiresAt: new Date(Date.now() + 86_400_000) }, { merge: true });
+  r = await call("checkInToEvent", {
+    eventId: "serp-e2e-plus-multiplier", category: "Festival",
+    claimedPoints: 99999, proofPath: `proofs/${freshPlus.uid}/p.jpg`, lat: NEAR.lat, lng: NEAR.lng,
+  }, freshPlus.idToken);
   ok("verified Plus earns the 1.25× multiplier (ceiling clamped first)",
      r.result?.awarded === 312, JSON.stringify(r));
 
@@ -365,7 +369,7 @@ async function main() {
   // recoverable order behind (the vendor integration isn't live yet).
   const ff = (await db.doc(`fulfillments/${uid}_starbucks-5`).get()).data();
   ok("redemption writes a durable fulfilment record",
-     ff?.status === "pending" && ff?.rewardId === "starbucks-5" && ff?.pointsSpent === 1000,
+     ff?.status === "pending" && ff?.rewardId === "starbucks-5" && ff?.pointsSpent === 35000 && ff?.usd === 5,
      JSON.stringify(ff ?? {}));
 
   // Those records hold a delivery email + spend, and /attendance holds GPS —
@@ -467,31 +471,9 @@ async function main() {
   ok("multiplier applies after the category ceiling, not before",
      r.result?.awarded === Math.floor(75 * 1.25), `got ${r.result?.awarded}`);
 
-  // Early access: patagonia-30-earth opens 18 days into the month with a 7-day
-  // Plus head start, so there is a window where only members may redeem.
-  const now = new Date();
-  const monthStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
-  const publicFrom = monthStart + 18 * 86400_000;
-  const plusFrom = publicFrom - 7 * 86400_000;
-  const inEarlyWindow = Date.now() >= plusFrom && Date.now() < publicFrom;
-
-  if (inEarlyWindow) {
-    await db.doc(`users/${plusUser.uid}`).set({ pointsBalance: 12000 }, { merge: true });
-    await db.doc(`users/${freeUser.uid}`).set({ pointsBalance: 12000 }, { merge: true });
-
-    r = await call("redeemReward", { rewardId: "patagonia-30-earth" }, freeUser.idToken);
-    ok("early-access drop is DENIED to a non-member",
-       r.error?.status === "PERMISSION_DENIED", JSON.stringify(r.error ?? r.result));
-
-    r = await call("redeemReward", { rewardId: "patagonia-30-earth" }, plusUser.idToken);
-    ok("early-access drop is ALLOWED for a Verdure+ member",
-       r.result?.redeemed === true, JSON.stringify(r.error ?? r.result));
-  } else {
-    // Skipped rather than silently passing — a green tick for a test that never
-    // ran is exactly the vacuous pass this suite exists to avoid.
-    console.log("  ⏭  early-access window not open today — window test skipped " +
-                `(opens ${new Date(plusFrom).toISOString().slice(0, 10)})`);
-  }
+  // Early access is now a property of PARTNER PERKS (earlyAccessUntil) and is
+  // covered in the economy section below with a controllable timestamp — no
+  // more date-of-month-dependent tests.
 
   // An EXPIRED entitlement must read as no entitlement.
   const expiredUser = await signUp(`e2e-expired-${Date.now()}@verdure.test`, password);
@@ -525,7 +507,7 @@ async function main() {
   console.log("\n── Gift-card fulfilment queue ──");
 
   const buyer = await signUp(`e2e-buyer-${Date.now()}@verdure.test`, password);
-  await db.doc(`users/${buyer.uid}`).set({ pointsBalance: 30000 }, { merge: true });
+  await db.doc(`users/${buyer.uid}`).set({ pointsBalance: 40000, plusExpiresAt: new Date(Date.now() + 30 * 86400_000) }, { merge: true });
 
   r = await call("redeemReward", { rewardId: "starbucks-5" }, buyer.idToken);
   ok("redeem succeeds and debits", r.result?.redeemed === true, JSON.stringify(r));
@@ -534,7 +516,7 @@ async function main() {
   const f = fdoc.data();
   ok("a durable fulfilment row is written in the same transaction", fdoc.exists);
   ok("fulfilment row starts pending with the points recorded",
-     f?.status === "pending" && f?.pointsSpent === 1000, JSON.stringify(f));
+     f?.status === "pending" && f?.pointsSpent === 35000 && f?.usd === 5, JSON.stringify(f));
   ok("fulfilment row carries a delivery address",
      typeof f?.deliverToEmail === "string" && f.deliverToEmail.includes("@"),
      String(f?.deliverToEmail));
@@ -1259,6 +1241,156 @@ async function main() {
   ok("organizer: deleting the owner removes the profile and every event they published",
      r.result?.deleted === true && !(await db.doc(`organizers/${organizerId}`).get()).exists
      && !(await db.doc(`events/${orgEventId}`).get()).exists && !(await db.doc(`events/${approvedEventId}`).get()).exists, JSON.stringify(r));
+
+  // ────────────────────────────────────────────────────────────────────────
+  // REWARD ECONOMY (Part 3 §1)
+  //
+  // 7,000 pts ≈ $1. Cash cards are Verdure+ only, capped at $25 per rolling 12
+  // months per member (enforced in the SAME transaction as the debit) and
+  // $200/month programme-wide with a kill switch. Partner perks are the primary
+  // redemption surface: a code from a pre-loaded pool, no vendor call.
+  // ────────────────────────────────────────────────────────────────────────
+  console.log("\n── Reward economy ──");
+
+  const thisMonth = new Date().toISOString().slice(0, 7);
+  const grantPlus = (u) => db.doc(`users/${u.uid}`).set({ plusExpiresAt: new Date(Date.now() + 30 * 86400_000) }, { merge: true });
+  const fund = (u, pts) => db.doc(`users/${u.uid}`).set({ pointsBalance: pts }, { merge: true });
+
+  // Catalog as the app sees it — eligibility decided server-side.
+  const freeMember = await mk("freemember");
+  await fund(freeMember, 2000);
+  r = await call("listRewardsCatalog", {}, freeMember.idToken);
+  ok("catalog: free member sees cash as NOT eligible, 7,000 pts per $, $25 ceiling",
+     r.result?.cashEligible === false && r.result?.pointsPerDollar === 7000 && r.result?.rollingCeilingUsd === 25
+     && r.result?.cash?.find((c) => c.id === "starbucks-5")?.cost === 35000
+     && r.result?.cash?.find((c) => c.id === "amazon-25")?.active === false, JSON.stringify(r.result).slice(0, 300));
+
+  // ── Rolling 12-month ceiling ──
+  const spender = await mk("spender");
+  await grantPlus(spender); await fund(spender, 500000);
+  for (const id of ["starbucks-5", "dunkin-5", "amazon-10"]) {          // $5 + $5 + $10 = $20
+    r = await call("redeemReward", { rewardId: id }, spender.idToken);
+    ok(`ceiling: ${id} redeems ($${r.result?.rollingSpentUsd ?? "?"} of $25 used)`, r.result?.redeemed === true, JSON.stringify(r));
+  }
+  r = await call("redeemReward", { rewardId: "target-10" }, spender.idToken);
+  ok("ceiling: the redemption that would cross $25 is refused with the release date",
+     r.error?.status === "FAILED_PRECONDITION" && /\$25/.test(r.error?.message ?? "") && /frees up on \d{4}-\d{2}-\d{2}/.test(r.error?.message ?? ""),
+     JSON.stringify(r.error));
+  const spenderDoc = (await db.doc(`users/${spender.uid}`).get()).data();
+  ok("ceiling: the ledger on the user doc holds exactly the live entries",
+     spenderDoc?.redemptionBudget?.entries?.length === 3 && spenderDoc?.pointsBalance === 500000 - 140000, JSON.stringify(spenderDoc?.redemptionBudget));
+  code2 = await userWrite(`users/${spender.uid}`, { redemptionBudget: { entries: [] } });
+  ok("rules: a client cannot reset its own rolling ledger", code2 === "permission-denied", `got ${code2}`);
+
+  // Concurrency: three $10 cards fired at once against a fresh $25 ceiling — exactly two may land.
+  const racer = await mk("racer");
+  await grantPlus(racer); await fund(racer, 500000);
+  const results = await Promise.all(["amazon-10", "target-10", "chipotle-10"].map((id) => call("redeemReward", { rewardId: id }, racer.idToken)));
+  const landed = results.filter((x) => x.result?.redeemed === true).length;
+  const refused = results.filter((x) => x.error?.status === "FAILED_PRECONDITION").length;
+  ok("ceiling: concurrent redemptions cannot both slip under the ceiling (2 of 3 land, 1 refused)",
+     landed === 2 && refused === 1, JSON.stringify(results.map((x) => x.result?.redeemed ?? x.error?.status)));
+  const racerDoc = (await db.doc(`users/${racer.uid}`).get()).data();
+  ok("ceiling: after the race the ledger shows $20, never $30", racerDoc?.redemptionBudget?.entries?.reduce((a, e) => a + e.usd, 0) === 20);
+
+  // ── Global monthly treasury cap + kill switch ──
+  const tBefore = (await db.doc(`treasury/${thisMonth}`).get()).data() ?? {};
+  await db.doc(`treasury/${thisMonth}`).set({ dollarsCommitted: 195, killSwitch: false }, { merge: true });
+  const capUser = await mk("capuser");
+  await grantPlus(capUser); await fund(capUser, 500000);
+  r = await call("redeemReward", { rewardId: "starbucks-5" }, capUser.idToken);
+  ok("treasury: a $5 card that lands exactly on $200 is allowed", r.result?.redeemed === true, JSON.stringify(r));
+  r = await call("redeemReward", { rewardId: "dunkin-5" }, capUser.idToken);
+  ok("treasury: the card that would exceed $200/month is refused with an honest message",
+     r.error?.status === "UNAVAILABLE" && /paused/i.test(r.error?.message ?? "") && /points are safe/i.test(r.error?.message ?? ""), JSON.stringify(r.error));
+  ok("treasury: the kill switch is now ON", (await db.doc(`treasury/${thisMonth}`).get()).data()?.killSwitch === true);
+  r = await call("redeemReward", { rewardId: "starbucks-5" }, racer.idToken);
+  ok("treasury: with the kill switch on, every member's cash redemption halts cleanly", r.error?.status === "UNAVAILABLE");
+  r = await call("listRewardsCatalog", {}, racer.idToken);
+  ok("catalog: reports treasuryPaused so the app can say so", r.result?.treasuryPaused === true);
+  r = await call("resetTreasuryKillSwitch", { month: thisMonth }, racer.idToken);
+  ok("treasury: only staff can lift the kill switch", r.error?.status === "PERMISSION_DENIED");
+  r = await call("resetTreasuryKillSwitch", { month: thisMonth }, staff.idToken);
+  ok("treasury: staff can lift it after review", r.result?.killSwitch === false);
+  // Restore the month's committed total so later runs aren't capped by this test.
+  await db.doc(`treasury/${thisMonth}`).set({ dollarsCommitted: (Number(tBefore.dollarsCommitted) || 0) + 45, killSwitch: false }, { merge: true });
+
+  // ── Telemetry + reconciliation against /fulfillments for a simulated month ──
+  const simMonth = "2026-01";
+  const seedF = (id, status, usd, extra = {}) => db.doc(`fulfillments/${id}`).set({
+    uid: "sim", rewardId: usd === 5 ? "starbucks-5" : "amazon-10", pointsSpent: usd * 7000, usd, status, month: simMonth,
+    requestedAt: new Date("2026-01-10T12:00:00Z"), deliverToEmail: "sim@verdure.test", ...extra });
+  await seedF("sim-1", "sent", 5); await seedF("sim-2", "sent", 10); await seedF("sim-3", "pending", 5); await seedF("sim-4", "failed", 10);
+  await db.doc(`treasury/${simMonth}`).set({ dollarsFulfilled: 15, dollarsCommitted: 20, pointsIssued: 90000, pointsBurned: 140000, earnersCount: 12, plannerCostUsd: 0.6 });
+  r = await call("reconcileTreasury", { month: simMonth }, staff.idToken);
+  ok("treasury: reconciles fulfilled ($15) and committed ($20) against /fulfillments",
+     r.result?.reconciled === true && r.result?.fulfillments?.sentUsd === 15 && r.result?.fulfillments?.committedUsd === 20, JSON.stringify(r.result?.fulfillments));
+  ok("treasury: cost per active user is derived ((15 + 0.6) / 12)", r.result?.costPerActiveUser === 1.3);
+  await db.doc(`treasury/${simMonth}`).set({ dollarsFulfilled: 99 }, { merge: true });
+  r = await call("reconcileTreasury", { month: simMonth }, staff.idToken);
+  ok("treasury: drift is reported, never silent", r.result?.reconciled === false);
+  const live = (await db.doc(`treasury/${thisMonth}`).get()).data();
+  ok("treasury: this month's counters carry points issued / burned / cash redemptions / earners",
+     (live?.pointsIssued ?? 0) > 0 && (live?.pointsBurned ?? 0) >= 140000 && (live?.cashRedemptions ?? 0) >= 6 && (live?.earnersCount ?? 0) >= 1,
+     JSON.stringify({ issued: live?.pointsIssued, burned: live?.pointsBurned, cash: live?.cashRedemptions, earners: live?.earnersCount }));
+
+  // ── Partner perks (primary redemption surface) ──
+  let pcode;
+  r = await call("seedPartnerPerks", {}, freeMember.idToken);
+  ok("perks: seeding is staff-only", r.error?.status === "PERMISSION_DENIED");
+  r = await call("seedPartnerPerks", {}, staff.idToken);
+  ok("perks: placeholder perks seeded with code pools", r.result?.added === 3, JSON.stringify(r));
+  r = await call("listRewardsCatalog", {}, freeMember.idToken);
+  const coffee = r.result?.perks?.find((p) => p.id === "placeholder-coffee-20");
+  ok("catalog: a free member sees perks first-class with cost, codes left and redeemable", coffee?.pointCost === 500 && coffee?.redeemable === true && coffee?.codesLeft === 5, JSON.stringify(coffee));
+  r = await call("redeemReward", { rewardId: "placeholder-coffee-20" }, freeMember.idToken);
+  ok("perks: a FREE member redeems a perk and receives a code — no Tremendous, no dollars",
+     r.result?.redeemed === true && r.result?.kind === "perk" && /^PLACEHOL-\d{3}$/.test(r.result?.code ?? "") && r.result?.remaining === 1500, JSON.stringify(r.result));
+  ok("perks: no fulfilment row is created for a perk", !(await db.doc(`fulfillments/${freeMember.uid}_placeholder-coffee-20`).get()).exists);
+  const myCode = (await db.doc(`users/${freeMember.uid}/perkCodes/placeholder-coffee-20`).get()).data();
+  ok("perks: the member's copy of the code is stored under their profile", myCode?.code === r.result?.code && myCode?.partner === "Placeholder Coffee Co.");
+  const perkDoc = (await db.doc("partnerPerks/placeholder-coffee-20").get()).data();
+  ok("perks: pool decremented and redemption counted", perkDoc?.codePoolCount === 4 && perkDoc?.redeemedCount === 1);
+  r = await call("redeemReward", { rewardId: "placeholder-coffee-20" }, freeMember.idToken);
+  ok("perks: one redemption per member per perk", r.error?.status === "ALREADY_EXISTS");
+  try { pcode = (await getDoc(doc(freeMember.fdb, `users/${freeMember.uid}/perkCodes/placeholder-coffee-20`))).exists() ? "ok" : "missing"; } catch (e) { pcode = e.code; }
+  ok("rules: the member can read their own perk code", pcode === "ok", `got ${pcode}`);
+  try { await getDoc(doc(spender.fdb, `users/${freeMember.uid}/perkCodes/placeholder-coffee-20`)); pcode = "ok"; } catch (e) { pcode = e.code; }
+  ok("rules: nobody else can read it", pcode === "permission-denied", `got ${pcode}`);
+  try { await getDocs(collection(freeMember.fdb, "partnerPerks")); pcode = "ok"; } catch (e) { pcode = e.code; }
+  ok("rules: the perk catalog is not directly readable (served by listRewardsCatalog)", pcode === "permission-denied", `got ${pcode}`);
+  try { await getDocs(collection(freeMember.fdb, "partnerPerks/placeholder-coffee-20/codes")); pcode = "ok"; } catch (e) { pcode = e.code; }
+  ok("rules: the code pool is never readable", pcode === "permission-denied", `got ${pcode}`);
+  ok("treasury: perksRedeemed counted", ((await db.doc(`treasury/${thisMonth}`).get()).data()?.perksRedeemed ?? 0) >= 1);
+
+  // earlyAccessUntil: Verdure+ only until the timestamp, everyone after.
+  r = await call("upsertPartnerPerk", { perkId: "early-bird-brunch", title: "Free brunch side", partner: "Placeholder Diner", kind: "free-item",
+    pointCost: 600, codes: ["EB-001", "EB-002", "EB-003"], earlyAccessUntilMs: Date.now() + 86_400_000 }, staff.idToken);
+  ok("perks: staff can load a perk with a code pool and an early-access window", r.result?.codesAdded === 3, JSON.stringify(r));
+  r = await call("listRewardsCatalog", {}, freeMember.idToken);
+  const early = r.result?.perks?.find((p) => p.id === "early-bird-brunch");
+  ok("early access: a free member sees the perk as Plus-only-until-opens and not redeemable", early?.plusOnlyUntilOpens === true && early?.redeemable === false, JSON.stringify(early));
+  r = await call("redeemReward", { rewardId: "early-bird-brunch" }, freeMember.idToken);
+  ok("early access: a free member is refused before the timestamp", r.error?.status === "PERMISSION_DENIED", JSON.stringify(r.error));
+  await fund(spender, 5000);
+  r = await call("redeemReward", { rewardId: "early-bird-brunch" }, spender.idToken);
+  ok("early access: a Verdure+ member redeems it during the window", r.result?.redeemed === true && r.result?.code === "EB-001", JSON.stringify(r.result));
+  await db.doc("partnerPerks/early-bird-brunch").set({ earlyAccessUntil: new Date(Date.now() - 1000) }, { merge: true });
+  r = await call("listRewardsCatalog", {}, freeMember.idToken);
+  ok("early access: after the timestamp the same perk is visible and redeemable to a free member",
+     r.result?.perks?.find((p) => p.id === "early-bird-brunch")?.redeemable === true);
+  r = await call("redeemReward", { rewardId: "early-bird-brunch" }, freeMember.idToken);
+  ok("early access: and the free member can redeem it", r.result?.redeemed === true && r.result?.code === "EB-002", JSON.stringify(r.result));
+  // Pool exhaustion is an honest error, not a silent debit.
+  const last = await mk("lastcode");
+  await fund(last, 5000);
+  r = await call("redeemReward", { rewardId: "early-bird-brunch" }, last.idToken);
+  ok("perks: the last code goes out", r.result?.code === "EB-003");
+  const nobody = await mk("nocode");
+  await fund(nobody, 5000);
+  r = await call("redeemReward", { rewardId: "early-bird-brunch" }, nobody.idToken);
+  ok("perks: an empty pool refuses without debiting points",
+     r.error?.status === "RESOURCE_EXHAUSTED" && (await db.doc(`users/${nobody.uid}`).get()).data()?.pointsBalance === 5000, JSON.stringify(r.error));
 
   console.log(`\n══ ${passed} passed, ${failed} failed ══`);
   process.exit(failed > 0 ? 1 : 0);
