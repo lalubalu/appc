@@ -36,6 +36,7 @@ struct RootView: View {
     @State private var eventsService = EventsAPIService()
     @State private var storeService = StoreService()
     @State private var moderationService = ModerationService()
+    @State private var socialService = SocialService()
     @State private var dailyGemFact: GemFact?
 
     var body: some View {
@@ -50,6 +51,7 @@ struct RootView: View {
                     .environment(eventsService)
                     .environment(storeService)
                     .environment(moderationService)
+                    .environment(socialService)
                     .onAppear {
                         locationManager.requestPermission()
                         connectServicesIfNeeded()
@@ -66,6 +68,7 @@ struct RootView: View {
                         } else {
                             gameState.disconnectCloud()
                             moderationService.clearLocal()
+                            socialService.clearLocal()
                         }
                     }
                     .onChange(of: scenePhase) { _, phase in
@@ -92,6 +95,7 @@ struct RootView: View {
         if let user = authService.currentUser {
             gameState.connectCloud(firestore: firestoreService, functions: functionsService, userID: user.uid)
             Task { await moderationService.refreshBlocks() }
+            Task { await socialService.refreshAll() }
             Task {
                 let center = locationManager.userCoordinate
                 await placesService.fetchNearbyPlaces(around: center)

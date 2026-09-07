@@ -45,7 +45,7 @@ final class GameStateManager {
 
     /// Bookmarked events (local only — not cloud-synced).
     var savedEventIDs: Set<String> {
-        didSet { save(savedEventIDs, forKey: "savedEventIDs") }
+        didSet { save(savedEventIDs, forKey: "savedEventIDs"); scheduleSync() }
     }
 
     /// Bookmarked places (local only).
@@ -614,7 +614,8 @@ final class GameStateManager {
         Task {
             await firestore.syncGameState(
                 userID: userID,
-                collectedPlaceIDs: collectedPlaceIDs
+                collectedPlaceIDs: collectedPlaceIDs,
+                savedEventIDs: savedEventIDs
             )
         }
     }

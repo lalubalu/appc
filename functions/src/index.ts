@@ -606,3 +606,8 @@ export {
 // Every write is a callable so blocks are enforced server-side and counts stay
 // honest; rules deny clients all writes to these subcollections. See social.ts.
 export { followUser, rsvpToEvent, inviteToEvent, respondToInvite, friendsGoing } from "./social.js";
+
+// ── Organizer accounts (Part 2 §5) ──────────────────────────────────────────
+// Unverified organizers may create, not broadcast; approval is a staff action
+// enforced server-side and mirrored onto every event they own. See organizers.ts.
+export { createOrganizer, approveOrganizer, listOrganizerApplications, createEvent, myOrganizer } from "./organizers.js";

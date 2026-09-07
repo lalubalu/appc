@@ -1140,6 +1140,126 @@ async function main() {
   r = await call("rsvpToEvent", { eventId: { toString: "x" } }, stranger.idToken);
   ok("rsvp: hostile input is rejected, not crashed", r.error?.status === "INVALID_ARGUMENT", JSON.stringify(r));
 
+  // ────────────────────────────────────────────────────────────────────────
+  // ORGANIZER ACCOUNTS (Part 2 §5)
+  //
+  // Unverified organizers may create, not broadcast. Approval is a staff action
+  // enforced server-side; the rules make an unverified organizer's events
+  // invisible to anyone who doesn't follow them; organizer content is
+  // reportable and moderatable like anything else.
+  // ────────────────────────────────────────────────────────────────────────
+  console.log("\n── Organizer accounts ──");
+
+  const orgOwner = await mk("orgowner");
+  const fan = await mk("fan");
+  const nonfan = await mk("nonfan");
+
+  r = await call("createEvent", { title: "Pickup Soccer", locationName: "Edgewater Park", startMs: Date.now() + 3 * 86_400_000, category: "Sports" }, orgOwner.idToken);
+  ok("organizer: publishing without a profile is refused", r.error?.status === "FAILED_PRECONDITION", JSON.stringify(r));
+
+  r = await call("createOrganizer", { displayName: "Lakefront Rec League", category: "rec-league", description: "Weekly pickup sports on the lakefront.", website: "https://example.org" }, orgOwner.idToken);
+  const organizerId = r.result?.organizerId;
+  ok("organizer: profile created as PENDING", !!organizerId && r.result?.status === "pending" && r.result?.alreadyExists === false, JSON.stringify(r));
+  r = await call("createOrganizer", { displayName: "Dup", category: "other" }, orgOwner.idToken);
+  ok("organizer: one profile per account (second call returns the existing one)", r.result?.organizerId === organizerId && r.result?.alreadyExists === true);
+  const orgDoc = (await db.doc(`organizers/${organizerId}`).get()).data();
+  ok("organizer: record shaped for a future merchant (kind + billing null), owned by the applicant",
+     orgDoc?.ownerUid === orgOwner.uid && orgDoc?.kind === "organizer" && orgDoc?.billing === null && orgDoc?.status === "pending");
+  ok("organizer: owner's user doc points at the profile", (await db.doc(`users/${orgOwner.uid}`).get()).data()?.organizerId === organizerId);
+
+  // Rules on the organizer record.
+  let ocode = await (async () => { try { await updateDoc(doc(orgOwner.fdb, `organizers/${organizerId}`), { status: "approved" }); return "ok"; } catch (e) { return e.code; } })();
+  ok("rules: owner cannot approve themselves", ocode === "permission-denied", `got ${ocode}`);
+  ocode = await (async () => { try { await updateDoc(doc(orgOwner.fdb, `organizers/${organizerId}`), { description: "Updated blurb", updatedAt: serverTimestamp() }); return "ok"; } catch (e) { return e.code; } })();
+  ok("rules: owner CAN edit their description", ocode === "ok", `got ${ocode}`);
+  try { await getDoc(doc(nonfan.fdb, `organizers/${organizerId}`)); ocode = "ok"; } catch (e) { ocode = e.code; }
+  ok("rules: a pending organizer is not readable by the public", ocode === "permission-denied", `got ${ocode}`);
+  try { await setDoc(doc(nonfan.fdb, `organizers/forged`), { ownerUid: nonfan.uid, displayName: "Forged", status: "approved" }); ocode = "ok"; } catch (e) { ocode = e.code; }
+  ok("rules: a client cannot create an organizer record directly", ocode === "permission-denied", `got ${ocode}`);
+
+  // Unverified organizer publishes: visible to followers only.
+  r = await call("createEvent", { title: "Pickup Soccer", description: "All levels.", locationName: "Edgewater Park", time: "6:00 PM",
+    startMs: Date.now() + 3 * 86_400_000, category: "Sports", latitude: 41.4903, longitude: -81.7381 }, orgOwner.idToken);
+  const orgEventId = r.result?.eventId;
+  ok("organizer: pending organizer CAN create — but not broadcast", !!orgEventId && r.result?.broadcast === false && r.result?.organizerStatus === "pending", JSON.stringify(r));
+  const orgEv = (await db.doc(`events/${orgEventId}`).get()).data();
+  ok("organizer: event carries organizer provenance, area, honest flags",
+     orgEv?.source === "organizer" && orgEv?.organizerId === organizerId && orgEv?.organizerOwnerUid === orgOwner.uid
+     && orgEv?.areaId === "cleveland-oh" && orgEv?.active === true && orgEv?.hidden === false && orgEv?.broadcast === false && orgEv?.pointValue === 150,
+     JSON.stringify(orgEv && { s: orgEv.source, o: orgEv.organizerId, a: orgEv.areaId, b: orgEv.broadcast, p: orgEv.pointValue }));
+
+  const publicIds = (await getDocs(query(collection(nonfan.fdb, "events"),
+    where("hidden", "==", false), where("active", "==", true), where("broadcast", "==", true), where("date", ">=", new Date())))).docs.map((d) => d.id);
+  ok("visibility: an unverified organizer's event is NOT in the public feed", !publicIds.includes(orgEventId));
+  const orgQuery = (fdb) => query(collection(fdb, "events"), where("hidden", "==", false), where("active", "==", true), where("organizerId", "==", organizerId));
+  try { await getDocs(orgQuery(nonfan.fdb)); ocode = "ok"; } catch (e) { ocode = e.code; }
+  ok("visibility: a non-follower cannot read the organizer's calendar", ocode === "permission-denied", `got ${ocode}`);
+
+  r = await call("followUser", { targetId: organizerId, kind: "organizer" }, fan.idToken);
+  ok("organizer: a member can follow an organizer", r.result?.following === true, JSON.stringify(r));
+  ok("organizer: organizer followerCount maintained", (await db.doc(`organizers/${organizerId}`).get()).data()?.followerCount === 1);
+  let fanIds = [];
+  try { fanIds = (await getDocs(orgQuery(fan.fdb))).docs.map((d) => d.id); } catch (e) { fanIds = [`ERR:${e.code}`]; }
+  ok("visibility: a FOLLOWER can read the unverified organizer's events", fanIds.includes(orgEventId), JSON.stringify(fanIds));
+  try { ocode = (await getDoc(doc(fan.fdb, `organizers/${organizerId}`))).exists() ? "ok" : "missing"; } catch (e) { ocode = e.code; }
+  ok("rules: a follower can read the pending organizer's profile", ocode === "ok", `got ${ocode}`);
+  let ownIds = [];
+  try { ownIds = (await getDocs(query(collection(orgOwner.fdb, "events"), where("hidden", "==", false), where("creatorID", "==", orgOwner.uid)))).docs.map((d) => d.id); } catch (e) { ownIds = [`ERR:${e.code}`]; }
+  ok("visibility: the organizer sees their own unbroadcast events", ownIds.includes(orgEventId), JSON.stringify(ownIds));
+  const orgAct = await db.collection("activity").where("organizerId", "==", organizerId).get();
+  ok("organizer: publishing writes an activity row for followers' feeds", orgAct.size === 1 && orgAct.docs[0].data().kind === "organizer-event");
+
+  // Approval is staff-only and mirrors onto the events.
+  r = await call("approveOrganizer", { organizerId, action: "approve" }, orgOwner.idToken);
+  ok("organizer: a non-staff user cannot approve", r.error?.status === "PERMISSION_DENIED");
+  r = await call("approveOrganizer", { organizerId, action: "approve" }, staff.idToken);
+  ok("organizer: staff approval flips status and every owned event to broadcast",
+     r.result?.status === "approved" && r.result?.eventsUpdated === 1
+     && (await db.doc(`events/${orgEventId}`).get()).data()?.broadcast === true
+     && (await db.doc(`organizers/${organizerId}`).get()).data()?.status === "approved", JSON.stringify(r));
+  const publicAfter = (await getDocs(query(collection(nonfan.fdb, "events"),
+    where("hidden", "==", false), where("active", "==", true), where("broadcast", "==", true), where("date", ">=", new Date())))).docs.map((d) => d.id);
+  ok("visibility: after approval the event is in the public feed", publicAfter.includes(orgEventId));
+  try { ocode = (await getDoc(doc(nonfan.fdb, `organizers/${organizerId}`))).exists() ? "ok" : "missing"; } catch (e) { ocode = e.code; }
+  ok("rules: an approved organizer's profile is publicly readable", ocode === "ok", `got ${ocode}`);
+  r = await call("createEvent", { title: "Sunset Volleyball", locationName: "Edgewater Beach", startMs: Date.now() + 4 * 86_400_000, category: "Sports" }, orgOwner.idToken);
+  ok("organizer: an approved organizer's new events broadcast immediately", r.result?.broadcast === true);
+  const approvedEventId = r.result?.eventId;
+
+  // Suspension pulls everything back.
+  r = await call("approveOrganizer", { organizerId, action: "suspend" }, staff.idToken);
+  ok("organizer: suspension flips every event back to follower-only",
+     r.result?.eventsUpdated === 2 && (await db.doc(`events/${approvedEventId}`).get()).data()?.broadcast === false);
+  r = await call("createEvent", { title: "Nope", locationName: "X", startMs: Date.now() + 86_400_000 }, orgOwner.idToken);
+  ok("organizer: a suspended organizer cannot publish", r.error?.status === "PERMISSION_DENIED");
+  await call("approveOrganizer", { organizerId, action: "reinstate" }, staff.idToken);
+
+  // The manual window is capped at 50.
+  for (let i = 0; i < 50; i++) await db.doc(`organizers/e2e-approved-${i}`).set({ ownerUid: `seed-${i}`, displayName: `Org ${i}`, category: "other", status: "approved", hidden: false, createdAt: new Date() });
+  await db.doc("organizers/e2e-pending-51").set({ ownerUid: "seed-51", displayName: "Fifty-first", category: "other", status: "pending", hidden: false, createdAt: new Date() });
+  r = await call("approveOrganizer", { organizerId: "e2e-pending-51", action: "approve" }, staff.idToken);
+  ok("organizer: the 51st approval is refused (manual window is 50)", r.error?.status === "RESOURCE_EXHAUSTED", JSON.stringify(r.error));
+  for (let i = 0; i < 50; i++) await db.doc(`organizers/e2e-approved-${i}`).delete();
+
+  // Verification exempts nothing: organizer events + profiles are moderatable.
+  r = await call("reportContent", { targetType: "event", targetId: orgEventId, reason: "spam" }, nonfan.idToken);
+  ok("moderation: an organizer's event can be reported", r.result?.reported === true);
+  r = await call("reportContent", { targetType: "organizer", targetId: organizerId, reason: "impersonation" }, nonfan.idToken);
+  ok("moderation: an organizer profile can be reported", r.result?.reported === true);
+  r = await call("moderateContent", { queueId: `organizer_${organizerId}`, action: "remove" }, staff.idToken);
+  ok("moderation: staff can remove (hide) an organizer profile", (await db.doc(`organizers/${organizerId}`).get()).data()?.hidden === true);
+  r = await call("followUser", { targetId: organizerId, kind: "organizer" }, nonfan.idToken);
+  ok("moderation: a hidden organizer cannot gain followers", r.error?.status === "NOT_FOUND");
+  r = await call("createEvent", { title: "Nope", locationName: "X", startMs: Date.now() + 86_400_000 }, orgOwner.idToken);
+  ok("moderation: a hidden organizer cannot publish", r.error?.status === "PERMISSION_DENIED");
+  await call("moderateContent", { queueId: `organizer_${organizerId}`, action: "restore" }, staff.idToken);
+
+  // Deleting the owner leaves no orphaned organizer events.
+  r = await call("deleteAccount", {}, orgOwner.idToken);
+  ok("organizer: deleting the owner removes the profile and every event they published",
+     r.result?.deleted === true && !(await db.doc(`organizers/${organizerId}`).get()).exists
+     && !(await db.doc(`events/${orgEventId}`).get()).exists && !(await db.doc(`events/${approvedEventId}`).get()).exists, JSON.stringify(r));
+
   console.log(`\n══ ${passed} passed, ${failed} failed ══`);
   process.exit(failed > 0 ? 1 : 0);
 }

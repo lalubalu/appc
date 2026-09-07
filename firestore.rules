@@ -241,6 +241,36 @@ service cloud.firestore {
     }
 
     // ──────────────────────────────────────────────
+    // ORGANIZERS: /organizers/{organizerId}
+    // ──────────────────────────────────────────────
+    // Created by the createOrganizer callable (status starts `pending`);
+    // `status` and the counts are staff/server-owned. An approved organizer is
+    // publicly readable (signed in); a pending one is readable by its owner and
+    // by people who chose to follow it. Moderation flags apply like any UGC.
+    match /organizers/{organizerId} {
+      allow get: if request.auth != null
+                 && resource.data.get('hidden', false) == false
+                 && (resource.data.status == 'approved'
+                     || resource.data.ownerUid == request.auth.uid
+                     || exists(/databases/$(database)/documents/users/$(request.auth.uid)/following/$(organizerId)));
+      allow list: if request.auth != null
+                  && resource.data.get('hidden', false) == false
+                  && (resource.data.status == 'approved' || resource.data.ownerUid == request.auth.uid);
+      allow create: if false;
+      // The owner edits their own copy; never status, counts, billing or moderation state.
+      allow update: if request.auth != null
+                    && resource.data.ownerUid == request.auth.uid
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                        .hasOnly(['displayName', 'category', 'description', 'website', 'updatedAt'])
+                    && request.resource.data.displayName is string
+                    && request.resource.data.displayName.size() >= 2
+                    && request.resource.data.displayName.size() <= 80
+                    && request.resource.data.description is string
+                    && request.resource.data.description.size() <= 600;
+      allow delete: if false;
+    }
+
+    // ──────────────────────────────────────────────
     // COMMUNITY POSTS: /posts/{postId}
     // ──────────────────────────────────────────────
     match /posts/{postId} {
@@ -416,7 +446,9 @@ service cloud.firestore {
         // Social. savedEventIDs + activityPrivacy are the user's own choices
         // (client-writable, validated in validSocialFields); rsvpEventIDs and the
         // follow counts are written by the callables only.
-        'savedEventIDs', 'activityPrivacy', 'rsvpEventIDs', 'followerCount', 'followingCount'
+        'savedEventIDs', 'activityPrivacy', 'rsvpEventIDs', 'followerCount', 'followingCount',
+        // Set by createOrganizer; points at the profile this account owns.
+        'organizerId'
       ];
       let noExtraFields = data.keys().hasOnly(allowedFields);
 
@@ -537,7 +569,7 @@ service cloud.firestore {
                    'suspended', 'suspendedAt',
                    // Social state owned by the callables: a client that could
                    // write rsvpEventIDs could fake attendance; counts must add up.
-                   'rsvpEventIDs', 'followerCount', 'followingCount']);
+                   'rsvpEventIDs', 'followerCount', 'followingCount', 'organizerId']);
     }
 
     // On create, server-owned fields must be absent or zero/empty — a fresh client

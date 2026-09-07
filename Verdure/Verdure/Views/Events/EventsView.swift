@@ -7,6 +7,7 @@ struct EventsView: View {
     @Environment(LocationManager.self) private var locationManager
     @Environment(EventsAPIService.self) private var eventsService
     @Environment(ModerationService.self) private var moderation
+    @Environment(SocialService.self) private var social
     @State private var selectedEvent: Event? = nil
     @State private var showCreateEvent = false
     @State private var showSaved = false
@@ -15,9 +16,7 @@ struct EventsView: View {
     @State private var selectedCategory: EventCategory? = nil
     @State private var searchText = ""
     @FocusState private var searchFocused: Bool
-    @AppStorage("accountType") private var accountTypeRaw = AccountType.visitor.rawValue
     @AppStorage("interestCategories") private var interestCategoriesRaw = ""
-    private var accountType: AccountType { AccountType(rawValue: accountTypeRaw) ?? .visitor }
 
     private var sourceEvents: [Event] {
         // The service already holds QA fixtures under the DEBUG harness; a live
@@ -88,8 +87,15 @@ struct EventsView: View {
                 .padding(.bottom, 110)
             }
             .background(VerdureBackground())
-            .refreshable { await eventsService.refresh(around: locationManager.userCoordinate) }
-            .task { await eventsService.fetchNearbyEvents(around: locationManager.userCoordinate) }
+            .refreshable {
+                await eventsService.refresh(around: locationManager.userCoordinate)
+                await social.loadFriendsGoing(for: displayEvents.prefix(50).map(\.id), force: true)
+            }
+            .task {
+                await eventsService.fetchNearbyEvents(around: locationManager.userCoordinate,
+                                                      followedOrganizerIDs: social.followedOrganizerIDs)
+                await social.loadFriendsGoing(for: displayEvents.prefix(50).map(\.id))
+            }
             .sheet(item: $selectedEvent) { event in
                 EventDetailSheet(event: event, dateFormatter: dateFormatter)
                     .environment(gameState).environment(locationManager)
@@ -261,8 +267,9 @@ struct EventsView: View {
                     }
                     .buttonStyle(.plain)
 
-                    // Only organizers can create events.
-                    if accountType.canCreateEvents {
+                    // Only organizers can publish events — status comes from the
+                    // server (pending organizers publish to their followers only).
+                    if social.organizer?.canPublish == true {
                         Button { Haptics.tap(); showCreateEvent = true } label: {
                             Image(systemName: "plus").font(.system(size: 19, weight: .bold))
                                 .foregroundStyle(Palette.spruce.onColor)
@@ -522,8 +529,11 @@ private struct EventPoster: View {
                             .overlay(Circle().strokeBorder(on.opacity(0.4), lineWidth: 1.5))
                     }
                 }
-                Text(event.maxAttendees.map { "\(event.attendeeCount)/\($0)" } ?? "\(event.attendeeCount) going")
-                    .font(VType.body(12, .semibold)).foregroundStyle(on.opacity(0.85))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(event.maxAttendees.map { "\(event.attendeeCount)/\($0)" } ?? "\(event.attendeeCount) going")
+                        .font(VType.body(12, .semibold)).foregroundStyle(on.opacity(0.85))
+                    FriendsGoingStack(eventId: event.id, compact: true)
+                }
                 Spacer()
                 HStack(spacing: 4) {
                     Image(systemName: "leaf.circle.fill").font(.system(size: 13, weight: .bold))
@@ -592,6 +602,7 @@ private struct TimelineRow: View {
                     Text(dateStr).font(VType.num(11, .bold)).foregroundStyle(kind.accent.base)
                     Text(event.locationName).font(VType.body(11, .medium)).foregroundStyle(Palette.inkFaint).lineLimit(1)
                 }
+                FriendsGoingStack(eventId: event.id, compact: true)
             }
             Spacer()
             Image(systemName: "chevron.right").font(.system(size: 12, weight: .bold)).foregroundStyle(Palette.inkFaint)
@@ -610,8 +621,11 @@ private struct CreateEventSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var title = ""
     @State private var description = ""
-    @State private var organizer = ""
     @State private var locationName = ""
+    @State private var website = ""
+    @State private var isFree = true
+    @Environment(SocialService.self) private var social
+    @Environment(LocationManager.self) private var locationManager
     @State private var date = Date()
     @State private var startTime = Date()
     @State private var endTime = Calendar.current.date(byAdding: .hour, value: 2, to: Date())!
@@ -621,9 +635,9 @@ private struct CreateEventSheet: View {
     @State private var errorMessage: String?
 
     private var isValid: Bool {
-        !title.trimmingCharacters(in: .whitespaces).isEmpty &&
-        !organizer.trimmingCharacters(in: .whitespaces).isEmpty &&
-        !locationName.trimmingCharacters(in: .whitespaces).isEmpty
+        title.trimmingCharacters(in: .whitespaces).count >= 3 &&
+        !locationName.trimmingCharacters(in: .whitespaces).isEmpty &&
+        social.organizer?.canPublish == true
     }
     private var timeString: String {
         let f = DateFormatter(); f.dateFormat = "h:mm a"
@@ -642,8 +656,27 @@ private struct CreateEventSheet: View {
                             .frame(minHeight: 90).padding(10)
                             .background(ClayBackground(style: .inset, radius: Radius.sm))
                     }
-                    labeled("ORGANIZED BY") { ClayField(placeholder: "e.g. Local Dev Collective", text: $organizer) }
-                    labeled("LOCATION") { ClayField(placeholder: "e.g. Downtown Library", text: $locationName) }
+                    if let org = social.organizer {
+                        HStack(spacing: 8) {
+                            Image(systemName: org.isApproved ? "checkmark.seal.fill" : "clock.badge.checkmark.fill")
+                                .foregroundStyle(org.isApproved ? Palette.spruce.base : Palette.gold.base)
+                            Text(org.isApproved
+                                 ? "Publishing as \(org.displayName) — public to everyone nearby."
+                                 : "Publishing as \(org.displayName) — until you're approved, only your followers see it.")
+                                .font(VType.body(12, .medium)).foregroundStyle(Palette.inkSoft)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(Spacing.md).frame(maxWidth: .infinity, alignment: .leading)
+                        .background(ClayBackground(style: .inset, radius: Radius.sm))
+                        .accessibilityElement(children: .combine)
+                    }
+                    labeled("LOCATION") { ClayField(placeholder: "e.g. Downtown Library, 325 Superior Ave", text: $locationName) }
+                    labeled("WEBSITE (OPTIONAL)") { ClayField(placeholder: "https://…", text: $website, keyboard: .URL, autocap: false) }
+                    Toggle(isOn: $isFree) {
+                        Text("Free to attend").font(VType.body(14, .medium)).foregroundStyle(Palette.ink)
+                    }
+                    .tint(Palette.spruce.base)
+                    .padding(.horizontal, 4)
                     dateTimeSection
                     labeled("MAX ATTENDEES (OPTIONAL)") {
                         ClayField(placeholder: "Leave empty for unlimited", text: $maxAttendees, keyboard: .numberPad)
@@ -719,14 +752,34 @@ private struct CreateEventSheet: View {
         .background(ClayBackground(style: .inset, radius: Radius.sm))
     }
 
+    /// Combine the picked day with the picked start clock.
+    private var startDate: Date {
+        let cal = Calendar.current
+        let day = cal.dateComponents([.year, .month, .day], from: date)
+        let clock = cal.dateComponents([.hour, .minute], from: startTime)
+        var c = DateComponents(); c.year = day.year; c.month = day.month; c.day = day.day
+        c.hour = clock.hour; c.minute = clock.minute
+        return cal.date(from: c) ?? date
+    }
+
     private func submit() async {
         isSubmitting = true; errorMessage = nil
-        let result = await eventsService.createEvent(
-            title: title, description: description, organizer: organizer, date: date,
-            time: timeString, locationName: locationName, maxAttendees: Int(maxAttendees), category: category)
+        // Best-effort venue geocode so the server can gate check-ins by proximity.
+        let coord = await EventsAPIService.geocode(locationName)
+        let result = await social.createEvent(
+            title: title, description: description, locationName: locationName, time: timeString,
+            start: startDate, category: category, maxAttendees: Int(maxAttendees), isFree: isFree,
+            latitude: coord?.latitude, longitude: coord?.longitude, website: website)
         isSubmitting = false
-        if result != nil { Haptics.success(); dismiss() }
-        else { errorMessage = eventsService.lastError ?? "Failed to create event." }
+        if let result {
+            Haptics.success()
+            AccessibilityNotification.Announcement(result.broadcast ? "Event published." : "Event published to your followers.").post()
+            // Pull the store so the new event appears at once.
+            await eventsService.refresh(around: locationManager.userCoordinate)
+            dismiss()
+        } else {
+            errorMessage = social.lastError ?? "Couldn't publish the event."
+        }
     }
 }
 
@@ -801,6 +854,7 @@ private struct EventDetailSheet: View {
                                     .claySurface(.surface, radius: Radius.md)
                             }
                             detailGrid
+                            goingSection
                             checkInSection
                             ClayButton("Get Directions", systemImage: "arrow.triangle.turn.up.right.diamond.fill",
                                        kind: .teal, fullWidth: true) { openDirections() }
@@ -875,6 +929,37 @@ private struct EventDetailSheet: View {
             }
             .padding(12)
         }
+    }
+
+    // MARK: Going / friends / invite
+
+    @State private var showInvite = false
+
+    private var goingSection: some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            FriendsGoingStack(eventId: event.id)
+            HStack(spacing: 10) {
+                GoingButton(event: event)
+                Button { Haptics.tap(); showInvite = true } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "paperplane.fill").font(.system(size: 14, weight: .bold))
+                        Text("Invite").font(VType.body(15, .bold))
+                    }
+                    .foregroundStyle(Palette.ink)
+                    .padding(.vertical, 14).padding(.horizontal, 18)
+                }
+                .buttonStyle(ClayPressButtonStyle(style: .surface, radius: Radius.md, elevation: 0.6))
+                .accessibilityLabel("Invite friends to \(event.title)")
+            }
+            if let orgId = event.organizerId {
+                FollowOrganizerButton(organizerId: orgId, organizerName: event.organizer)
+            }
+            if !event.isBroadcast {
+                Text("Visible to you because you follow \(event.organizer). It goes public once the organizer is approved.")
+                    .font(VType.body(12)).foregroundStyle(Palette.inkFaint)
+            }
+        }
+        .sheet(isPresented: $showInvite) { InviteFriendsSheet(event: event) }
     }
 
     private var detailGrid: some View {
@@ -1160,6 +1245,7 @@ private struct InterestPickerSheet: View {
         .environment(EventsAPIService())
         .environment(ModerationService())
         .environment(AuthService())
+        .environment(SocialService())
 }
 
 // MARK: - Saved / bookmarked events

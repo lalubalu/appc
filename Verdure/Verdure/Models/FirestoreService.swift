@@ -37,7 +37,8 @@ final class FirestoreService {
     /// deliberately absent here (including them would reject the whole write).
     func syncGameState(
         userID: String,
-        collectedPlaceIDs: Set<String>
+        collectedPlaceIDs: Set<String>,
+        savedEventIDs: Set<String> = []
     ) async {
         // Verify the authenticated user matches the target document
         guard let currentUID = Auth.auth().currentUser?.uid, currentUID == userID else {
@@ -46,6 +47,9 @@ final class FirestoreService {
         }
 
         let sanitizedCollected = sanitizeIDArray(Array(collectedPlaceIDs), limit: Limits.maxArraySize)
+        // Saved events are the user's own choice (client-writable). The server uses
+        // them to tell you when a friend RSVPs to something you saved.
+        let sanitizedSaved = sanitizeIDArray(Array(savedEventIDs), limit: Limits.maxArraySize)
 
         isSyncing = true
 
@@ -53,6 +57,7 @@ final class FirestoreService {
             let docRef = db.collection("users").document(userID)
             try await docRef.setData([
                 "collectedPlaceIDs": sanitizedCollected,
+                "savedEventIDs": sanitizedSaved,
                 "lastUpdated": FieldValue.serverTimestamp()
             ], merge: true)
         } catch {

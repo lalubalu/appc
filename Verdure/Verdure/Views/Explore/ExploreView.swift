@@ -5,6 +5,7 @@ struct ExploreView: View {
     @Environment(PlacesAPIService.self) private var placesService
     @Environment(AuthService.self) private var authService
     @Environment(LocationManager.self) private var locationManager
+    @Environment(SocialService.self) private var social
     @State private var showGem = false
     @State private var showPlanner = false
     @State private var showNotifications = false
@@ -90,8 +91,8 @@ struct ExploreView: View {
                         .foregroundStyle(Palette.spruce.base)
                         .frame(width: 46, height: 46)
                         .background(ClayBackground(style: .surface, radius: Radius.chip, elevation: 0.6))
-                    if NotificationManager.shared.unreadCount > 0 {
-                        Text("\(NotificationManager.shared.unreadCount)")
+                    if NotificationManager.shared.unreadCount + social.unreadNotificationCount > 0 {
+                        Text("\(NotificationManager.shared.unreadCount + social.unreadNotificationCount)")
                             .font(VType.num(10, .bold)).foregroundStyle(Palette.terracotta.onColor)
                             .padding(.horizontal, 5).padding(.vertical, 2)
                             .background(Capsule().fill(Palette.terracotta.base))
@@ -531,4 +532,7 @@ private struct NearbyCard: View {
     ExploreView()
         .environment(GameStateManager())
         .environment(PlacesAPIService())
+        .environment(AuthService())
+        .environment(LocationManager())
+        .environment(SocialService())
 }

@@ -37,6 +37,7 @@ final class EventsAPIService {
     // MARK: - Private
 
     private var db: Firestore { Firestore.firestore() }
+    private var followedOrganizerIDs: Set<String> = []
     private var lastFetchDate: Date?
     private var cachedCenter: CLLocationCoordinate2D?
     /// Firestore reads are cheap and the store changes hourly; refresh gently.
@@ -63,9 +64,11 @@ final class EventsAPIService {
     /// Load upcoming events from the normalized store. `center` is used only
     /// for the coverage notice — the query itself is not geographic, because
     /// ingestion is already scoped to launch areas.
-    func fetchNearbyEvents(around center: CLLocationCoordinate2D) async {
+    func fetchNearbyEvents(around center: CLLocationCoordinate2D, followedOrganizerIDs: Set<String> = []) async {
         if QAData.offline { return }   // QA: cached/sample data only
         updateCoverage(for: center)
+        // Remember the follow set across plain refreshes (which pass none).
+        if !followedOrganizerIDs.isEmpty { self.followedOrganizerIDs = followedOrganizerIDs }
         if let cached = cachedCenter, let last = lastFetchDate,
            Date().timeIntervalSince(last) < fetchCooldown,
            distance(cached, center) < 5000 {
@@ -77,8 +80,14 @@ final class EventsAPIService {
             self.isLoading = true
             self.lastError = nil
             if let fetched = await self.fetchFirestoreEvents() {
+                // Followed organizers who aren't approved yet are visible only to
+                // their followers — a separate, rules-permitted query per organizer.
+                let followerOnly = await self.fetchFollowedOrganizerEvents(self.followedOrganizerIDs)
+                var merged = fetched
+                let seen = Set(fetched.map(\.id))
+                merged.append(contentsOf: followerOnly.filter { !seen.contains($0.id) })
                 // A successful read is the truth — including an honest empty list.
-                self.events = fetched.sorted { $0.date < $1.date }
+                self.events = merged.sorted { $0.date < $1.date }
                 self.cachedCenter = center
                 self.persistCache(center: center)
             }
@@ -221,6 +230,30 @@ final class EventsAPIService {
             print("[EventsAPI] Firestore error: \(error.localizedDescription)")
             return nil
         }
+    }
+
+    /// Events from organizers the user follows that are NOT yet broadcast. The
+    /// rules allow this read only when the query pins organizerId, which is why
+    /// it is one query per followed organizer (bounded to 20).
+    private func fetchFollowedOrganizerEvents(_ organizerIDs: Set<String>) async -> [Event] {
+        guard Auth.auth().currentUser != nil, !organizerIDs.isEmpty else { return [] }
+        var out: [Event] = []
+        let cutoff = Timestamp(date: Date().addingTimeInterval(-3600))
+        for orgId in organizerIDs.prefix(20) {
+            do {
+                let snap = try await db.collection("events")
+                    .whereField("hidden", isEqualTo: false)
+                    .whereField("active", isEqualTo: true)
+                    .whereField("organizerId", isEqualTo: orgId)
+                    .whereField("date", isGreaterThanOrEqualTo: cutoff)
+                    .limit(to: 100)
+                    .getDocuments()
+                out.append(contentsOf: snap.documents.compactMap { Self.mapFirestoreDocument($0) })
+            } catch {
+                print("[EventsAPI] organizer \(orgId) query failed: \(error.localizedDescription)")
+            }
+        }
+        return out
     }
 
     /// Community events are user-generated and ingested events came from third

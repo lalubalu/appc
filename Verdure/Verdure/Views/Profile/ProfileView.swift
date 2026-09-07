@@ -13,6 +13,7 @@ struct ProfileView: View {
     @Environment(AuthService.self) private var authService
     @Environment(StoreService.self) private var store
     @Environment(ModerationService.self) private var moderation
+    @Environment(SocialService.self) private var social
     @State private var showRewardsStore = false
     @State private var showDeleteConfirm = false
     @State private var isDeletingAccount = false
@@ -338,10 +339,19 @@ struct ProfileView: View {
                     Toggle("", isOn: $prefersDarkMode).tint(Palette.spruce.base).labelsHidden()
                 }
                 rowDivider
-                if accountTypeRaw == AccountType.organizer.rawValue {
-                    settingsRow(icon: "checkmark.seal.fill", label: "Verified Organizer", accent: .spruce) {
-                        Text("Active").font(VType.body(12, .bold)).foregroundStyle(Palette.spruce.base)
+                if let org = social.organizer {
+                    Button { Haptics.tap(); showOrganizerVerify = true } label: {
+                        settingsRow(icon: org.isApproved ? "checkmark.seal.fill" : "clock.badge.checkmark.fill",
+                                    label: org.displayName, accent: org.isApproved ? .spruce : .gold) {
+                            HStack(spacing: 6) {
+                                Text(org.statusLabel).font(VType.body(12, .bold))
+                                    .foregroundStyle(org.isApproved ? Palette.spruce.base : Palette.gold.base)
+                                chevron
+                            }
+                        }
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Organizer profile \(org.displayName), \(org.statusLabel)")
                 } else {
                     Button { Haptics.tap(); showOrganizerVerify = true } label: {
                         settingsRow(icon: "megaphone.fill", label: "Become an Organizer", accent: .terracotta) { chevron }
@@ -500,4 +510,5 @@ struct ProfileView: View {
         .environment(AuthService())
         .environment(StoreService())
         .environment(ModerationService())
+        .environment(SocialService())
 }
