@@ -38,18 +38,8 @@ jobs:
         working-directory: Verdure
         run: |
           cat > Secrets.xcconfig <<'EOF'
-          SERPAPI_KEY =
-          TICKETMASTER_KEY =
-          SEATGEEK_CLIENT_ID =
           NPS_API_KEY =
           RECREATION_GOV_KEY =
-          EVENTBRITE_TOKEN =
-          EVENTBRITE_ORG_ID =
-          LOCALIST_HOST =
-          GOOGLE_PSE_KEY =
-          GOOGLE_PSE_CX =
-          NEIGHBORHOOD_COMMONS_BASE =
-          NEIGHBORHOOD_COMMONS_KEY =
           EOF
 
       - name: Generate Xcode project

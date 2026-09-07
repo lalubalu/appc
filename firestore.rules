@@ -144,6 +144,33 @@ service cloud.firestore {
         allow update: if false;
         allow delete: if isOwner(userId);
       }
+
+      // ── Follows: /users/{userId}/following/{targetId} ──
+      // Written ONLY by the followUser callable (block check + counts happen
+      // server-side). Owner may read their own list; the rules functions below
+      // also consult it (event visibility, attendee visibility).
+      match /following/{targetId} {
+        allow read: if isOwner(userId);
+        allow write: if false;
+      }
+
+      // ── Invites: /users/{userId}/invites/{eventId}_{fromUid} ──
+      // Created by inviteToEvent; status changes go through rsvpToEvent /
+      // respondToInvite so the sender is told the outcome. Owner-readable.
+      match /invites/{inviteId} {
+        allow read: if isOwner(userId);
+        allow write: if false;
+      }
+
+      // ── Notifications: /users/{userId}/notifications/{id} ──
+      // Server-created. The owner may mark them read and delete them.
+      match /notifications/{notificationId} {
+        allow read: if isOwner(userId);
+        allow create: if false;
+        allow update: if isOwner(userId)
+                      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+        allow delete: if isOwner(userId);
+      }
     }
 
     // ──────────────────────────────────────────────
@@ -151,35 +178,66 @@ service cloud.firestore {
     // ──────────────────────────────────────────────
     match /events/{eventId} {
 
-      // MODERATION VISIBILITY. `hidden` is a server-owned flag (auto-hide at the
-      // report threshold, or a staff decision). Hidden events are served only to
-      // their creator — so they can see it was hidden — never to anyone else.
-      // "Rules are not filters": a LIST must constrain hidden == false itself,
-      // which is exactly what the client query does.
-      allow get: if request.auth != null
-                 && (resource.data.hidden == false
-                     || resource.data.creatorID == request.auth.uid);
-      allow list: if request.auth != null
-                  && resource.data.hidden == false;
+      // VISIBILITY MODEL.
+      //   hidden     — server-owned moderation flag; hidden events are served
+      //                only to their creator (so they can see it was hidden).
+      //   broadcast  — server-owned. Ingested listings and events from APPROVED
+      //                organizers are broadcast: public listings, readable even
+      //                signed out (guests browse). An unverified organizer's
+      //                events are NOT broadcast and are visible only to the
+      //                creator and to people who follow that organizer.
+      // "Rules are not filters": a LIST must constrain these fields itself, which
+      // is exactly what the two client queries do (broadcast == true for the
+      // feed; organizerId == X for a followed organizer's calendar).
+      allow get: if resource.data.hidden == false
+                 && (resource.data.broadcast == true
+                     || (request.auth != null && resource.data.creatorID == request.auth.uid)
+                     || (request.auth != null && followsOrganizer(resource.data)));
+      allow list: if resource.data.hidden == false
+                  && (resource.data.broadcast == true
+                      || (request.auth != null && resource.data.creatorID == request.auth.uid)
+                      || (request.auth != null && followsOrganizer(resource.data)));
 
       // Any authenticated user can create an event (must include their UID as
-      // creatorID). It must be born visible: a client cannot pre-set moderation
-      // state in either direction.
+      // creatorID). It must be born visible-but-not-broadcast: a client can set
+      // neither moderation state nor its own broadcast flag — approval state is
+      // enforced server-side (approveOrganizer flips broadcast for a verified
+      // organizer's events).
       allow create: if request.auth != null
                     && request.resource.data.creatorID == request.auth.uid
                     && validEventDocument(request.resource.data)
-                    && moderationFlagsAtCreate(request.resource.data);
+                    && moderationFlagsAtCreate(request.resource.data)
+                    && storeFlagsAtCreate(request.resource.data)
+                    && !isSuspended(request.auth.uid);
 
-      // Only the creator can update their event — and never its moderation flags.
+      // Only the creator can update their event — and never its moderation or
+      // store flags (hidden/removed/active/broadcast/source/provenance).
       allow update: if request.auth != null
                     && resource.data.creatorID == request.auth.uid
                     && request.resource.data.creatorID == request.auth.uid
                     && validEventDocument(request.resource.data)
-                    && noModerationFlagChanges();
+                    && noModerationFlagChanges()
+                    && noStoreFlagChanges();
 
       // Only the creator can delete their event
       allow delete: if request.auth != null
                     && resource.data.creatorID == request.auth.uid;
+
+      // ── Going / RSVP: /events/{eventId}/attendees/{attendeeUid} ──
+      // Written ONLY by rsvpToEvent (so the count stays honest and blocks are
+      // checked server-side) — a client cannot write its own attendee document,
+      // let alone anyone else's. A single record is readable by its owner, or
+      // by a reader it is visible to: the attendee set themselves public, or
+      // they follow the reader ("friends" visibility); never across a block in
+      // either direction. Listing is denied — the friendsGoing callable is the
+      // only way to see who is going, and it applies the same rules.
+      match /attendees/{attendeeUid} {
+        allow get: if request.auth != null
+                   && (request.auth.uid == attendeeUid
+                       || (attendeeVisibleToCaller(attendeeUid, resource.data) && !blockedEitherWay(attendeeUid)));
+        allow list: if false;
+        allow write: if false;
+      }
     }
 
     // ──────────────────────────────────────────────
@@ -251,6 +309,44 @@ service cloud.firestore {
           .hasAny(['hidden', 'hiddenAt', 'removed', 'removedAt']);
     }
 
+    // ── Event store flags (ingest-and-own + organizer visibility) ──
+    // A client-created event is a community event that is active and NOT
+    // broadcast; the server owns everything else about provenance.
+    function storeFlagsAtCreate(data) {
+      return data.active == true
+          && data.source == 'community'
+          && (!('broadcast' in data) || data.broadcast == false)
+          && !('sources' in data) && !('sourceKeys' in data) && !('areaId' in data)
+          && !('organizerOwnerUid' in data) && !('lastSeenAt' in data) && !('missedCycles' in data);
+    }
+
+    function noStoreFlagChanges() {
+      return !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['active', 'broadcast', 'source', 'sourceEventId', 'sources', 'sourceKeys',
+                   'areaId', 'organizerId', 'organizerOwnerUid', 'ingestedAt', 'lastSeenAt',
+                   'missedCycles', 'inactiveAt', 'attendeeCount']);
+    }
+
+    // An attendee record is visible when public, or when the attendee follows the caller.
+    function attendeeVisibleToCaller(attendeeUid, data) {
+      return data.get('visibility', 'friends') == 'public'
+          || exists(/databases/$(database)/documents/users/$(attendeeUid)/following/$(request.auth.uid));
+    }
+
+    // Blocks are symmetric: a block in either direction hides both parties from each other.
+    function blockedEitherWay(otherUid) {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid)/blocks/$(otherUid))
+          || exists(/databases/$(database)/documents/users/$(otherUid)/blocks/$(request.auth.uid));
+    }
+
+    // Does the caller follow the organizer that published this event?
+    // Follow rows live at users/{uid}/following/{organizerId}; only evaluable
+    // for a LIST when the query pins organizerId with an equality filter.
+    function followsOrganizer(data) {
+      return 'organizerId' in data && data.organizerId is string
+          && exists(/databases/$(database)/documents/users/$(request.auth.uid)/following/$(data.organizerId));
+    }
+
     // A suspended account (server-set by moderateContent) keeps read access but
     // may not publish. Missing profile doc → not suspended.
     function isSuspended(uid) {
@@ -316,12 +412,29 @@ service cloud.firestore {
         // failing and the user can never write their own document again.
         'plusProductId', 'plusOriginalTransactionId', 'plusStatus', 'plusUpdatedAt',
         // Moderation outcome (server-owned): a suspended account may read, not act.
-        'suspended', 'suspendedAt'
+        'suspended', 'suspendedAt',
+        // Social. savedEventIDs + activityPrivacy are the user's own choices
+        // (client-writable, validated in validSocialFields); rsvpEventIDs and the
+        // follow counts are written by the callables only.
+        'savedEventIDs', 'activityPrivacy', 'rsvpEventIDs', 'followerCount', 'followingCount'
       ];
       let noExtraFields = data.keys().hasOnly(allowedFields);
 
       return validDisplayName && validEmail && validInterests
-          && validLastUpdated && validCreatedAt && validFcmTokens && noExtraFields;
+          && validLastUpdated && validCreatedAt && validFcmTokens && noExtraFields
+          && validSocialFields(data);
+    }
+
+    function validSocialFields(data) {
+      let validSaved = !('savedEventIDs' in data) ||
+        (data.savedEventIDs is list && data.savedEventIDs.size() <= 500);
+      let validPrivacy = !('activityPrivacy' in data) ||
+        data.activityPrivacy in ['friends', 'public'];
+      let validRsvps = !('rsvpEventIDs' in data) ||
+        (data.rsvpEventIDs is list && data.rsvpEventIDs.size() <= 500);
+      let validCounts = (!('followerCount' in data) || (data.followerCount is int && data.followerCount >= 0))
+        && (!('followingCount' in data) || (data.followingCount is int && data.followingCount >= 0));
+      return validSaved && validPrivacy && validRsvps && validCounts;
     }
 
     // Validate game state fields (collections, points)
@@ -384,7 +497,14 @@ service cloud.firestore {
         'category', 'imagePlaceholder', 'pointValue',
         'creatorID', 'createdAt', 'latitude', 'longitude',
         // Server-owned moderation state
-        'hidden', 'hiddenAt', 'removed', 'removedAt'
+        'hidden', 'hiddenAt', 'removed', 'removedAt',
+        // Normalized-store fields (ingest-and-own). Client creates may set only
+        // active/source (see storeFlagsAtCreate); the rest is written by the
+        // server and must be listed so a later client edit doesn't trip hasOnly().
+        'active', 'broadcast', 'source', 'sourceEventId', 'sources', 'sourceKeys',
+        'areaId', 'organizerId', 'organizerOwnerUid', 'titleKey', 'venueKey', 'startBucket',
+        'isFree', 'priceMin', 'website', 'imageURL', 'tags', 'endDate',
+        'ingestedAt', 'lastSeenAt', 'missedCycles', 'inactiveAt'
       ];
       let noExtraFields = data.keys().hasOnly(allowedFields);
 
@@ -414,7 +534,10 @@ service cloud.firestore {
                    'plusStatus', 'plusUpdatedAt',
                    // Moderation outcome — a client must not be able to lift
                    // its own suspension.
-                   'suspended', 'suspendedAt']);
+                   'suspended', 'suspendedAt',
+                   // Social state owned by the callables: a client that could
+                   // write rsvpEventIDs could fake attendance; counts must add up.
+                   'rsvpEventIDs', 'followerCount', 'followingCount']);
     }
 
     // On create, server-owned fields must be absent or zero/empty — a fresh client
@@ -430,7 +553,10 @@ service cloud.firestore {
           && !('plusOriginalTransactionId' in data)
           && !('plusProductId' in data)
           && !('plusStatus' in data)
-          && !('suspended' in data);
+          && !('suspended' in data)
+          && (!('rsvpEventIDs' in data) || (data.rsvpEventIDs is list && data.rsvpEventIDs.size() == 0))
+          && (!('followerCount' in data) || data.followerCount == 0)
+          && (!('followingCount' in data) || data.followingCount == 0);
     }
 
     // Prevent changing fields that should be immutable after creation

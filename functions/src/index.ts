@@ -601,3 +601,8 @@ export {
   ingestTicketed, ingestCivic, runIngest,
   supplyReportWeekly, getSupplyReport, listLaunchAreas,
 } from "./ingest/index.js";
+
+// ── Social: follows, Going/RSVP, invites, friends-going ─────────────────────
+// Every write is a callable so blocks are enforced server-side and counts stay
+// honest; rules deny clients all writes to these subcollections. See social.ts.
+export { followUser, rsvpToEvent, inviteToEvent, respondToInvite, friendsGoing } from "./social.js";

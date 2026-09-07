@@ -182,7 +182,7 @@ async function main() {
     category: "Market",                 // ceiling is only 75 for Market…
     imagePlaceholder: "bag.fill",
     pointValue: 1000,                   // …but the doc claims 1000
-    creatorID: atk.uid, createdAt: serverTimestamp(), hidden: false,
+    creatorID: atk.uid, createdAt: serverTimestamp(), hidden: false, active: true, source: "community",
     latitude: NEAR.lat, longitude: NEAR.lng,   // right where the attacker is
   }));
   // Diagnostics matter here: if event creation failed for an unrelated schema

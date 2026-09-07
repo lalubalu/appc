@@ -20,34 +20,14 @@
 	<string>1.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
-	<key>EventbriteOrgId</key>
-	<string>$(EVENTBRITE_ORG_ID)</string>
-	<key>EventbriteToken</key>
-	<string>$(EVENTBRITE_TOKEN)</string>
-	<key>GooglePSECx</key>
-	<string>$(GOOGLE_PSE_CX)</string>
-	<key>GooglePSEKey</key>
-	<string>$(GOOGLE_PSE_KEY)</string>
-	<key>LocalistHost</key>
-	<string>$(LOCALIST_HOST)</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Verdure uses your location to find nearby events and outdoor places you can check in to.</string>
 	<key>NSMotionUsageDescription</key>
 	<string>Verdure uses motion to gently tilt cards as you move your phone. This is purely decorative and no motion data ever leaves your device.</string>
-	<key>NeighborhoodCommonsBase</key>
-	<string>$(NEIGHBORHOOD_COMMONS_BASE)</string>
-	<key>NeighborhoodCommonsKey</key>
-	<string>$(NEIGHBORHOOD_COMMONS_KEY)</string>
 	<key>NpsApiKey</key>
 	<string>$(NPS_API_KEY)</string>
 	<key>RecreationGovKey</key>
 	<string>$(RECREATION_GOV_KEY)</string>
-	<key>SeatGeekClientId</key>
-	<string>$(SEATGEEK_CLIENT_ID)</string>
-	<key>SerpApiKey</key>
-	<string>$(SERPAPI_KEY)</string>
-	<key>TicketmasterKey</key>
-	<string>$(TICKETMASTER_KEY)</string>
 	<key>UIAppFonts</key>
 	<array>
 		<string>Fredoka-Regular.ttf</string>

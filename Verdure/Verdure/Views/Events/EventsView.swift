@@ -79,6 +79,7 @@ struct EventsView: View {
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: Spacing.xl) {
                     kineticHero.dramaticRise(index: 0)
+                    if let notice = eventsService.coverageNotice { coverageBanner(notice) }
                     forYouSection.dramaticRise(index: 1)
                     posterDeck.dramaticRise(index: 2)
                     upcomingTimeline.dramaticRise(index: 3)
@@ -111,6 +112,25 @@ struct EventsView: View {
                     .presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
             }
         }
+    }
+
+    // MARK: - Coverage (launch areas)
+
+    /// Events are ingested only for launch areas. Someone opening the app
+    /// elsewhere gets the truth, not an empty screen with no explanation.
+    private func coverageBanner(_ notice: String) -> some View {
+        HStack(alignment: .top, spacing: Spacing.sm) {
+            Image(systemName: "mappin.and.ellipse").font(.system(size: 14, weight: .bold))
+                .foregroundStyle(Palette.gold.base).padding(.top, 2)
+            Text(notice)
+                .font(VType.scaledBody(13, .medium, relativeTo: .footnote)).foregroundStyle(Palette.inkSoft)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .padding(Spacing.md)
+        .background(ClayBackground(style: .inset, radius: Radius.md))
+        .padding(.horizontal, Spacing.md)
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: - For You (personalized recommendations)
@@ -864,6 +884,10 @@ private struct EventDetailSheet: View {
             detailRow("mappin.circle.fill", "Location", event.locationName)
             if let max = event.maxAttendees { detailRow("person.2.fill", "Capacity", "\(event.attendeeCount) / \(max)") }
             else { detailRow("person.2.fill", "Attending", "\(event.attendeeCount) people") }
+            if let price = event.priceLabel { detailRow("tag.fill", "Price", price) }
+            detailRow("tray.full.fill", "Listed by", event.sourceCount > 1
+                      ? "\(event.sourceLabel) · \(event.sourceCount) sources agree"
+                      : event.sourceLabel)
             detailRow("leaf.circle.fill", "Points", "+\(event.pointValue) for attending")
         }
         .padding(Spacing.md)

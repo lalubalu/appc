@@ -50,18 +50,13 @@ targets:
           - Rubik-Medium.ttf
           - Rubik-SemiBold.ttf
           - Rubik-Bold.ttf
-        SerpApiKey: $(SERPAPI_KEY)
-        TicketmasterKey: $(TICKETMASTER_KEY)
-        SeatGeekClientId: $(SEATGEEK_CLIENT_ID)
+        # PLACES keys only. Every EVENT provider key (SerpApi, Ticketmaster,
+        # SeatGeek, Eventbrite, Localist, Google PSE, Neighborhood Commons) was
+        # removed from the bundle: events are ingested server-side and the app
+        # reads Firestore only. A key that reaches the device is public — the
+        # removed keys are considered compromised and must be rotated.
         NpsApiKey: $(NPS_API_KEY)
         RecreationGovKey: $(RECREATION_GOV_KEY)
-        EventbriteToken: $(EVENTBRITE_TOKEN)
-        EventbriteOrgId: $(EVENTBRITE_ORG_ID)
-        LocalistHost: $(LOCALIST_HOST)
-        GooglePSEKey: $(GOOGLE_PSE_KEY)
-        GooglePSECx: $(GOOGLE_PSE_CX)
-        NeighborhoodCommonsBase: $(NEIGHBORHOOD_COMMONS_BASE)
-        NeighborhoodCommonsKey: $(NEIGHBORHOOD_COMMONS_KEY)
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: com.vaiybhav.verdure
       ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon

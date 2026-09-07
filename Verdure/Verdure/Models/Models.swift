@@ -89,10 +89,44 @@ struct Event: Identifiable, Hashable {
     var latitude: Double? = nil  // venue coordinates when the source provides them —
     var longitude: Double? = nil //   used for the GPS proximity gate at check-in
 
+    // Provenance + listing facts from the normalized /events store (ingest-and-own).
+    var source: String = "community"   // ticketmaster | libcal | localist | nps | ics | serpapi | organizer | community
+    var sourceCount: Int = 1           // how many feeds listed this same event (dedupe merged them)
+    var isFree: Bool? = nil            // nil = the source didn't say
+    var priceMin: Double? = nil        // lowest listed price in USD when known
+    var imageURL: String? = nil        // real image from the source, never a placeholder
+    var tags: [String] = []            // feed-provided tags / audiences
+    var areaId: String? = nil          // launch area the event was ingested for
+    var organizerId: String? = nil     // organizer profile that published it (organizer accounts)
+    var isBroadcast: Bool = true       // false = visible only to the organizer's followers (unverified)
+
     /// Venue coordinate when both components are known.
     var coordinate: CLLocationCoordinate2D? {
         guard let latitude, let longitude else { return nil }
         return CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    }
+
+    /// Human label for where the listing came from — shown on cards so users can
+    /// see that a library workshop and a stadium concert are different kinds of thing.
+    var sourceLabel: String {
+        switch source {
+        case "ticketmaster": return "Ticketed"
+        case "libcal": return "Library"
+        case "localist": return "Campus & civic"
+        case "nps": return "National Park Service"
+        case "ics": return "Community calendar"
+        case "serpapi": return "Web listing"
+        case "organizer": return "Verdure organizer"
+        default: return "Community"
+        }
+    }
+
+    /// "Free", "$12+", or nil when the source gave no price information.
+    var priceLabel: String? {
+        if isFree == true { return "Free" }
+        if let priceMin, priceMin > 0 { return priceMin == priceMin.rounded() ? "$\(Int(priceMin))+" : String(format: "$%.2f+", priceMin) }
+        if isFree == false { return "Paid" }
+        return nil
     }
 
     func hash(into hasher: inout Hasher) { hasher.combine(id) }

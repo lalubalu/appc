@@ -732,7 +732,7 @@ async function main() {
     title: "Deleter's Event", organizer: "Delete Me", date: new Date("2026-12-01T17:00:00Z"),
     time: "12:00 PM", locationName: "Venue", attendeeCount: 1, category: "Social",
     imagePlaceholder: "cup.and.saucer.fill", pointValue: 100, creatorID: del.uid,
-    createdAt: serverTimestamp(), hidden: false,
+    createdAt: serverTimestamp(), hidden: false, active: true, source: "community",
   });
   // Someone RSVP'd to their event; they RSVP'd to someone else's (server-written rows).
   await db.doc(`events/e2e-del-event/attendees/${bystander2.uid}`).set({ uid: bystander2.uid, createdAt: new Date() });
@@ -906,9 +906,239 @@ async function main() {
   ok("rules: clients cannot read /ingestRuns or /supplyReports",
      await (async () => { try { await getDocs(query(collection(cdb, "ingestRuns"))); return false; } catch (e) { return e.code === "permission-denied"; } })()
      && await (async () => { try { await getDocs(query(collection(cdb, "supplyReports"))); return false; } catch (e) { return e.code === "permission-denied"; } })());
+  // GUESTS BROWSE. Broadcast listings are public information; a signed-out
+  // client must be able to run the app's query so "Continue as guest" shows
+  // real events. Everything else about /events stays authenticated.
+  const guestApp = clientInit({ projectId: PROJECT, apiKey: "fake-api-key" }, "guest");
+  const guestDb = clientFirestore(guestApp);
+  connectFirestoreEmulator(guestDb, "127.0.0.1", 8899);
+  let guestIds = [];
+  try {
+    guestIds = (await getDocs(query(collection(guestDb, "events"),
+      where("hidden", "==", false), where("active", "==", true), where("broadcast", "==", true),
+      where("date", ">=", new Date())))).docs.map((d) => d.id);
+  } catch (e) { guestIds = [`ERR:${e.code}`]; }
+  ok("rules: a signed-out guest can read broadcast events (the app's query)",
+     guestIds.includes("ticketmaster-tmC1"), JSON.stringify(guestIds));
+  let guestCode;
+  try { await getDocs(query(collection(guestDb, "events"), where("hidden", "==", false))); guestCode = "ok"; }
+  catch (e) { guestCode = e.code; }
+  ok("rules: a guest cannot list non-broadcast events", guestCode === "permission-denied", `got ${guestCode}`);
+  try { await getDoc(doc(guestDb, "posts/e2e-post-1")); guestCode = "ok"; } catch (e) { guestCode = e.code; }
+  ok("rules: a guest still cannot read community posts", guestCode === "permission-denied", `got ${guestCode}`);
+
+  // A client cannot broadcast its own event or forge provenance on create.
+  const baseEvent = {
+    title: "Self Broadcast", organizer: "Me", date: new Date(Date.now() + 7 * 86_400_000), time: "6 PM",
+    locationName: "Somewhere", attendeeCount: 1, category: "Social", imagePlaceholder: "cup.and.saucer.fill",
+    pointValue: 100, creatorID: uid, createdAt: serverTimestamp(), hidden: false, active: true, source: "community",
+  };
+  const tryCreate = async (id, extra) => { try { await setDoc(doc(cdb, `events/${id}`), { ...baseEvent, ...extra }); return "ok"; } catch (e) { return e.code; } };
+  ok("rules: client cannot create an event with broadcast: true", (await tryCreate("e2e-selfbc", { broadcast: true })) === "permission-denied");
+  ok("rules: client cannot forge an ingested source", (await tryCreate("e2e-forge-src", { source: "ticketmaster" })) === "permission-denied");
+  ok("rules: client cannot pre-set provenance (sources[])", (await tryCreate("e2e-forge-prov", { sources: [{ source: "libcal" }] })) === "permission-denied");
+  ok("rules: a plain community event (active, not broadcast) is accepted", (await tryCreate("e2e-plain-community", {})) === "ok");
+  code2 = await userWrite("events/e2e-plain-community", { broadcast: true });
+  ok("rules: creator cannot flip broadcast on later", code2 === "permission-denied", `got ${code2}`);
+  code2 = await userWrite("events/e2e-plain-community", { description: "edited by creator" });
+  ok("rules: creator CAN still edit their own event copy", code2 === "ok", `got ${code2}`);
+
   r = await call("listLaunchAreas", {}, rep1.idToken);
   ok("areas: any signed-in user can list launch areas (to explain coverage honestly)",
      Array.isArray(r.result?.areas) && r.result.areas[0]?.id === "cleveland-oh", JSON.stringify(r.result));
+
+  // ────────────────────────────────────────────────────────────────────────
+  // SOCIAL — follows, Going/RSVP, invites, friends-going (Part 2 §4)
+  //
+  // Every write is a callable; blocks are enforced server-side; the rules
+  // decide who may read an attendee record. "Sarah is going Thursday" must be
+  // visible to Sarah's friends, invisible across a block, and impossible to
+  // forge.
+  // ────────────────────────────────────────────────────────────────────────
+  console.log("\n── Social: follows / RSVP / invites / friends-going ──");
+
+  const mk = async (label) => {
+    const em = `e2e-${label}-${Date.now()}@verdure.test`;
+    const u = await signUp(em, password);
+    const fdb = await clientAs(em, password, label);
+    await setDoc(doc(fdb, `users/${u.uid}`), {
+      displayName: label === "sarah" ? "Sarah Park" : label === "quinn" ? "Quinn Lee" : `${label} user`,
+      email: em, interests: [], collectedPlaceIDs: [], createdAt: serverTimestamp(), lastUpdated: serverTimestamp(),
+    });
+    return { ...u, email: em, fdb };
+  };
+  const sarah = await mk("sarah");    // the friend who RSVPs
+  const quinn = await mk("quinn");    // saved the event; friends with Sarah
+  const stranger = await mk("stranger");
+  const blocker = await mk("blocker");
+
+  const socialEventId = `e2e-social-event-${Date.now()}`;
+  await db.doc(`events/${socialEventId}`).set({
+    title: "Thursday Trail Cleanup", organizer: "Metroparks Friends", date: new Date(Date.now() + 5 * 86_400_000),
+    time: "6:00 PM", locationName: "Edgewater Park", attendeeCount: 0, category: "Cleanup",
+    imagePlaceholder: "sparkles", pointValue: 200, creatorID: "system:ingest", createdAt: new Date(),
+    hidden: false, active: true, broadcast: true, source: "libcal", areaId: "cleveland-oh",
+    latitude: 41.4903, longitude: -81.7381,
+  });
+
+  // ── Follows ──
+  r = await call("followUser", { targetId: sarah.uid, kind: "user" }, quinn.idToken);
+  ok("follow: Quinn follows Sarah", r.result?.following === true && r.result?.changed === true, JSON.stringify(r));
+  r = await call("followUser", { targetId: sarah.uid, kind: "user" }, quinn.idToken);
+  ok("follow: repeating a follow is a no-op", r.result?.changed === false);
+  r = await call("followUser", { targetId: quinn.uid, kind: "user" }, sarah.idToken);
+  ok("follow: Sarah follows Quinn back (mutual)", r.result?.following === true);
+  const qDoc = (await db.doc(`users/${quinn.uid}`).get()).data();
+  const sDoc = (await db.doc(`users/${sarah.uid}`).get()).data();
+  ok("follow: counts are maintained server-side",
+     qDoc?.followingCount === 1 && qDoc?.followerCount === 1 && sDoc?.followerCount === 1 && sDoc?.followingCount === 1,
+     JSON.stringify({ q: [qDoc?.followingCount, qDoc?.followerCount], s: [sDoc?.followingCount, sDoc?.followerCount] }));
+  r = await call("followUser", { targetId: sarah.uid, kind: "user" }, sarah.idToken);
+  ok("follow: cannot follow yourself", r.error?.status === "FAILED_PRECONDITION");
+  let fcode;
+  try { await setDoc(doc(quinn.fdb, `users/${quinn.uid}/following/${stranger.uid}`), { uid: stranger.uid, kind: "user" }); fcode = "ok"; } catch (e) { fcode = e.code; }
+  ok("rules: a client cannot write its own following list (callable only)", fcode === "permission-denied", `got ${fcode}`);
+  try { await setDoc(doc(quinn.fdb, `users/${sarah.uid}/following/${quinn.uid}`), { uid: quinn.uid, kind: "user" }); fcode = "ok"; } catch (e) { fcode = e.code; }
+  ok("rules: a client cannot write another user's following list", fcode === "permission-denied", `got ${fcode}`);
+  try { fcode = (await getDoc(doc(quinn.fdb, `users/${quinn.uid}/following/${sarah.uid}`))).exists() ? "ok" : "missing"; } catch (e) { fcode = e.code; }
+  ok("rules: owner can read their own following list", fcode === "ok", `got ${fcode}`);
+  try { await getDoc(doc(stranger.fdb, `users/${quinn.uid}/following/${sarah.uid}`)); fcode = "ok"; } catch (e) { fcode = e.code; }
+  ok("rules: others cannot read your following list", fcode === "permission-denied", `got ${fcode}`);
+  try { fcode = await (async () => { await updateDoc(doc(quinn.fdb, `users/${quinn.uid}`), { followerCount: 999 }); return "ok"; })(); } catch (e) { fcode = e.code; }
+  ok("rules: client cannot inflate its own follower count", fcode === "permission-denied", `got ${fcode}`);
+
+  // Blocks refuse follows server-side, in both directions.
+  await setDoc(doc(blocker.fdb, `users/${blocker.uid}/blocks/${sarah.uid}`), { uid: sarah.uid, createdAt: serverTimestamp() });
+  r = await call("followUser", { targetId: blocker.uid, kind: "user" }, sarah.idToken);
+  ok("follow: a blocked user's follow attempt fails server-side", r.error?.status === "PERMISSION_DENIED", JSON.stringify(r));
+  r = await call("followUser", { targetId: sarah.uid, kind: "user" }, blocker.idToken);
+  ok("follow: the blocker cannot follow the person they blocked either", r.error?.status === "PERMISSION_DENIED", JSON.stringify(r));
+
+  // ── Saved events + privacy are the user's own choices ──
+  let ucode = await (async () => { try { await updateDoc(doc(quinn.fdb, `users/${quinn.uid}`), { savedEventIDs: [socialEventId] }); return "ok"; } catch (e) { return e.code; } })();
+  ok("rules: client can save an event (savedEventIDs)", ucode === "ok", `got ${ucode}`);
+  ucode = await (async () => { try { await updateDoc(doc(quinn.fdb, `users/${quinn.uid}`), { activityPrivacy: "everyone-please" }); return "ok"; } catch (e) { return e.code; } })();
+  ok("rules: activityPrivacy accepts only friends|public", ucode === "permission-denied", `got ${ucode}`);
+  ucode = await (async () => { try { await updateDoc(doc(quinn.fdb, `users/${quinn.uid}`), { rsvpEventIDs: [socialEventId] }); return "ok"; } catch (e) { return e.code; } })();
+  ok("rules: client cannot fake an RSVP via rsvpEventIDs", ucode === "permission-denied", `got ${ucode}`);
+
+  // ── RSVP ──
+  r = await call("rsvpToEvent", { eventId: socialEventId, going: true }, sarah.idToken);
+  ok("rsvp: Sarah marks herself Going", r.result?.going === true && r.result?.changed === true && r.result?.attendeeCount === 1, JSON.stringify(r));
+  const att = (await db.doc(`events/${socialEventId}/attendees/${sarah.uid}`).get()).data();
+  ok("rsvp: attendee record written with name, initials and privacy (friends by default)",
+     att?.uid === sarah.uid && att?.displayName === "Sarah Park" && att?.initials === "SP" && att?.visibility === "friends", JSON.stringify(att));
+  ok("rsvp: public count on the event is honest", (await db.doc(`events/${socialEventId}`).get()).data()?.attendeeCount === 1);
+  ok("rsvp: the user's offline Going state is recorded server-side",
+     ((await db.doc(`users/${sarah.uid}`).get()).data()?.rsvpEventIDs ?? []).includes(socialEventId));
+  r = await call("rsvpToEvent", { eventId: socialEventId, going: true }, sarah.idToken);
+  ok("rsvp: repeating is idempotent (count stays 1)", r.result?.changed === false && r.result?.attendeeCount === 1);
+  const qNotifs = await db.collection(`users/${quinn.uid}/notifications`).where("kind", "==", "friend-rsvp").get();
+  ok("rsvp: a friend who SAVED the event is notified", qNotifs.size === 1 && qNotifs.docs[0].data().actorUid === sarah.uid && qNotifs.docs[0].data().eventId === socialEventId,
+     JSON.stringify(qNotifs.docs.map((d) => d.data())));
+  const sNotifs = await db.collection(`users/${stranger.uid}/notifications`).get();
+  ok("rsvp: a stranger who did not save it hears nothing", sNotifs.empty);
+  const act = await db.collection("activity").where("actorUid", "==", sarah.uid).where("kind", "==", "rsvp").get();
+  ok("rsvp: an activity row is written for the friends feed", act.size === 1 && act.docs[0].data().eventId === socialEventId);
+
+  // Rules on attendee records.
+  let acode;
+  try { await setDoc(doc(sarah.fdb, `events/${socialEventId}/attendees/${sarah.uid}`), { uid: sarah.uid }); acode = "ok"; } catch (e) { acode = e.code; }
+  ok("rules: a client cannot write even its OWN attendee document", acode === "permission-denied", `got ${acode}`);
+  try { await setDoc(doc(quinn.fdb, `events/${socialEventId}/attendees/${sarah.uid}`), { uid: sarah.uid }); acode = "ok"; } catch (e) { acode = e.code; }
+  ok("rules: a client cannot write another user's attendee document", acode === "permission-denied", `got ${acode}`);
+  try { await deleteDoc(doc(quinn.fdb, `events/${socialEventId}/attendees/${sarah.uid}`)); acode = "ok"; } catch (e) { acode = e.code; }
+  ok("rules: a client cannot delete another user's RSVP", acode === "permission-denied", `got ${acode}`);
+  try { acode = (await getDoc(doc(quinn.fdb, `events/${socialEventId}/attendees/${sarah.uid}`))).exists() ? "ok" : "missing"; } catch (e) { acode = e.code; }
+  ok("rules: a friend Sarah follows CAN read her RSVP", acode === "ok", `got ${acode}`);
+  try { await getDoc(doc(stranger.fdb, `events/${socialEventId}/attendees/${sarah.uid}`)); acode = "ok"; } catch (e) { acode = e.code; }
+  ok("rules: a stranger CANNOT read a friends-only RSVP", acode === "permission-denied", `got ${acode}`);
+  try { await getDocs(collection(quinn.fdb, `events/${socialEventId}/attendees`)); acode = "ok"; } catch (e) { acode = e.code; }
+  ok("rules: nobody can LIST attendees (friendsGoing is the only window)", acode === "permission-denied", `got ${acode}`);
+
+  // ── Friends going ──
+  r = await call("friendsGoing", { eventIds: [socialEventId] }, quinn.idToken);
+  const fg = r.result?.events?.[socialEventId];
+  ok("friendsGoing: Quinn sees Sarah (mutual follow) with count 1", fg?.count === 1 && fg?.friends?.[0]?.uid === sarah.uid && fg.friends[0].initials === "SP", JSON.stringify(r.result));
+  r = await call("friendsGoing", { eventIds: [socialEventId] }, stranger.idToken);
+  ok("friendsGoing: a stranger sees 0 (not a friend)", r.result?.events?.[socialEventId]?.count === 0, JSON.stringify(r.result));
+  // One-way follow + friends-only privacy: Sarah must follow the viewer for her RSVP to show.
+  const oneway = await mk("oneway");
+  await call("followUser", { targetId: sarah.uid, kind: "user" }, oneway.idToken);
+  r = await call("friendsGoing", { eventIds: [socialEventId] }, oneway.idToken);
+  ok("friendsGoing: a one-way follower does NOT see a friends-only RSVP", r.result?.events?.[socialEventId]?.count === 0, JSON.stringify(r.result));
+  await db.doc(`users/${sarah.uid}`).set({ activityPrivacy: "public" }, { merge: true });
+  await call("rsvpToEvent", { eventId: socialEventId, going: false }, sarah.idToken);
+  await call("rsvpToEvent", { eventId: socialEventId, going: true }, sarah.idToken);   // re-stamps visibility
+  r = await call("friendsGoing", { eventIds: [socialEventId] }, oneway.idToken);
+  ok("friendsGoing: once Sarah is public, her follower sees her", r.result?.events?.[socialEventId]?.count === 1, JSON.stringify(r.result));
+  // Blocks win over everything, in both directions.
+  const viewer = await mk("viewer");
+  await call("followUser", { targetId: sarah.uid, kind: "user" }, viewer.idToken);
+  r = await call("friendsGoing", { eventIds: [socialEventId] }, viewer.idToken);
+  ok("friendsGoing: viewer sees public Sarah before any block", r.result?.events?.[socialEventId]?.count === 1);
+  await setDoc(doc(viewer.fdb, `users/${viewer.uid}/blocks/${sarah.uid}`), { uid: sarah.uid, createdAt: serverTimestamp() });
+  r = await call("friendsGoing", { eventIds: [socialEventId] }, viewer.idToken);
+  ok("friendsGoing: after blocking Sarah, her RSVP is invisible to the blocker", r.result?.events?.[socialEventId]?.count === 0);
+  try { await getDoc(doc(viewer.fdb, `events/${socialEventId}/attendees/${sarah.uid}`)); acode = "ok"; } catch (e) { acode = e.code; }
+  ok("rules: a blocked-in-either-direction RSVP is unreadable even when public", acode === "permission-denied", `got ${acode}`);
+  await setDoc(doc(blocker.fdb, `users/${blocker.uid}/blocks/${quinn.uid}`), { uid: quinn.uid, createdAt: serverTimestamp() });
+  r = await call("rsvpToEvent", { eventId: socialEventId, going: true }, blocker.idToken);
+  ok("rsvp: the blocker can still RSVP to a public listing", r.result?.going === true);
+  r = await call("friendsGoing", { eventIds: [socialEventId] }, quinn.idToken);
+  ok("friendsGoing: the blocked side never sees the blocker's RSVP (Quinn sees only Sarah)",
+     r.result?.events?.[socialEventId]?.count === 1 && r.result.events[socialEventId].friends.every((f) => f.uid !== blocker.uid), JSON.stringify(r.result));
+
+  // ── Invites ──
+  r = await call("inviteToEvent", { eventId: socialEventId, toUids: [quinn.uid, stranger.uid], message: "Come with me!" }, sarah.idToken);
+  ok("invite: delivered to a friend, skipped for a non-friend",
+     r.result?.delivered?.includes(quinn.uid) && r.result?.skipped?.includes(stranger.uid), JSON.stringify(r.result));
+  const invId = `${socialEventId}_${sarah.uid}`;
+  const inv = (await db.doc(`users/${quinn.uid}/invites/${invId}`).get()).data();
+  ok("invite: durable invite row is pending with the sender and message", inv?.status === "pending" && inv?.fromUid === sarah.uid && inv?.message === "Come with me!", JSON.stringify(inv));
+  const invNotif = await db.collection(`users/${quinn.uid}/notifications`).where("kind", "==", "invite").get();
+  ok("invite: recipient is notified with the inviteId to act on", invNotif.size === 1 && invNotif.docs[0].data().inviteId === invId, JSON.stringify(invNotif.docs.map((d) => d.data())));
+  try { acode = (await getDoc(doc(quinn.fdb, `users/${quinn.uid}/invites/${invId}`))).exists() ? "ok" : "missing"; } catch (e) { acode = e.code; }
+  ok("rules: recipient can read their invite", acode === "ok", `got ${acode}`);
+  try { await getDoc(doc(stranger.fdb, `users/${quinn.uid}/invites/${invId}`)); acode = "ok"; } catch (e) { acode = e.code; }
+  ok("rules: others cannot read someone's invites", acode === "permission-denied", `got ${acode}`);
+  try { await setDoc(doc(stranger.fdb, `users/${quinn.uid}/invites/forged`), { eventId: socialEventId, fromUid: stranger.uid, status: "pending" }); acode = "ok"; } catch (e) { acode = e.code; }
+  ok("rules: a client cannot forge an invite", acode === "permission-denied", `got ${acode}`);
+  r = await call("inviteToEvent", { eventId: socialEventId, toUids: [quinn.uid] }, sarah.idToken);
+  ok("invite: the same invite is not sent twice", r.result?.skipped?.includes(quinn.uid) && !r.result?.delivered?.length);
+  // Round-trip: Quinn RSVPs from the invite → invite accepted, Sarah told.
+  r = await call("rsvpToEvent", { eventId: socialEventId, going: true }, quinn.idToken);
+  ok("invite → rsvp: recipient RSVPs", r.result?.going === true);
+  ok("invite → rsvp: invite flips to accepted", (await db.doc(`users/${quinn.uid}/invites/${invId}`).get()).data()?.status === "accepted");
+  const accepted = await db.collection(`users/${sarah.uid}/notifications`).where("kind", "==", "invite-accepted").get();
+  ok("invite → rsvp: the inviter is told their friend is going", accepted.size === 1 && accepted.docs[0].data().actorUid === quinn.uid);
+  // Declining.
+  r = await call("inviteToEvent", { eventId: socialEventId, toUids: [sarah.uid] }, quinn.idToken);
+  r = await call("respondToInvite", { inviteId: `${socialEventId}_${quinn.uid}` }, sarah.idToken);
+  ok("invite: recipient can decline", r.result?.status === "declined" && (await db.doc(`users/${sarah.uid}/invites/${socialEventId}_${quinn.uid}`).get()).data()?.status === "declined");
+
+  // ── Notifications rules ──
+  const nDoc = qNotifs.docs[0].ref.path;
+  let ncode = await (async () => { try { await updateDoc(doc(quinn.fdb, nDoc), { read: true }); return "ok"; } catch (e) { return e.code; } })();
+  ok("rules: owner can mark a notification read", ncode === "ok", `got ${ncode}`);
+  ncode = await (async () => { try { await updateDoc(doc(quinn.fdb, nDoc), { title: "spoofed" }); return "ok"; } catch (e) { return e.code; } })();
+  ok("rules: owner cannot rewrite a notification's content", ncode === "permission-denied", `got ${ncode}`);
+  try { await getDoc(doc(stranger.fdb, nDoc)); ncode = "ok"; } catch (e) { ncode = e.code; }
+  ok("rules: others cannot read your notifications", ncode === "permission-denied", `got ${ncode}`);
+
+  // ── Un-RSVP + unavailable events ──
+  r = await call("rsvpToEvent", { eventId: socialEventId, going: false }, quinn.idToken);
+  ok("rsvp: un-going removes the record and decrements the count",
+     r.result?.going === false && r.result?.changed === true && !(await db.doc(`events/${socialEventId}/attendees/${quinn.uid}`).get()).exists
+     && !((await db.doc(`users/${quinn.uid}`).get()).data()?.rsvpEventIDs ?? []).includes(socialEventId), JSON.stringify(r));
+  await db.doc(`events/${socialEventId}`).set({ active: false }, { merge: true });
+  r = await call("rsvpToEvent", { eventId: socialEventId, going: true }, stranger.idToken);
+  ok("rsvp: an inactive (cancelled) event cannot be RSVP'd", r.error?.status === "FAILED_PRECONDITION", JSON.stringify(r));
+  await db.doc(`events/${socialEventId}`).set({ active: true }, { merge: true });
+  r = await call("rsvpToEvent", { eventId: "does-not-exist" }, stranger.idToken);
+  ok("rsvp: unknown event → not found", r.error?.status === "NOT_FOUND");
+  r = await call("rsvpToEvent", { eventId: { toString: "x" } }, stranger.idToken);
+  ok("rsvp: hostile input is rejected, not crashed", r.error?.status === "INVALID_ARGUMENT", JSON.stringify(r));
 
   console.log(`\n══ ${passed} passed, ${failed} failed ══`);
   process.exit(failed > 0 ? 1 : 0);
