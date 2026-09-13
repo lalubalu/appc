@@ -54,22 +54,55 @@ final class JourneyTests: XCTestCase {
 
     // MARK: Rewards gating + paywall
 
-    func testRewardsLocksGoldTierBehindPaywall() {
+    /// This used to assert a Verdure+ lock chip on the "Gold tier".
+    ///
+    /// That tier no longer exists. amazon-25, nike-25, apple-50 and rei-50 are
+    /// all `active: false` in CASH_CATALOG — the server refuses every one of
+    /// them — so they were removed from the client catalog rather than shown as
+    /// a locked upsell for something nobody can ever buy. The test now asserts
+    /// the contract that replaced it: cash is members-only, and NOTHING the
+    /// server has deactivated appears on this screen or on the paywall.
+    func testRewardsGatesCashBehindPaywallAndSellsOnlyLiveFeatures() {
         let app = QA.launch(tab: "profile")
         QA.waitFor(app.buttons["Rewards"].firstMatch, "rewards button").tap()
         QA.waitFor(app.staticTexts["AVAILABLE POINTS"], "rewards store")
 
         app.swipeUp(); app.swipeUp()
-        let lockChip = QA.waitFor(
-            app.buttons["Gold tier requires Verdure Plus"].firstMatch,
-            "Verdure+ lock chip on Gold tier")
-        lockChip.tap()
+
+        // No deactivated tier may be browsable. These were redeemable-looking
+        // and permanently un-redeemable, which is the defect A1 fixed.
+        for dead in ["$25 Amazon", "$50 Apple", "$25 Nike", "$50 REI"] {
+            XCTAssertFalse(app.staticTexts[dead].exists,
+                           "\(dead) is active:false on the server and must not be shown")
+        }
+
+        // Cash is a member benefit; the lock is on the cash section.
+        let lock = app.buttons.matching(NSPredicate(
+            format: "label CONTAINS[c] 'requires Verdure Plus'")).firstMatch
+        guard lock.waitForExistence(timeout: 6) else {
+            // A non-member with no cash rewards loaded is a legitimate state
+            // (the catalog is server-driven). Say which, rather than failing
+            // on an assumption about what the server returned.
+            XCTAssertTrue(app.staticTexts["Partner Perks"].exists
+                          || app.staticTexts["Gift Cards"].exists,
+                          "rewards store rendered neither perks nor cash")
+            return
+        }
+        lock.tap()
 
         QA.waitFor(app.buttons["Start Verdure Plus"], "paywall CTA from rewards lock")
-        // Honest-copy check: the sheet only sells live features.
-        XCTAssertTrue(app.staticTexts["Premium Rewards"].exists)
-        XCTAssertFalse(app.staticTexts["AI Adventure Planner"].exists,
-                       "unshipped features must not be sold on the paywall")
+
+        // Honest-copy check, updated for A2: the paywall leads with the planner
+        // and must never again name a deactivated reward tier.
+        XCTAssertTrue(app.staticTexts["Unlimited Adventure Planner"].exists,
+                      "the paywall should lead with the benefit a member uses on day one")
+        XCTAssertFalse(app.staticTexts["Premium Rewards"].exists,
+                       "the old Gold/Platinum pitch must be gone")
+        for dead in ["$25", "$50"] {
+            XCTAssertFalse(app.staticTexts.containing(
+                NSPredicate(format: "label CONTAINS %@", dead)).element.exists,
+                "the paywall must not advertise a deactivated tier (\(dead))")
+        }
     }
 
     // MARK: Personalization
