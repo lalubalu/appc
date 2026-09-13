@@ -26,3 +26,14 @@ updates:
         update-types:
           - "minor"
           - "patch"
+
+  # The workflow in ci.yml pins third-party actions by major version, so a
+  # compromised or abandoned action is a supply-chain path into CI that npm
+  # alerting cannot see. Monthly rather than weekly: this list is three actions
+  # long and moves slowly, and security advisories still arrive immediately
+  # regardless of the interval.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 3

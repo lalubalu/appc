@@ -27,10 +27,22 @@ const manrope = Manrope({
 
 // Display voice — Cormorant Garamond: a high-contrast editorial serif with
 // elegant thin strokes and classical proportions.
+//
+// `style` is deliberately absent, which means normal only. It used to request
+// ["normal", "italic"] and nothing on the site has ever set font-style: italic
+// — the single occurrence of the word in src/ is a Tailwind `not-italic` that
+// switches it OFF. next/font emits a @font-face set per style, and Next
+// preloads them, so the italic set was 129 KB shipped and 38 KB fetched at high
+// priority on every route to render zero glyphs. It also doubled the @font-face
+// blocks in the critical CSS.
+//
+// The weights are free by comparison: Cormorant resolves to a variable font, so
+// all four map onto the same file and cost nothing extra. Styles are the axis
+// that actually multiplies downloads. If italic copy is ever wanted, add it back
+// here — but add it in the same change that uses it.
 const cormorant = Cormorant_Garamond({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
-  style: ["normal", "italic"],
   variable: "--font-display",
   display: "swap",
 });
@@ -45,7 +57,13 @@ export const metadata: Metadata = {
     // The tagline alone said nothing a person would ever search for. The
     // default title now carries what the app is; the tagline keeps its place
     // on the share cards and in the opening copy.
-    default: "Verdure — Explore Local Places Near You, Every Day",
+    //
+    // Phrase first, brand second. This led with "Verdure —", which spends the
+    // most heavily weighted characters of the title on a term with essentially
+    // no search volume: nobody looks for an app that has not launched by name.
+    // The words someone might actually type now come first, and the brand still
+    // closes the line for anyone who already knows it.
+    default: "Explore Local Places Near You, Every Day — Verdure",
     // Sub-pages set the page name only: "Pricing" renders as
     // "Pricing · Verdure".
     template: "%s · Verdure",

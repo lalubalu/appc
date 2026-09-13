@@ -35,6 +35,7 @@ import {
   db, inEmulator, requireUid, enforceRateLimit, assertNotSuspended,
   safeString, safeText, safeBool, isBlockedEitherWay, docIdFrom,
 } from "./common.js";
+import { mayPush } from "./notifications.js";
 
 const MAX_INVITES_PER_CALL = 20;
 const MAX_FRIENDS_GOING_EVENTS = 50;
@@ -225,6 +226,11 @@ export const rsvpToEvent = onCall(async (req) => {
       // The saver must count me as a friend; my RSVP must be visible to them.
       if (!(await follows(target, uid))) continue;
       if (me.visibility === "friends" && !(await follows(uid, target))) continue;
+      // Preferences, quiet hours and the 2/week push cap. The privacy checks
+      // above stay here because they are specific to RSVP visibility; mayPush
+      // owns only the things every discretionary push shares. A true result has
+      // already spent a budget slot, so it must be the last check before send.
+      if (!(await mayPush(target, "friend_activity"))) continue;
       await notify(target, {
         kind: "friend-rsvp", actorUid: uid, eventId,
         title: `${me.displayName} is going`,

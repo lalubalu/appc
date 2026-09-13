@@ -81,6 +81,17 @@ final class NotificationManager {
         await PushService.shared.requestAuthorizationAndRegister()
     }
 
+    /// Has iOS already been asked? Distinct from `permissionGranted`: a user
+    /// who DENIED is "determined" but not granted, and re-prompting them shows
+    /// nothing at all — so the primer must not appear for either answer.
+    nonisolated static func authorizationDetermined() async -> Bool {
+        await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
+            UNUserNotificationCenter.current().getNotificationSettings { settings in
+                cont.resume(returning: settings.authorizationStatus != .notDetermined)
+            }
+        }
+    }
+
     func refreshPermissionStatus() {
         // Read the status off-actor (UNNotificationSettings isn't Sendable, and the
         // completion fires on a background queue), then hop back with just a Bool.

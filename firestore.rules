@@ -178,6 +178,18 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      // ── Suggestion ledger: /users/{userId}/suggestedEvents/{eventId} ──
+      // What the digest has already pushed, and what the user dismissed. The
+      // owner may READ it (so the UI can grey out a dismissed suggestion) but
+      // never write: a client that could delete these rows could make the
+      // digest re-notify about the same event every run, which is precisely
+      // the behaviour the ledger exists to prevent. Dismissal goes through the
+      // dismissSuggestion callable.
+      match /suggestedEvents/{eventId} {
+        allow read: if isOwner(userId);
+        allow write: if false;
+      }
+
       // ── Notifications: /users/{userId}/notifications/{id} ──
       // Server-created. The owner may mark them read and delete them.
       match /notifications/{notificationId} {
@@ -471,13 +483,42 @@ service cloud.firestore {
         // keyed yyyy-mm. Listed here for the reason spelled out above — the
         // moment the server stamps a key this list doesn't know, hasOnly()
         // starts failing and the user can never write their own doc again.
-        'plannerUsage'
+        'plannerUsage',
+        // Notification settings (client-writable via the callable, and readable
+        // here) and the server-owned weekly push budget. Same allowlist hazard
+        // as every line above it.
+        'notificationPrefs', 'notifyBudget',
+        // Last known coarse location + area, used by the digest to rank without
+        // asking the device while it is asleep.
+        'areaId', 'lastLat', 'lastLng'
       ];
       let noExtraFields = data.keys().hasOnly(allowedFields);
 
       return validDisplayName && validEmail && validInterests
           && validLastUpdated && validCreatedAt && validFcmTokens && noExtraFields
-          && validSocialFields(data);
+          && validSocialFields(data) && validNotificationPrefs(data);
+    }
+
+    // Notification settings are the user's own choice, so the client may write
+    // them directly as well as through setNotificationPrefs — but only in a
+    // shape the digest can actually read. An out-of-range quiet hour would make
+    // inQuietHours() behave unpredictably for that account.
+    function validNotificationPrefs(data) {
+      return !('notificationPrefs' in data) || (
+        data.notificationPrefs is map
+        && data.notificationPrefs.keys().hasOnly(
+             ['eventSuggestions', 'friendActivity', 'quietStart', 'quietEnd', 'timeZone'])
+        && (!('eventSuggestions' in data.notificationPrefs) || data.notificationPrefs.eventSuggestions is bool)
+        && (!('friendActivity' in data.notificationPrefs) || data.notificationPrefs.friendActivity is bool)
+        && (!('quietStart' in data.notificationPrefs) ||
+            (data.notificationPrefs.quietStart is int
+             && data.notificationPrefs.quietStart >= 0 && data.notificationPrefs.quietStart <= 23))
+        && (!('quietEnd' in data.notificationPrefs) ||
+            (data.notificationPrefs.quietEnd is int
+             && data.notificationPrefs.quietEnd >= 0 && data.notificationPrefs.quietEnd <= 23))
+        && (!('timeZone' in data.notificationPrefs) ||
+            (data.notificationPrefs.timeZone is string && data.notificationPrefs.timeZone.size() <= 64))
+      );
     }
 
     function validSocialFields(data) {
@@ -599,7 +640,11 @@ service cloud.firestore {
                    // Planner quota — a client that could edit this would hand
                    // itself unlimited plans, which are billed per call to a
                    // paid vendor. This is the whole gate.
-                   'plannerUsage']);
+                   'plannerUsage',
+                   // The weekly push budget. A client that could reset it could
+                   // un-cap its own notifications; more importantly a malicious
+                   // one could not, because the cap protects the USER from us.
+                   'notifyBudget']);
     }
 
     // On create, server-owned fields must be absent or zero/empty — a fresh client

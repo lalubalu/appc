@@ -28,6 +28,27 @@ private enum AppTab: Int, CaseIterable {
 
 struct MainTabView: View {
     @State private var selected: AppTab
+    @State private var router = DeepLinkRouter.shared
+    @State private var deepLinkedEventId: BoxedID?
+    @State private var primerTrigger: NotificationPrimer.Trigger?
+    @Environment(GameStateManager.self) private var gameState
+
+    /// `sheet(item:)` needs an Identifiable; a bare String isn't one.
+    struct BoxedID: Identifiable, Equatable { let id: String }
+
+    /// Take whatever the router is holding and go there.
+    private func consumeDeepLink() {
+        guard let destination = router.claim() else { return }
+        switch destination {
+        case .event(let id):
+            selected = .events
+            deepLinkedEventId = BoxedID(id: id)
+        case .perk, .rewards:
+            selected = .collect
+        case .notifications:
+            selected = .profile
+        }
+    }
 
     init() {
         // QA hook (debug builds only): `-QATab collect` as a launch argument lands
@@ -73,6 +94,37 @@ struct MainTabView: View {
         }
         .tint(Palette.spruce.base)
         .ignoresSafeArea(edges: .bottom)
+        // Deep links from a tapped notification.
+        //
+        // Claimed on appear (the COLD-LAUNCH case: the tap was handled before
+        // this view existed, and the destination has been waiting) and also
+        // watched while running, so a tap taken with the app already open lands
+        // just the same. `claim()` is idempotent, so the two paths cannot both
+        // navigate for one tap.
+        .onAppear { consumeDeepLink() }
+        .onChange(of: router.pending) { _, _ in consumeDeepLink() }
+        .sheet(item: $deepLinkedEventId) { boxed in
+            EventDeepLinkSheet(eventId: boxed.id)
+        }
+        // C3: permission priming, hosted here so any screen can trigger it by
+        // setting the flag. Gated twice — a trigger must have fired AND iOS must
+        // not already have been asked, because a second requestAuthorization
+        // returns instantly without showing anything, so re-priming someone who
+        // already answered is a sheet that leads nowhere.
+        .sheet(item: $primerTrigger) { trigger in
+            NotificationPrimer(trigger: trigger)
+                .presentationDetents([.height(480)])
+        }
+        .onChange(of: gameState.pendingNotificationPrimer) { _, trigger in
+            guard let trigger else { return }
+            gameState.pendingNotificationPrimer = nil
+            Task {
+                let determined = await NotificationManager.authorizationDetermined()
+                if NotificationPrimer.shouldPrime(authorizationDetermined: determined) {
+                    primerTrigger = trigger
+                }
+            }
+        }
     }
 }
 

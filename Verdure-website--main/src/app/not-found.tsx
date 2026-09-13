@@ -5,6 +5,10 @@ export const metadata: Metadata =
 {
   // The root layout's title template appends "· Verdure".
   title: "Lost on the trail",
+  // Its own line rather than the inherited SITE_DESCRIPTION, which described
+  // the product to someone who had just failed to find a page.
+  description:
+    "That page isn't here. Head back to the trail — or read why Verdure exists.",
   // A 404 already answers with a 404 status, but Next serves this component
   // for any unmatched path and a stray crawl of one shouldn't bank a soft
   // 404 against the site.

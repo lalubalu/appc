@@ -14,9 +14,22 @@ type Bucket = {
   // Kept so eviction can tell a bucket that is actively blocking somebody
   // from one that is merely occupying space. See evict().
   limit: number;
+  // Creation order, as a monotonic counter rather than a timestamp.
+  //
+  // Two reasons it is not Date.now(). Window lengths differ per namespace
+  // (waitlist 10min, login 15min, identity 1min) so resetAt compares clocks
+  // that started at different times; and a flood mints thousands of buckets
+  // inside a single millisecond, so wall-clock ties en masse and the sort falls
+  // back to insertion order — which is the exact failure this replaced. A
+  // counter cannot tie.
+  seq: number;
 };
 
 let BUCKETS = new Map<string, Bucket>();
+
+// Incremented once per bucket creation. Number.MAX_SAFE_INTEGER at a sustained
+// million creations a second is ~285 years, so wraparound is not a case.
+let SEQ = 0;
 
 // A ceiling so a flood of distinct keys cannot grow the map without bound.
 let MAX_BUCKETS = 10_000;
@@ -39,16 +52,43 @@ export type RateLimitResult = {
 // oldest means longest-established, so a flood of fresh keys evicted exactly
 // the limits that had been earned — measured, and it failed the test.
 //
-// Sorting by CONSUMED FRACTION fixes both: a flood arrives as count=1 buckets
-// and evicts itself first.
+// Sorting by CONSUMED FRACTION was the third attempt, and it was wrong in a way
+// the test could not see. It ordered a flood of count=1 buckets (fraction 0.2)
+// below an established bucket, which is right — but only because that flood is
+// cheap. Flood with SATURATED keys instead (5 hits each, fraction 1.0) and every
+// entry ties at 1.0, Array.sort is stable, and a tie among equals is broken by
+// insertion order: the longest-established bucket goes first. That is precisely
+// the victim. Measured — a fully-consumed bucket was evicted, and a 40/60
+// identity budget came back with a fresh 60, the reset this whole function
+// exists to deny. The committed regression missed it because both of its floods
+// used count=1 keys, so the tie case was never exercised.
 //
-// Fraction rather than absolute headroom, which is what this compared at
-// first. Namespaces have different limits — waitlist 5, login 10, signout 20,
-// identity 60 — so absolute headroom is dominated by whichever policy has the
-// largest limit, regardless of how heavily it is being used. The identity
-// limiter therefore sat at the top of the eviction order by construction and
-// was the first thing discarded under any memory pressure, attacker-driven or
-// organic: the newest control shed first. count/limit compares like with like.
+// Age alone does not fix it either, and it fails in a way worth recording: with
+// newest-first, an attacker floods 10k junk keys FIRST, so the pile of stale
+// buckets is older than the victim's, and the victim is then the newest thing in
+// the map and evicted by the next round. Tested, and it failed exactly there.
+//
+// The question eviction is actually answering is: how much does dropping this
+// bucket GIVE BACK? Resetting a bucket hands the attacker precisely `count`
+// fresh attempts and nothing else. So evict the smallest count first. That is
+// the cheapest thing to lose by definition, and it holds in every shape the
+// other policies broke on:
+//
+//   flood of count=1 keys   count 1   evicted first, as before
+//   saturated flood keys    count 5   evicted before anything better established
+//   a blocked waitlist IP   count 5   ties with the flood, broken by seq below
+//   a 40/60 identity budget count 40  kept last, though its FRACTION is lowest
+//
+// That last row is the one consumed-fraction got backwards: 40/60 = 0.67 sorts
+// below a saturated 5/5 = 1.0, so fraction sheds the identity budget first and
+// returns a full 60 — while count correctly sees that it is holding back four
+// times more than any flood key is.
+//
+// seq DESCENDING breaks ties, so between two buckets that would give back the
+// same amount the newer one goes. A flood's keys are new; an earned limit is
+// not. And it cannot be turned around on its owner, because evict() only runs
+// from the create path (see rateLimit below): every key an attacker mints to
+// drive eviction is itself newer than the bucket they are trying to reset.
 function evict(now: number): void
 {
   let expired: string[] = [];
@@ -74,21 +114,23 @@ function evict(now: number): void
     return;
   }
 
-  // Everything is live. Evict least-consumed first, so a bucket at 1/5 goes
-  // before one at 40/60 and a blocking bucket (1.0) goes last of all.
-  let consumed = function (bucket: Bucket): number
-  {
-    return bucket.limit > 0 ? bucket.count / bucket.limit : 1;
-  };
-
-  let byConsumed = Array.from(BUCKETS.entries())
+  // Everything is live. Cheapest-to-lose first: fewest attempts handed back,
+  // and among equals the most recent arrival.
+  let byCost = Array.from(BUCKETS.entries())
     .slice()
     .sort(function (a, b)
     {
-      return consumed(a[1]) - consumed(b[1]);
+      if (a[1].count !== b[1].count)
+      {
+        return a[1].count - b[1].count;
+      }
+
+      // seq is unique per bucket, so this decides every remaining tie and the
+      // result never depends on the sort being stable.
+      return b[1].seq - a[1].seq;
     });
 
-  byConsumed.slice(0, Math.ceil(MAX_BUCKETS / 10)).forEach(function (entry)
+  byCost.slice(0, Math.ceil(MAX_BUCKETS / 10)).forEach(function (entry)
   {
     BUCKETS.delete(entry[0]);
   });
@@ -120,7 +162,8 @@ export function rateLimit(
       evict(now);
     }
 
-    BUCKETS.set(key, { count: 1, resetAt: now + windowMs, limit });
+    SEQ = SEQ + 1;
+    BUCKETS.set(key, { count: 1, resetAt: now + windowMs, limit, seq: SEQ });
     return { ok: true, retryAfterSeconds: 0 };
   }
 
@@ -132,6 +175,14 @@ export function rateLimit(
     };
   }
 
-  BUCKETS.set(key, { count: bucket.count + 1, resetAt: bucket.resetAt, limit });
+  // seq carries over deliberately. Reassigning it on every hit would make the
+  // most heavily used bucket look like the newest arrival, and eviction would
+  // then shed exactly the limits doing the most work.
+  BUCKETS.set(key, {
+    count: bucket.count + 1,
+    resetAt: bucket.resetAt,
+    limit,
+    seq: bucket.seq,
+  });
   return { ok: true, retryAfterSeconds: 0 };
 }

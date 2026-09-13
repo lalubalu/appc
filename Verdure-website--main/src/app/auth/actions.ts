@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { rateLimit } from "@/lib/security/rate-limit";
 import { clientIp } from "@/lib/security/request-ip";
 import { safeInternalPath } from "@/lib/security/safe-path";
-import { SITE_URL } from "@/lib/seo";
+import { getSiteUrl } from "@/lib/site-url";
 
 // Shape returned to the client form via useActionState.
 export type AuthState = {
@@ -81,44 +81,10 @@ let SAFE_SIGNUP_ERRORS = new Map([
   ["over_request_rate_limit", TOO_MANY_ATTEMPTS],
 ]);
 
-// Absolute origin for the confirmation link we ask Supabase to email.
-//
-// The old fallback was a bare "http://localhost:3000", which is a live footgun
-// rather than a default: forget the env var on the deployment and every
-// confirmation email points a new user at their own machine, so no account can
-// ever be confirmed and the failure is invisible from the server side. In
-// production the canonical host — the same constant the canonicals and JSON-LD
-// already use — is always a better guess than a loopback address.
-function getSiteUrl(): string
-{
-  let configured = process.env.NEXT_PUBLIC_SITE_URL;
-
-  if (configured)
-  {
-    return configured;
-  }
-
-  // NODE_ENV is "production" for Vercel PREVIEW builds too, so falling back to
-  // the canonical host here would have a preview signup email a confirmation
-  // link pointing at production — confirming an account against a different
-  // deployment than the one being tested. VERCEL_ENV distinguishes them, and
-  // VERCEL_URL is the deployment's own hostname.
-  if (process.env.VERCEL_ENV === "preview" && process.env.VERCEL_URL)
-  {
-    return "https://" + process.env.VERCEL_URL;
-  }
-
-  if (process.env.NODE_ENV === "production")
-  {
-    console.error(
-      "[auth] NEXT_PUBLIC_SITE_URL is not set; falling back to the canonical " +
-        "host for email links. Set it on this deployment."
-    );
-    return SITE_URL;
-  }
-
-  return "http://localhost:3000";
-}
+// Absolute origin for the confirmation link we ask Supabase to email. Moved to
+// lib/site-url.ts so /auth/callback can share it: this file is "use server", so
+// it can only export async functions, and the callback route was left deriving
+// its own origin from the request's Host header as a result.
 
 // Only allow same-site relative redirect targets to avoid open-redirects.
 // The parse-based check lives in lib/security/safe-path.ts; the previous

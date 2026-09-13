@@ -130,10 +130,26 @@ extension PushService: UNUserNotificationCenterDelegate {
         let content = response.notification.request.content
         let title = content.title
         let body = content.body
+        // Pull the two Strings we need OUT of userInfo here, on the delegate's
+        // own isolation. `[AnyHashable: Any]` is not Sendable, so passing the
+        // dictionary across to the main actor is a data race the compiler will
+        // (correctly) refuse.
+        let deepLink = content.userInfo["deepLink"] as? String
+        let eventId = content.userInfo["eventId"] as? String
         await MainActor.run {
             NotificationManager.shared.push(
                 AppNotification(kind: .community, title: title, message: body, timeAgo: "now")
             )
+            // Route to what the push advertised.
+            //
+            // This fires on COLD LAUNCH too — iOS delivers the tap before
+            // SwiftUI has built a view — so the router holds the destination
+            // rather than broadcasting it, and MainTabView claims it when it
+            // appears. Broadcasting here would drop precisely the taps that
+            // launched the app, silently, and only on device.
+            if let destination = DeepLinkRouter.destination(deepLink: deepLink, eventId: eventId) {
+                DeepLinkRouter.shared.handle(destination)
+            }
         }
     }
 }

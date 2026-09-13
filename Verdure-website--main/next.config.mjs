@@ -24,9 +24,16 @@ let now = new Date();
 let stamp = shortSha + " · " + two(now.getMonth() + 1) + "." + two(now.getDate());
 
 // Security headers that are the same on every request. The one header that
-// cannot live here is Content-Security-Policy: it carries a per-request nonce
-// for Next's inline hydration scripts, so it is built in middleware instead
-// (src/lib/security/csp.ts).
+// cannot live here is Content-Security-Policy: it differs between development
+// and production (dev needs 'unsafe-eval' and a websocket for HMR), so it is
+// built per-request in middleware instead — see src/lib/security/csp.ts.
+//
+// That file, not this comment, is the authority on what the policy contains.
+// This said the CSP "carries a per-request nonce", which it does not and cannot:
+// every page here is statically prerendered, so there is no per-request render
+// in which to stamp a nonce onto the inline hydration scripts. csp.ts explains
+// the trade in full. Stale comments about a security control are worse than no
+// comment — this one described a defense the site does not have.
 //
 // geolocation is scoped rather than blanket-denied on purpose. Verdure is a
 // place-based product and the web surface will need to ask for location; this

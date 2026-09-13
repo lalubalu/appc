@@ -2,8 +2,11 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { getSupabaseAnonKey, getSupabaseUrl, hasSupabaseEnv } from "./env";
 import { hardenCookie } from "./cookies";
-import { canSpendIdentityLookup } from "@/lib/security/identity-budget";
-import { normalizeIp } from "@/lib/security/ip";
+import {
+  canSpendIdentityLookup,
+  type IdentityPurpose,
+} from "@/lib/security/identity-budget";
+import { resolveClientIp } from "@/lib/security/ip";
 
 // Routes that require an authenticated user. Unauthenticated visitors are
 // bounced to /login; the original path is preserved as ?redirect=.
@@ -18,6 +21,20 @@ let AUTH_PREFIXES = ["/login", "/signup"];
 // CHARGE for it, because the budget has to be spent in one runtime to be one
 // budget. See the identity-budget block below.
 let SESSION_PROBE_PATH = "/auth/session";
+
+// The PKCE exchange. Same shape as the probe — it reaches Supabase Auth on its
+// own (exchangeCodeForSession), so it is charged here and not looked up here.
+//
+// It was missed when the budget was written, and the miss was the same bug the
+// budget exists to fix, one route over: /auth/callback matches neither
+// PROTECTED_PREFIXES nor AUTH_PREFIXES, so it took the early return below and
+// was never charged at all. Anyone who signs up once keeps their verifier
+// cookie — auth-js does not clear it when the exchange fails — and can then
+// replay GET /auth/callback?code=junk forever, one outbound Supabase Auth call
+// per request, unauthenticated. Those calls leave from the deployment's egress
+// address, so what they exhaust is the project-wide token_verifications limit
+// that real users need to confirm their email.
+let AUTH_CALLBACK_PATH = "/auth/callback";
 
 // Next parses these off the inbound request when it is working out a CSP
 // nonce, and GHSA-ffhc-5mcf-pf4q (Next < 15.5.16) could reflect a malformed
@@ -35,16 +52,19 @@ function startsWithAny(pathname: string, prefixes: string[]): boolean
   });
 }
 
-// Middleware runs before next/headers is available, so the address is read
-// off the request directly. Shares the parser with lib/security/request-ip.ts
-// so the two cannot disagree about what one client is.
+// Middleware runs before next/headers is available, so the address is read off
+// the request directly. Shares the whole resolver — not just the parser — with
+// lib/security/request-ip.ts, so the two cannot disagree about what one client
+// is. They previously shared only normalizeIp and had the header precedence
+// copied into both, which is drift waiting to happen: the identity budget is
+// charged here and spent there, and two rules for reading an address would have
+// made that one budget into two.
 function middlewareIp(request: NextRequest): string
 {
-  let forwarded = request.headers.get("x-forwarded-for") || "";
-  let first = forwarded.split(",").at(0);
-  let address = (first || request.headers.get("x-real-ip") || "unknown").trim();
-
-  return normalizeIp(address);
+  return resolveClientIp(function (name)
+  {
+    return request.headers.get(name);
+  });
 }
 
 // Refreshes the Supabase session on every request and enforces route access.
@@ -92,9 +112,13 @@ export async function updateSession(request: NextRequest)
   // The cost of skipping: a session no longer refreshes while someone reads
   // marketing pages. It refreshes the moment they touch /account or an auth
   // route, which is the only place a fresh session is required.
+  // Routes that reach Supabase Auth under their own steam. The middleware pays
+  // for them and then gets out of the way rather than spending a second call.
   let isSessionProbe = pathname === SESSION_PROBE_PATH;
+  let isAuthCallback = pathname === AUTH_CALLBACK_PATH;
+  let callsAuthItself = isSessionProbe || isAuthCallback;
 
-  if (!needsUser && !isSessionProbe)
+  if (!needsUser && !callsAuthItself)
   {
     return response;
   }
@@ -114,7 +138,16 @@ export async function updateSession(request: NextRequest)
   // counters of 60 is a budget of 120, and the test that proved it showed
   // 50 + 50 requests costing 100 lookups instead of 60. So the charge happens
   // here, in one runtime, and the route below trusts it.
-  if (!canSpendIdentityLookup(middlewareIp(request)))
+  // Which allowance this request draws on. Keeping them separate is what stops
+  // anonymous probe traffic from taking /account away from everyone sharing an
+  // egress address — see the note in lib/security/identity-budget.ts.
+  let purpose: IdentityPurpose = isSessionProbe
+    ? "probe"
+    : isAuthCallback
+      ? "exchange"
+      : "gate";
+
+  if (!canSpendIdentityLookup(middlewareIp(request), purpose))
   {
     // Over budget: refuse to spend a Supabase call. Every branch fails towards
     // "signed out", which costs a person one login rather than costing
@@ -125,6 +158,19 @@ export async function updateSession(request: NextRequest)
         { signedIn: false },
         { headers: { "Cache-Control": "no-store" } }
       );
+    }
+
+    // The exchange is refused without being attempted, which is the entire
+    // point of charging for it: the outbound call is what is being rationed, so
+    // "over budget" has to mean the request never reaches Supabase. The user
+    // sees the same failure a stale link gives them and can click it again.
+    if (isAuthCallback)
+    {
+      let callbackUrl = request.nextUrl.clone();
+      callbackUrl.pathname = "/login";
+      callbackUrl.search = "";
+      callbackUrl.searchParams.set("error", "auth_callback_failed");
+      return NextResponse.redirect(callbackUrl);
     }
 
     // A protected route falls back to the login redirect (fail closed); an
@@ -142,8 +188,9 @@ export async function updateSession(request: NextRequest)
 
   // Paid for; the Route Handler makes the call. Nothing further to do here —
   // running getUser() as well would double the outbound cost of the one route
-  // that is hit from every page.
-  if (isSessionProbe)
+  // that is hit from every page, and on the callback it would spend a lookup on
+  // a request whose whole purpose is to mint the session that lookup wants.
+  if (callsAuthItself)
   {
     return response;
   }

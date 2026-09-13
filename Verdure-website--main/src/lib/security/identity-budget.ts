@@ -29,16 +29,57 @@ import { rateLimit } from "./rate-limit";
 // It is still per-instance within that runtime — see the note at the top of
 // rate-limit.ts, which is honest about cold starts. This bounds the cheap,
 // single-source flood that actually happens; it is not a distributed quota.
-let IDENTITY_LOOKUP_LIMIT = 60;
+//
+// ONE BUDGET PER PURPOSE, not one budget per source, and the split is the fix
+// for a lockout the single shared bucket made possible. Exhaustion fails CLOSED
+// on a protected route and OPEN on an auth page, which is individually right and
+// jointly a loop: an attacker spending the whole budget on unauthenticated
+// GET /auth/session took /account away from every OTHER visitor sharing that
+// egress address — a corporate NAT, a campus, a CGNAT pool, an ISP /64. Those
+// visitors were bounced to /login, logged in successfully, were redirected back
+// to /account, and bounced again, for as long as the attacker kept spending
+// about one request a second. Cheap, and invisible: the Navbar probe fails the
+// same way, so the victim cannot even see that they are signed in.
+//
+// Separate keys mean the traffic an anonymous stranger can generate cannot
+// consume the allowance the signed-in visitor beside them needs. The aggregate
+// per-source ceiling rises from 60 to 130, which is the deliberate cost: a
+// single number that anyone can drain is not a smaller amplifier, it is a
+// smaller amplifier and a denial-of-service switch.
 let IDENTITY_LOOKUP_WINDOW_MS = 60 * 1000;
 
-// True when the caller may spend one identity lookup; false when the budget for
-// this source is exhausted. Callers MUST fail closed — answer from the cookie's
-// own untrusted state, or refuse — rather than calling Supabase anyway. Every
-// such fallback can only err towards treating somebody as signed out, which is
-// the direction that costs a person one login rather than costing everyone the
-// project's auth quota.
-export function canSpendIdentityLookup(ip: string): boolean
+// gate     the middleware's own getUser() for /account, /login and /signup.
+//          What a signed-in visitor actually needs, so it is protected from the
+//          other two.
+// probe    /auth/session, the Navbar's signed-in check. Fires on every page
+//          view, hence the same generous ceiling, and reachable with no cookie
+//          at all — which is exactly why it must not share with `gate`.
+// exchange /auth/callback's PKCE code exchange. Tight, because a real user
+//          clicks a confirmation link once or twice, while a replayed ?code is
+//          one outbound Supabase Auth call per request. Anything above single
+//          digits per minute from one source is not a person confirming email.
+let IDENTITY_LOOKUP_LIMITS = {
+  gate: 60,
+  probe: 60,
+  exchange: 10,
+};
+
+export type IdentityPurpose = keyof typeof IDENTITY_LOOKUP_LIMITS;
+
+// True when the caller may spend one identity lookup of this KIND; false when
+// that budget is exhausted for this source. Callers MUST fail closed — answer
+// from the cookie's own untrusted state, or refuse — rather than calling
+// Supabase anyway. Every such fallback can only err towards treating somebody as
+// signed out, which is the direction that costs a person one login rather than
+// costing everyone the project's auth quota.
+export function canSpendIdentityLookup(
+  ip: string,
+  purpose: IdentityPurpose
+): boolean
 {
-  return rateLimit("identity:" + ip, IDENTITY_LOOKUP_LIMIT, IDENTITY_LOOKUP_WINDOW_MS).ok;
+  return rateLimit(
+    "identity:" + purpose + ":" + ip,
+    IDENTITY_LOOKUP_LIMITS[purpose],
+    IDENTITY_LOOKUP_WINDOW_MS
+  ).ok;
 }

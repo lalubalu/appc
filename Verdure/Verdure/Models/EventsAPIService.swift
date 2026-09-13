@@ -98,6 +98,24 @@ final class EventsAPIService {
     }
 
     /// Force refresh, ignoring cooldown.
+    /// Look up a single event by id — the shape a notification deep link
+    /// arrives in. Checks what's already loaded first, then Firestore, because
+    /// a tap that lands on a cached event should be instant and offline-safe.
+    /// Returns nil when the event is genuinely gone (cancelled, hidden by
+    /// moderation, or aged out between the push and the tap), which the caller
+    /// must show honestly rather than as an empty screen.
+    func event(withID id: String) async -> Event? {
+        if let local = events.first(where: { $0.id == id }) { return local }
+        do {
+            let doc = try await Firestore.firestore().collection("events").document(id).getDocument()
+            guard doc.exists else { return nil }
+            return Self.mapFirestoreDocument(doc)
+        } catch {
+            print("[EventsAPI] event(withID:) failed: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
     func refresh(around center: CLLocationCoordinate2D) async {
         lastFetchDate = nil
         cachedCenter = nil

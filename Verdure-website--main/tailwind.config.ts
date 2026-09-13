@@ -21,9 +21,18 @@ let config: Config = {
         elev: "var(--elev)",
       },
       fontFamily: {
-        // One family for everything readable — Plus Jakarta Sans (500 floor)
+        // One family for everything readable — Manrope (500 floor)
         sans: ["var(--font-body)", "system-ui", "sans-serif"],
-        display: ["var(--font-body)", "system-ui", "sans-serif"],
+        // --font-display, not --font-body. These two disagreed: this line
+        // resolved `.font-display` to the BODY font while globals.css:146
+        // resolves the same class name to Cormorant. Cormorant wins today only
+        // because the globals rule is emitted later in the stylesheet, so the
+        // display serif renders by source order rather than by intent — and any
+        // change to CSS layer ordering would silently swap every display
+        // heading on the site to Manrope and orphan the five Cormorant font
+        // files still being downloaded. Making both say the same thing removes
+        // the coin flip.
+        display: ["var(--font-display)", "Garamond", "Georgia", "serif"],
         // Mono is fine print only (the build stamp)
         mono: ["ui-monospace", "Cascadia Mono", "Consolas", "monospace"],
       },

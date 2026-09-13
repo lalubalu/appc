@@ -195,3 +195,78 @@ export function normalizeIp(address: string): string
 
   return prefix.join(":") + "::/64";
 }
+
+// Resolves one client identity from request headers.
+//
+// Shared by lib/security/request-ip.ts (Server Actions and Route Handlers, via
+// next/headers) and lib/supabase/middleware.ts (which runs before next/headers
+// exists and must read the request directly). Those two had the same logic
+// copied into both files, which is how they came to disagree; keeping the
+// resolution here means one client cannot be two different buckets depending on
+// which runtime happened to charge them.
+//
+// HEADER ORDER IS THE WHOLE SECURITY PROPERTY, so, in order:
+//
+//   x-vercel-forwarded-for  Set by Vercel's proxy from the connecting socket.
+//                           A client cannot forge it — anything it sends under
+//                           this name is replaced, not appended.
+//   x-real-ip               The same guarantee from Vercel, and the header a
+//                           conventional nginx/Caddy front end sets. Single
+//                           value, so there is no element to choose.
+//   x-forwarded-for         Last, and read RIGHTMOST-first. This previously
+//                           read the LEFTMOST element, which is the one part of
+//                           the chain the client writes: `X-Forwarded-For:
+//                           1.2.3.4` on every request minted a fresh bucket and
+//                           turned every limit in the app into a no-op. It was
+//                           safe only because Vercel overwrites the header, so
+//                           the code was correct by deployment accident and
+//                           would have failed silently the moment it ran behind
+//                           any ordinary proxy, or behind none. The rightmost
+//                           element is the one appended by the nearest hop we
+//                           actually trust.
+//
+// Worst case is now over-counting rather than a bypass: behind a proxy chain
+// that appends, the rightmost value may be a shared hop and several users land
+// in one bucket. That direction costs someone an extra wait; the other
+// direction costs the limit entirely.
+export function resolveClientIp(
+  getHeader: (name: string) => string | null
+): string
+{
+  let vercel = getHeader("x-vercel-forwarded-for");
+
+  if (vercel && vercel.trim())
+  {
+    return normalizeIp(vercel.trim());
+  }
+
+  let realIp = getHeader("x-real-ip");
+
+  if (realIp && realIp.trim())
+  {
+    return normalizeIp(realIp.trim());
+  }
+
+  let forwarded = getHeader("x-forwarded-for");
+
+  if (forwarded)
+  {
+    let parts = forwarded.split(",");
+
+    // Rightmost non-empty. On Vercel the header carries a single value, so this
+    // resolves to the same address the two checks above would have returned.
+    for (let i = parts.length - 1; i >= 0; i--)
+    {
+      let candidate = parts[i].trim();
+
+      if (candidate)
+      {
+        return normalizeIp(candidate);
+      }
+    }
+  }
+
+  // Local dev, or a proxy that strips all three. Everyone shares one bucket,
+  // which is the safe direction to fail.
+  return "unknown";
+}

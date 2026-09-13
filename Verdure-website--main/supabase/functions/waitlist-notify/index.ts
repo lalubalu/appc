@@ -58,9 +58,20 @@ type Notice = {
 let MAX_EMAIL_LENGTH = 254;
 
 // Mirrors waitlist_list_limit() in the database. Stated again here rather than
-// trusted, because this function's job is to assume the payload is hostile —
-// and an unbounded array is the one field in it that can cost real memory.
+// trusted, because this function's job is to assume the payload is hostile.
 let MAX_LIST_ENTRIES = 2000;
+
+// The array was previously described as "the one field that can cost real
+// memory", and that was simply wrong: isEntryList bounded email but let source
+// and created_at through on `typeof === "string"` alone, so 2000 entries could
+// each carry a multi-megabyte string and every one of them would be validated,
+// escaped and concatenated into the HTML body. The database truncates source to
+// 40 characters on write and constrains it again on the column, so a legitimate
+// producer never emits anything near these — which is the argument for bounding
+// them here, not against it. This function does not get to assume its caller is
+// the database.
+let MAX_SOURCE_LENGTH = 120;
+let MAX_TIMESTAMP_LENGTH = 64;
 
 let RESEND_ENDPOINT = "https://api.resend.com/emails";
 
@@ -158,8 +169,11 @@ let isEntryList = function (value: unknown): value is Entry[]
     return (
       typeof entry.email === "string" &&
       entry.email.length <= MAX_EMAIL_LENGTH &&
-      (entry.source === null || typeof entry.source === "string") &&
+      (entry.source === null ||
+        (typeof entry.source === "string" &&
+          entry.source.length <= MAX_SOURCE_LENGTH)) &&
       typeof entry.created_at === "string" &&
+      entry.created_at.length <= MAX_TIMESTAMP_LENGTH &&
       typeof entry.is_new === "boolean"
     );
   });

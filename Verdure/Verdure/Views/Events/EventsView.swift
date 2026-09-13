@@ -774,7 +774,10 @@ private struct CreateEventSheet: View {
 
 // MARK: - Event detail sheet
 
-private struct EventDetailSheet: View {
+// Internal (was private) so a notification deep link can present the same
+// detail view the list does. A second, parallel detail screen for deep links
+// would drift from this one — different check-in gating, different copy.
+struct EventDetailSheet: View {
     let event: Event
     let dateFormatter: DateFormatter
     @Environment(GameStateManager.self) private var gameState

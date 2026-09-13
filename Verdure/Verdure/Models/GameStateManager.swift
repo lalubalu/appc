@@ -456,8 +456,18 @@ final class GameStateManager {
         } else {
             savedEventIDs.insert(event.id); Haptics.success()
             NotificationManager.shared.scheduleEventReminder(for: event)
+            // C3: the first save is a value moment — they've just told us what
+            // they care about, so "we'll tell you when a friend is going" now
+            // has an obvious referent. Only ever sets a flag; the primer sheet
+            // decides whether to appear, and only the primer's own button ever
+            // asks iOS.
+            pendingNotificationPrimer = .firstSave
         }
     }
+
+    /// Set when something has just earned the right to ask about notifications.
+    /// Consumed by whichever screen is on top; nil means don't ask.
+    var pendingNotificationPrimer: NotificationPrimer.Trigger?
 
     // MARK: - Place Collection (secondary, small points)
 

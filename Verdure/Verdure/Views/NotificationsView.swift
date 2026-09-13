@@ -161,86 +161,14 @@ struct NotificationsInboxView: View {
 
 // MARK: - Notification settings (from Profile → Settings)
 
-struct NotificationSettingsView: View {
-    @Environment(\.dismiss) private var dismiss
-    private var manager: NotificationManager { .shared }
+// NotificationSettingsView moved to Views/Notifications/NotificationSettingsView.swift.
+//
+// The version that lived here had a master toggle that called
+// requestPermission() straight from the switch — spending the one system prompt
+// iOS ever gives us with no explanation first — and four category rows
+// ("Event reminders", "Badges & milestones", "Daily Gem", "Community activity")
+// rendered by a `typeRow` helper that took no binding and wrote nothing. They
+// looked like settings and were decoration. The replacement has two real
+// switches and a quiet-hours window, all persisted server-side where the
+// fan-out actually reads them.
 
-    var body: some View {
-        NavigationStack {
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(alignment: .leading, spacing: Spacing.lg) {
-                    // Master enable
-                    HStack(spacing: Spacing.md) {
-                        ClayIconTile(systemImage: "bell.fill", kind: .gold, size: 44, radius: Radius.chip)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Push notifications").font(VType.display(16, .semibold)).foregroundStyle(Palette.ink)
-                            Text(manager.permissionGranted ? "Allowed in iOS Settings" : "Tap to allow")
-                                .font(VType.body(12)).foregroundStyle(Palette.inkSoft)
-                        }
-                        Spacer()
-                        Toggle("", isOn: Binding(
-                            get: { manager.enabled },
-                            set: { on in
-                                manager.enabled = on
-                                if on && !manager.permissionGranted { Task { await manager.requestPermission() } }
-                            })).labelsHidden().tint(Palette.spruce.base)
-                    }
-                    .padding(Spacing.md).claySurface(.surface, radius: Radius.md)
-
-                    Text("WHAT YOU'LL BE NOTIFIED ABOUT")
-                        .font(VType.body(11, .bold)).tracking(1).foregroundStyle(Palette.inkSoft)
-                        .padding(.top, Spacing.sm)
-
-                    VStack(spacing: 0) {
-                        typeRow("calendar.badge.clock", "Event reminders", "Before events you've saved", .spruce)
-                        divider
-                        typeRow("rosette", "Badges & milestones", "When you unlock something new", .gold)
-                        divider
-                        typeRow("diamond.fill", "Daily Gem", "A new neighborhood fact each day", .terracotta)
-                        divider
-                        typeRow("bubble.left.and.bubble.right.fill", "Community activity", "Mentions and nearby posts", .teal)
-                    }
-                    .padding(.vertical, 6).claySurface(.surface, radius: Radius.md)
-
-                    if !manager.permissionGranted {
-                        Text("Notifications are off in iOS Settings. Turning the switch on will ask for permission.")
-                            .font(VType.body(12)).foregroundStyle(Palette.inkFaint)
-                            .padding(.horizontal, Spacing.xs)
-                    }
-                }
-                .padding(Spacing.lg)
-                .padding(.bottom, Spacing.xl)
-            }
-            .background(VerdureBackground())
-            .navigationTitle("Notifications").navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { dismiss() } label: {
-                        Image(systemName: "xmark").font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(Palette.inkSoft)
-                    }
-                }
-            }
-            .onAppear { manager.refreshPermissionStatus() }
-        }
-    }
-
-    private var divider: some View {
-        Rectangle().fill(Palette.surfaceShadow.opacity(0.4)).frame(height: 1).padding(.leading, 64)
-    }
-
-    private func typeRow(_ icon: String, _ title: String, _ subtitle: String, _ kind: ClayStyle.ClayAccentKind) -> some View {
-        HStack(spacing: Spacing.md) {
-            ClayIconTile(systemImage: icon, kind: kind, size: 38, radius: Radius.chip)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title).font(VType.body(15, .semibold)).foregroundStyle(Palette.ink)
-                Text(subtitle).font(VType.body(12)).foregroundStyle(Palette.inkSoft)
-            }
-            Spacer()
-            Image(systemName: "checkmark").font(.system(size: 13, weight: .bold))
-                .foregroundStyle(manager.enabled ? Palette.spruce.base : Palette.inkFaint)
-        }
-        .padding(.horizontal, Spacing.md).padding(.vertical, 12)
-        .opacity(manager.enabled ? 1 : 0.5)
-    }
-}

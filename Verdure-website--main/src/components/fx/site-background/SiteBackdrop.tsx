@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { createScene, type SceneSettings } from "./scene";
+import ReactDOM from "react-dom";
+// Type-only, so the 821-line scene module and its shaders are erased from this
+// import and reach the browser solely through the dynamic import in the effect
+// below. A value import here would pull the whole thing into the root layout's
+// chunk, which is exactly what it used to do.
+import type { SceneSettings } from "./scene";
 import "lenis/dist/lenis.css";
 
 /**
@@ -19,7 +24,26 @@ import "lenis/dist/lenis.css";
  * cross-fades over it once a frame has actually been drawn.
  */
 
+// The JPEG is the fallback the <img> keeps; the AVIF/WebP ladder below is what
+// almost every real browser actually takes.
+//
+// This plate is the site's Largest Contentful Paint element — a full-viewport
+// <img> in the root layout, painted before any text, and React hoists its
+// fetchPriority="high" into a genuine <link rel=preload>. It was ONE 3840x2563
+// JPEG at 1.8 MB, with no srcset and no modern format, downloaded in full on
+// every route including /privacy. A 390px phone at 2x needs ~780px of image and
+// was being handed 3840 — about 96% of those pixels decoded and thrown away, on
+// the exact resource the LCP measurement is waiting for.
+//
+// Same frame, same crop, now 55 KB on that phone.
 let COLOR_SRC = "/bg/mountain.jpg";
+let COLOR_AVIF =
+  "/bg/mountain-1280.avif 1280w, /bg/mountain-1920.avif 1920w, /bg/mountain-2560.avif 2560w";
+let COLOR_WEBP =
+  "/bg/mountain-1280.webp 1280w, /bg/mountain-1920.webp 1920w, /bg/mountain-2560.webp 2560w";
+// The plate always covers the viewport, so the width the browser needs is the
+// viewport width. Nothing here is ever laid out at a fraction of it.
+let COLOR_SIZES = "100vw";
 let DEPTH_SRC = "/bg/mountain-depth.jpg";
 let PLATE_BG = "#0b120d";
 
@@ -47,6 +71,37 @@ export default function SiteBackdrop({
   sunGlow = 0,
 }: SiteBackdropProps)
 {
+  // Restores the head-start that moving to <picture> gave up.
+  //
+  // A bare <img fetchPriority="high"> was hoisted by React into a real
+  // <link rel=preload> in the head, so the plate began downloading before the
+  // parser reached the body. React cannot do that for a <picture> — it has no
+  // way to know which candidate the browser will choose — so the LCP image went
+  // back to being discovered only when the parser reached it.
+  //
+  // ReactDOM.preload rather than rendering a <link> in the JSX: a raw
+  // <link rel="preload"> is NOT hoisted (measured — it landed in the body at
+  // byte 5522, after </head> at 4275, which buys nothing over the <img> a
+  // thousand bytes later). This API is the one that injects into the head
+  // during SSR.
+  //
+  // imageSrcSet and imageSizes are byte-identical to the AVIF <source> below,
+  // and that is a correctness requirement rather than tidiness: the preload is
+  // only reused if the browser resolves it to the same URL it later picks from
+  // the picture. A mismatch downloads the plate twice, silently.
+  //
+  // AVIF only, gated by type. Preloading both formats would make every browser
+  // that supports both fetch two plates; one that cannot decode AVIF ignores
+  // this entirely and discovers the WebP or JPEG at parse time exactly as it
+  // does today, so the fallback path is no worse than before.
+  ReactDOM.preload(COLOR_SRC, {
+    as: "image",
+    type: "image/avif",
+    imageSrcSet: COLOR_AVIF,
+    imageSizes: COLOR_SIZES,
+    fetchPriority: "high",
+  });
+
   let plateRef = useRef<HTMLImageElement | null>(null);
   let canvasRef = useRef<HTMLCanvasElement | null>(null);
   let settingsRef = useRef<SceneSettings>({
@@ -83,25 +138,84 @@ export default function SiteBackdrop({
     root.classList.add("vd-bg-on");
     root.classList.remove("vd-bg-pinned");
 
-    let scene = createScene({
-      canvas: canvas,
-      plate: plateRef.current,
-      colorSrc: COLOR_SRC,
-      depthSrc: DEPTH_SRC,
-      reduced: reduced,
-      settings: function ()
+    // The GL bring-up is deferred, and deliberately only the bring-up.
+    //
+    // Loading the module, compiling two shader programs, allocating the
+    // ping-pong FBOs and uploading a multi-megapixel texture is a few hundred
+    // milliseconds of main thread, and it used to run synchronously inside
+    // hydration on every route — including /privacy and /pricing, where the
+    // plate sits behind a tint at low opacity and nobody can tell it is live.
+    // That lands squarely in the window Interaction to Next Paint measures.
+    //
+    // What is NOT deferred is the plate itself: the <picture> below is server
+    // rendered and is the LCP element, so it paints on schedule regardless.
+    // The scene is designed to cross-fade in only once it has drawn a frame
+    // (see the note at the top of this file), which means arriving late is the
+    // behaviour it already expects, not a regression.
+    let cancelled = false;
+    let scene: { destroy: () => void } | null = null;
+
+    let start = function ()
+    {
+      // currentSrc, not COLOR_SRC. The scene loads the colour plate itself, by
+      // URL, through its own new Image() — so it must ask for the exact file
+      // the <picture> already resolved. Handing it the JPEG while the browser
+      // chose an AVIF would download the plate a second time, at full size,
+      // and undo the responsive ladder on the request that matters most.
+      let plate = plateRef.current;
+
+      import("./scene").then(function (mod)
       {
-        return settingsRef.current;
-      },
-      onPinned: function (isPinned)
-      {
-        root.classList.toggle("vd-bg-pinned", isPinned);
-      },
-    });
+        // The component can unmount while the chunk is in flight, and a scene
+        // created after that would never be destroyed — a leaked GL context
+        // per navigation.
+        if (cancelled || !canvasRef.current) return;
+
+        scene = mod.createScene({
+          canvas: canvas,
+          plate: plate,
+          colorSrc: plate?.currentSrc || COLOR_SRC,
+          depthSrc: DEPTH_SRC,
+          reduced: reduced,
+          settings: function ()
+          {
+            return settingsRef.current;
+          },
+          onPinned: function (isPinned)
+          {
+            root.classList.toggle("vd-bg-pinned", isPinned);
+          },
+        });
+      });
+    };
+
+    // requestIdleCallback where it exists (not Safari), with a timeout so a
+    // busy main thread cannot postpone the background indefinitely.
+    let idleId = 0;
+    let timerId = 0;
+
+    if (typeof window.requestIdleCallback === "function")
+    {
+      idleId = window.requestIdleCallback(start, { timeout: 500 });
+    }
+    else
+    {
+      timerId = window.setTimeout(start, 1);
+    }
 
     return function ()
     {
-      scene.destroy();
+      cancelled = true;
+
+      if (idleId && typeof window.cancelIdleCallback === "function")
+      {
+        window.cancelIdleCallback(idleId);
+      }
+
+      if (timerId) window.clearTimeout(timerId);
+
+      if (scene) scene.destroy();
+
       root.classList.remove("vd-bg-on");
       root.classList.remove("vd-bg-pinned");
     };
@@ -109,18 +223,26 @@ export default function SiteBackdrop({
 
   return (
     <div className="vd-bg-layer" style={{ background: PLATE_BG }} aria-hidden="true">
-      {/* eslint-disable-next-line @next/next/no-img-element -- this is the
-          WebGL colour plate and the no-WebGL fallback in one element; a
-          next/image wrapper buys nothing over a fixed decorative layer. */}
-      <img
-        ref={plateRef}
-        className="vd-bg-plate"
-        src={COLOR_SRC}
-        alt=""
-        fetchPriority="high"
-        decoding="async"
-        draggable={false}
-      />
+      {/* <picture> rather than srcset on the <img> alone, because AVIF needs a
+          type-gated source: a browser that cannot decode it must never be
+          offered it, and only <source type> expresses that. The <img> keeps the
+          JPEG so anything that understands neither format still gets a plate. */}
+      <picture>
+        <source type="image/avif" srcSet={COLOR_AVIF} sizes={COLOR_SIZES} />
+        <source type="image/webp" srcSet={COLOR_WEBP} sizes={COLOR_SIZES} />
+        {/* eslint-disable-next-line @next/next/no-img-element -- this is the
+            WebGL colour plate and the no-WebGL fallback in one element; a
+            next/image wrapper buys nothing over a fixed decorative layer. */}
+        <img
+          ref={plateRef}
+          className="vd-bg-plate"
+          src={COLOR_SRC}
+          alt=""
+          fetchPriority="high"
+          decoding="async"
+          draggable={false}
+        />
+      </picture>
       <canvas ref={canvasRef} className="vd-bg-canvas" />
     </div>
   );

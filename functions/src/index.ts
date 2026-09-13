@@ -325,14 +325,13 @@ export const onPostCreated: unknown = inEmulator ? undefined
   });
 });
 
-/**
- * sendEventReminders — daily scheduled reminder fan-out (placeholder).
- * Hook up to saved events + FCM tokens to remind attendees the day before.
- */
-export const sendEventReminders = onSchedule("every day 09:00", async () => {
-  // Query events happening tomorrow, find users who saved them, send FCM. (Stub.)
-  return;
-});
+// sendEventReminders was an empty function body behind a daily schedule — it
+// shipped, ran every morning, and did nothing. Replaced by notifications.ts,
+// which sends a RANKED digest twice a week under a hard 2/week per-user cap
+// rather than a reminder every morning. See that file for why each gate exists.
+export {
+  sendEventSuggestions, setNotificationPrefs, getNotificationPrefs, dismissSuggestion,
+} from "./notifications.js";
 
 // ── External API proxy ──────────────────────────────────────────────────────
 //

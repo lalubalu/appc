@@ -1,12 +1,15 @@
 import { headers } from "next/headers";
-import { normalizeIp } from "./ip";
+import { resolveClientIp } from "./ip";
 
-// Resolves the caller's address for rate-limiting purposes.
+// Resolves the caller's address for rate-limiting purposes, for anything
+// running with next/headers available (Server Actions, Route Handlers).
 //
-// x-forwarded-for is only trustworthy because Vercel's proxy overwrites it on
-// the way in — the client cannot inject a value that survives. If this site
-// ever runs behind a different proxy, or directly, this needs revisiting
-// before anything security-relevant leans on it.
+// The header precedence and the reasoning behind it live in resolveClientIp
+// (lib/security/ip.ts), shared with the middleware so the two runtimes cannot
+// disagree about what one client is. In short: platform-set headers first,
+// x-forwarded-for last and read from the right, because its leftmost element is
+// written by the client.
+//
 // A single cheap host is routinely handed an IPv6 /64 — 18 quintillion
 // addresses — so keying a limit on the full address is the same as having no
 // limit at all against anyone who bothers. Collapsing to the /64 means the
@@ -20,27 +23,9 @@ import { normalizeIp } from "./ip";
 export async function clientIp(): Promise<string>
 {
   let requestHeaders = await headers();
-  let forwarded = requestHeaders.get("x-forwarded-for");
 
-  if (forwarded)
+  return resolveClientIp(function (name)
   {
-    // Real client first, proxy chain after.
-    let first = forwarded.split(",").at(0);
-
-    if (first && first.trim())
-    {
-      return normalizeIp(first.trim());
-    }
-  }
-
-  let realIp = requestHeaders.get("x-real-ip");
-
-  if (realIp && realIp.trim())
-  {
-    return normalizeIp(realIp.trim());
-  }
-
-  // Local dev, or a proxy that strips both. Everyone shares one bucket, which
-  // is the safe direction to fail.
-  return "unknown";
+    return requestHeaders.get(name);
+  });
 }

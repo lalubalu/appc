@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run test:ip && npm run test:security",
     "test:ip": "node ip-normalise.test.mjs",
     "test:security": "node scripts/security-regression.mjs",
     "supabase:start": "supabase start",
