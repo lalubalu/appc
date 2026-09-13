@@ -5,6 +5,7 @@ struct ProfileView: View {
     /// Muted brick red for the destructive Sign Out action — reads on both cream + graphite.
     static let signOutRed = Color(red: 0.82, green: 0.28, blue: 0.25)
     @AppStorage("prefersDarkMode") private var prefersDarkMode = false
+    @State private var analyticsEnabled = Analytics.isEnabled
     @AppStorage("profileImageData") private var profileImageData = Data()
     @State private var photoItem: PhotosPickerItem?
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = true
@@ -339,6 +340,19 @@ struct ProfileView: View {
                 settingsRow(icon: "moon.fill", label: "Dark Mode", accent: .spruce) {
                     Toggle("", isOn: $prefersDarkMode).tint(Palette.spruce.base).labelsHidden()
                 }
+                rowDivider
+                // The privacy policy promises this switch by name ("You can
+                // switch them off in Profile › Settings"), so it has to exist
+                // and it has to work. See Analytics.isEnabled.
+                settingsRow(icon: "chart.bar.fill", label: "Product Analytics", accent: .teal) {
+                    Toggle("", isOn: Binding(
+                        get: { analyticsEnabled },
+                        set: { on in analyticsEnabled = on; Analytics.isEnabled = on }
+                    )).tint(Palette.spruce.base).labelsHidden()
+                }
+                .accessibilityLabel("Product analytics")
+                .accessibilityValue(analyticsEnabled ? "On" : "Off")
+                .accessibilityHint("Anonymous usage data that helps us improve Verdure. No names or locations.")
                 rowDivider
                 if let org = social.organizer {
                     Button { Haptics.tap(); showOrganizerVerify = true } label: {

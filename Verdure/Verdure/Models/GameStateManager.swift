@@ -89,19 +89,65 @@ final class GameStateManager {
         didSet { UserDefaults.standard.set(lastActiveDay, forKey: "streakLastDay") }
     }
 
+    // MARK: Streak insurance
+    //
+    // One missed day used to reset a 40-day streak to 1. That is a punishment
+    // for having a life, and the people it hits hardest are the ones who had
+    // most invested — the exact users you least want to lose.
+    //
+    // So: ONE forgiven day per rolling 30, applied automatically. Deliberately
+    // not purchasable and not a Verdure+ benefit. Selling relief from a
+    // punishment we invented is a dark pattern, and putting it behind the
+    // paywall would make the streak a lever on the subscription rather than an
+    // encouragement to go outside.
+
+    /// How many days may be missed without breaking the streak, per window.
+    static let streakInsuranceDays = 1
+    static let streakInsuranceWindowDays = 30
+
+    private(set) var streakInsuranceUsedOn: String {
+        didSet { UserDefaults.standard.set(streakInsuranceUsedOn, forKey: "streakInsuranceUsedOn") }
+    }
+
+    /// True when a gap was forgiven recently — the UI says so rather than
+    /// letting the number look like it survived by magic.
+    func streakInsuranceAvailable(now: Date = Date()) -> Bool {
+        guard let used = Self.dayFormatter.date(from: streakInsuranceUsedOn) else { return true }
+        let days = Calendar.current.dateComponents([.day], from: used, to: now).day ?? 999
+        return days >= Self.streakInsuranceWindowDays
+    }
+
     /// Call on every foreground. Same day → no-op; consecutive day → streak+1;
-    /// a gap → streak resets to 1.
-    func recordActiveDay(now: Date = Date()) {
+    /// exactly one missed day with insurance available → streak survives;
+    /// anything longer → resets to 1.
+    @discardableResult
+    func recordActiveDay(now: Date = Date()) -> Bool {
         let today = Self.dayString(now)
-        guard lastActiveDay != today else { return }
-        if let last = Self.dayFormatter.date(from: lastActiveDay),
-           let dayAfterLast = Calendar.current.date(byAdding: .day, value: 1, to: last),
-           Calendar.current.isDate(now, inSameDayAs: dayAfterLast) {
-            currentStreak += 1
+        guard lastActiveDay != today else { return false }
+
+        var insuranceUsed = false
+        if let last = Self.dayFormatter.date(from: lastActiveDay) {
+            let gap = Calendar.current.dateComponents(
+                [.day],
+                from: Calendar.current.startOfDay(for: last),
+                to: Calendar.current.startOfDay(for: now)
+            ).day ?? 999
+
+            if gap == 1 {
+                currentStreak += 1
+            } else if gap == 2 && currentStreak > 0 && streakInsuranceAvailable(now: now) {
+                // Exactly one day missed. Forgive it, and count today.
+                currentStreak += 1
+                streakInsuranceUsedOn = today
+                insuranceUsed = true
+            } else {
+                currentStreak = 1
+            }
         } else {
             currentStreak = 1
         }
         lastActiveDay = today
+        return insuranceUsed
     }
 
     nonisolated static let dayFormatter: DateFormatter = {
@@ -382,6 +428,7 @@ final class GameStateManager {
             self.earnHistory = []
         }
         self.currentStreak = UserDefaults.standard.integer(forKey: "streakCount")
+        self.streakInsuranceUsedOn = UserDefaults.standard.string(forKey: "streakInsuranceUsedOn") ?? ""
         self.lastActiveDay = UserDefaults.standard.string(forKey: "streakLastDay") ?? ""
         self.challengeBonusXP = UserDefaults.standard.integer(forKey: "challengeBonusXP")
         self.completedChallengeKeys = Self.loadSet(forKey: "completedChallengeKeys")
@@ -705,6 +752,7 @@ final class GameStateManager {
         pendingOps = []
         earnHistory = []
         currentStreak = 0
+        streakInsuranceUsedOn = ""
         lastActiveDay = ""
         challengeBonusXP = 0
         completedChallengeKeys = []

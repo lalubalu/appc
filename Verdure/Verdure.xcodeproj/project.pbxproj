@@ -91,6 +91,7 @@
 		D1931D30FD04390E180C9D85 /* RewardConfirmationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46515EDD96AE8C6965E13DF0 /* RewardConfirmationView.swift */; };
 		D1FC30331239EED083EDFF4C /* LocationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEBC782328C28AF430767CD4 /* LocationManager.swift */; };
 		D1FDF825E59771F0108E99F2 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 0DE7746BD26FC744CB9F9052 /* PrivacyInfo.xcprivacy */; };
+		D37ED433A939E89079AA0E1F /* StreakInsuranceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 040EE3EF01F3E4F0A91994C4 /* StreakInsuranceTests.swift */; };
 		D88C145155268EC1BA430AD4 /* DiscoveryFiltersTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56070FE9AD21E11ACA0A2EDF /* DiscoveryFiltersTests.swift */; };
 		D8CF7239F6E15A06CD5A60C9 /* FilterSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CFB7938C6074CD43C8C68E1 /* FilterSheetView.swift */; };
 		D8F3CFEC200FF24E182F3713 /* NotificationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DFBFC44B8F8126080EA2194 /* NotificationsView.swift */; };
@@ -125,6 +126,7 @@
 
 /* Begin PBXFileReference section */
 		03A7624DC05E120CBE8C96D2 /* JourneyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JourneyTests.swift; sourceTree = "<group>"; };
+		040EE3EF01F3E4F0A91994C4 /* StreakInsuranceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreakInsuranceTests.swift; sourceTree = "<group>"; };
 		046EBA7E822D16C7DA6FF62B /* FunctionsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FunctionsService.swift; sourceTree = "<group>"; };
 		0756CECF5FCD5688FB7BA774 /* LimitedTimeRewardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LimitedTimeRewardTests.swift; sourceTree = "<group>"; };
 		08A121BFF1D3812CED51AE6A /* VerdureApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerdureApp.swift; sourceTree = "<group>"; };
@@ -354,6 +356,7 @@
 				0756CECF5FCD5688FB7BA774 /* LimitedTimeRewardTests.swift */,
 				CD9F31EA3280E44A96A10CE8 /* NotificationPreferencesTests.swift */,
 				9CB37DD05B2559698C6E6BAB /* RewardCatalogParityTests.swift */,
+				040EE3EF01F3E4F0A91994C4 /* StreakInsuranceTests.swift */,
 				9DC2357FAED1484C72866889 /* TestFixtures.swift */,
 			);
 			path = VerdureTests;
@@ -694,6 +697,7 @@
 				AB5104D5D8BFCE915694098B /* LimitedTimeRewardTests.swift in Sources */,
 				69CDB2CAB52E000AE9E39E26 /* NotificationPreferencesTests.swift in Sources */,
 				2B3ADA409FC954403B28A947 /* RewardCatalogParityTests.swift in Sources */,
+				D37ED433A939E89079AA0E1F /* StreakInsuranceTests.swift in Sources */,
 				8D5F0CD09318506A019F6528 /* TestFixtures.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

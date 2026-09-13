@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreLocation
 
 // MARK: - AI Adventure Planner
 //
@@ -29,6 +30,19 @@ struct AdventurePlannerView: View {
     @State private var quotaWall: QuotaWall?
     @State private var pendingRetry = false
     @Environment(StoreService.self) private var store
+    @Environment(SocialService.self) private var social
+    @Environment(EventsAPIService.self) private var eventsService
+
+    /// G1 — events happening at a planned stop that friends are going to,
+    /// keyed by stop placeId.
+    ///
+    /// This is the single strongest reason to actually go, and the planner was
+    /// the one surface that had no access to it: it returns PLACES, and
+    /// "friends going" is a property of EVENTS. Matching them is a real join,
+    /// not a display tweak, which is why it lives here rather than in the
+    /// server's plan response — the plan is cacheable and shared, and who your
+    /// friends are is neither.
+    @State private var friendsAtStop: [String: (event: Event, going: FriendsGoing)] = [:]
     @Environment(\.dismiss) private var dismiss
 
     private struct QuotaWall: Identifiable {
@@ -214,12 +228,15 @@ struct AdventurePlannerView: View {
                     .foregroundStyle(Palette.inkSoft)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 2)
+                if let match = friendsAtStop[stop.placeId] {
+                    friendsGoingBadge(match.going, event: match.event)
+                }
             }
             Spacer(minLength: 0)
         }
         .padding(.vertical, Spacing.xs)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Stop \(stop.order): \(stop.name), \(stop.minutes) minutes. \(stop.why)")
+        .accessibilityLabel(stopAccessibilityLabel(stop))
     }
 
     // MARK: - Actions
@@ -239,6 +256,7 @@ struct AdventurePlannerView: View {
                 longitude: longitude
             )
             Haptics.success()
+            await loadFriendsAtStops()
             // Q2 cohort entry point.
             Analytics.log(event: .plannerCompleted, params: [
                 "stops": plan?.stops.count ?? 0,
@@ -253,6 +271,67 @@ struct AdventurePlannerView: View {
             plan = nil
             errorMessage = error.localizedDescription
         }
+    }
+
+    @ViewBuilder
+    private func friendsGoingBadge(_ going: FriendsGoing, event: Event) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "person.2.fill").font(.system(size: 11, weight: .bold))
+            Text(going.count == 1
+                 ? "\(going.friends.first?.displayName ?? "A friend") is going to \(event.title)"
+                 : "\(going.count) friends are going to \(event.title)")
+                .font(VType.scaledBody(12, .semibold))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .foregroundStyle(Palette.spruce.base)
+        .padding(.horizontal, 10).padding(.vertical, 6)
+        .background(ClayBackground(style: .inset, radius: Radius.chip))
+        .padding(.top, 6)
+    }
+
+    /// Built here rather than inline so the friends line is part of the single
+    /// combined VoiceOver label — otherwise the badge is announced separately
+    /// from the stop it belongs to, or not at all.
+    private func stopAccessibilityLabel(_ stop: AdventureStop) -> String {
+        var text = "Stop \(stop.order): \(stop.name), \(stop.minutes) minutes. \(stop.why)"
+        if let match = friendsAtStop[stop.placeId] {
+            text += match.going.count == 1
+                ? " One friend is going to \(match.event.title) here."
+                : " \(match.going.count) friends are going to \(match.event.title) here."
+        }
+        return text
+    }
+
+    /// Join the plan's stops to upcoming events at the same place, then ask who
+    /// of the user's friends is going. Silent on every failure — a missing
+    /// social signal must never degrade a plan that is otherwise fine.
+    private func loadFriendsAtStops() async {
+        guard let plan else { return }
+        var matches: [String: Event] = [:]
+        for stop in plan.stops {
+            guard let lat = stop.latitude, let lng = stop.longitude else { continue }
+            // Same place: within ~150 m, or an exact location-name match. Both,
+            // because feeds spell venues differently and coordinates are
+            // sometimes the building next door.
+            if let hit = eventsService.events.first(where: { ev in
+                if ev.locationName.caseInsensitiveCompare(stop.name) == .orderedSame { return true }
+                guard let elat = ev.latitude, let elng = ev.longitude else { return false }
+                let d = CLLocation(latitude: elat, longitude: elng)
+                    .distance(from: CLLocation(latitude: lat, longitude: lng))
+                return d < 150
+            }) {
+                matches[stop.placeId] = hit
+            }
+        }
+        guard !matches.isEmpty else { return }
+        await social.loadFriendsGoing(for: Array(matches.values.map(\.id)))
+        var out: [String: (event: Event, going: FriendsGoing)] = [:]
+        for (placeId, ev) in matches {
+            let going = social.friendsGoingByEvent[ev.id] ?? .none
+            // Only surface it when there is something to say.
+            if going.count > 0 { out[placeId] = (ev, going) }
+        }
+        friendsAtStop = out
     }
 
     /// After the paywall closes: if they subscribed, run the plan they already
