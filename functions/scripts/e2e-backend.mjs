@@ -777,11 +777,11 @@ async function main() {
 
   const inTwoWeeks = new Date(Date.now() + 14 * 86_400_000);
   const iso = (d, plusMin = 0) => new Date(d.getTime() + plusMin * 60_000).toISOString();
-  const A = { source: "ticketmaster", sourceEventId: "tmA1", title: "The Cleveland Orchestra: Beethoven at Blossom",
-    start: iso(inTwoWeeks), locationName: "Blossom Music Center", latitude: 41.1876, longitude: -81.5527,
+  const A = { source: "ticketmaster", sourceEventId: "tmA1", title: "Symphony Silicon Valley: Beethoven at the California",
+    start: iso(inTwoWeeks), locationName: "California Theatre", latitude: 37.3318, longitude: -121.8895,
     category: "Festival", isFree: false, priceMin: 25, website: "https://www.ticketmaster.com/e/A1" };
-  const C = { source: "ticketmaster", sourceEventId: "tmC1", title: "Guardians vs. Tigers",
-    start: iso(inTwoWeeks, 24 * 60), locationName: "Progressive Field", latitude: 41.4962, longitude: -81.6852,
+  const C = { source: "ticketmaster", sourceEventId: "tmC1", title: "Sharks vs. Kings",
+    start: iso(inTwoWeeks, 24 * 60), locationName: "SAP Center", latitude: 37.3327, longitude: -121.9013,
     category: "Sports", isFree: false, priceMin: 12 };
   const OUT_OF_AREA = { source: "ticketmaster", sourceEventId: "tmFAR", title: "Columbus Thing",
     start: iso(inTwoWeeks), locationName: "Nationwide Arena", latitude: 39.9692, longitude: -83.0061 };
@@ -789,7 +789,7 @@ async function main() {
   r = await call("runIngest", { source: "ticketmaster", payload: [A, C, OUT_OF_AREA] }, rep1.idToken);
   ok("ingest: a non-staff user cannot run ingestion", r.error?.status === "PERMISSION_DENIED", JSON.stringify(r));
 
-  r = await call("runIngest", { areaId: "cleveland-oh", source: "ticketmaster", payload: [A, C, OUT_OF_AREA] }, staff.idToken);
+  r = await call("runIngest", { areaId: "san-jose-ca", source: "ticketmaster", payload: [A, C, OUT_OF_AREA] }, staff.idToken);
   let res = r.result?.results?.[0];
   ok("ingest: payload run creates the in-area records and skips the out-of-area one",
      res?.created === 2 && res?.skipped === 1 && res?.errors?.length === 0, JSON.stringify(res));
@@ -797,18 +797,18 @@ async function main() {
      await (async () => {
        const d = (await db.doc("events/ticketmaster-tmA1").get()).data();
        return d?.source === "ticketmaster" && d?.active === true && d?.hidden === false && d?.broadcast === true
-         && Array.isArray(d?.sourceKeys) && d.sourceKeys.includes("ticketmaster:tmA1") && d?.areaId === "cleveland-oh"
+         && Array.isArray(d?.sourceKeys) && d.sourceKeys.includes("ticketmaster:tmA1") && d?.areaId === "san-jose-ca"
          && d?.creatorID === "system:ingest" && d?.pointValue === 250;
      })());
   ok("ingest: out-of-area record was never written", !(await db.doc("events/ticketmaster-tmFAR").get()).exists);
 
   // Cross-source duplicate: LibCal lists the same concert with a differently
   // punctuated title, 30 minutes later, venue string with the city appended.
-  const B = { source: "libcal", sourceEventId: "LibCal-8758-999", title: "Cleveland Orchestra — Beethoven At Blossom!",
-    start: iso(inTwoWeeks, 30), locationName: "Blossom Music Center, Cuyahoga Falls",
+  const B = { source: "libcal", sourceEventId: "LibCal-8758-999", title: "Symphony Silicon Valley — Beethoven At The California!",
+    start: iso(inTwoWeeks, 30), locationName: "California Theatre, San Jose",
     description: "A much richer description of the concert from the library's calendar listing.",
-    website: "https://cpl.libcal.com/event/999" };
-  r = await call("runIngest", { areaId: "cleveland-oh", source: "libcal", payload: [B] }, staff.idToken);
+    website: "https://sjpl.bibliocommons.com/events/999" };
+  r = await call("runIngest", { areaId: "san-jose-ca", source: "libcal", payload: [B] }, staff.idToken);
   res = r.result?.results?.[0];
   ok("ingest: cross-source duplicate is MERGED, not created", res?.merged === 1 && res?.created === 0, JSON.stringify(res));
   const mergedDoc = (await db.doc("events/ticketmaster-tmA1").get()).data();
@@ -819,7 +819,7 @@ async function main() {
   ok("ingest: no second document was created for the duplicate", !(await db.doc("events/libcal-LibCal-8758-999").get()).exists);
 
   // Re-running the same feed is idempotent (updates, no new docs).
-  r = await call("runIngest", { areaId: "cleveland-oh", source: "libcal", payload: [B] }, staff.idToken);
+  r = await call("runIngest", { areaId: "san-jose-ca", source: "libcal", payload: [B] }, staff.idToken);
   res = r.result?.results?.[0];
   ok("ingest: re-seeing a merged source updates in place", res?.updated === 1 && res?.created === 0 && res?.merged === 0, JSON.stringify(res));
 
@@ -837,13 +837,13 @@ async function main() {
   ok("rules: clients cannot delete ingested events", code2 === "permission-denied", `got ${code2}`);
 
   // STALENESS: the feed stops listing A (cancelled). Not seen for 3 cycles → inactive.
-  r = await call("runIngest", { areaId: "cleveland-oh", source: "ticketmaster", payload: [C] }, staff.idToken);
+  r = await call("runIngest", { areaId: "san-jose-ca", source: "ticketmaster", payload: [C] }, staff.idToken);
   res = r.result?.results?.[0];
   let aDoc = (await db.doc("events/ticketmaster-tmA1").get()).data();
   ok("staleness: first miss increments missedCycles but keeps the event active",
      res?.markedStale === 1 && aDoc?.missedCycles === 1 && aDoc?.active === true, JSON.stringify({ res, missed: aDoc?.missedCycles }));
-  await call("runIngest", { areaId: "cleveland-oh", source: "ticketmaster", payload: [C] }, staff.idToken);
-  r = await call("runIngest", { areaId: "cleveland-oh", source: "ticketmaster", payload: [C] }, staff.idToken);
+  await call("runIngest", { areaId: "san-jose-ca", source: "ticketmaster", payload: [C] }, staff.idToken);
+  r = await call("runIngest", { areaId: "san-jose-ca", source: "ticketmaster", payload: [C] }, staff.idToken);
   res = r.result?.results?.[0];
   aDoc = (await db.doc("events/ticketmaster-tmA1").get()).data();
   ok("staleness: third consecutive miss deactivates (never deletes) the event",
@@ -854,13 +854,13 @@ async function main() {
 
   // A feed outage (zero records) must NOT age the corpus.
   const cBefore = (await db.doc("events/ticketmaster-tmC1").get()).data()?.missedCycles ?? 0;
-  r = await call("runIngest", { areaId: "cleveland-oh", source: "ticketmaster", payload: [] }, staff.idToken);
+  r = await call("runIngest", { areaId: "san-jose-ca", source: "ticketmaster", payload: [] }, staff.idToken);
   const cAfter = (await db.doc("events/ticketmaster-tmC1").get()).data()?.missedCycles ?? 0;
   ok("staleness: an empty fetch marks nothing stale (outage ≠ cancellations)",
      r.result?.results?.[0]?.markedStale === 0 && cAfter === cBefore, JSON.stringify(r.result));
 
   // A reappearing event is reactivated.
-  await call("runIngest", { areaId: "cleveland-oh", source: "ticketmaster", payload: [A, C] }, staff.idToken);
+  await call("runIngest", { areaId: "san-jose-ca", source: "ticketmaster", payload: [A, C] }, staff.idToken);
   aDoc = (await db.doc("events/ticketmaster-tmA1").get()).data();
   ok("staleness: an event that reappears is reactivated with a clean counter",
      aDoc?.active === true && aDoc?.missedCycles === 0, JSON.stringify({ active: aDoc?.active, missed: aDoc?.missedCycles }));
@@ -874,9 +874,9 @@ async function main() {
      (treasury?.supply?.["ticketmaster.runs"] ?? 0) >= 5 && (treasury?.supply?.["libcal.fetched"] ?? 0) >= 2, JSON.stringify(treasury?.supply));
 
   // Coverage report (Part 2 §1e) — computed server-side, admin-only.
-  r = await call("getSupplyReport", { areaId: "cleveland-oh" }, rep1.idToken);
+  r = await call("getSupplyReport", { areaId: "san-jose-ca" }, rep1.idToken);
   ok("supply: report is staff-only", r.error?.status === "PERMISSION_DENIED");
-  r = await call("getSupplyReport", { areaId: "cleveland-oh" }, staff.idToken);
+  r = await call("getSupplyReport", { areaId: "san-jose-ca" }, staff.idToken);
   const rep = r.result;
   ok("supply: report counts active upcoming events by source and multi-source merges",
      rep?.totalActiveUpcoming >= 2 && rep?.bySource?.ticketmaster >= 2 && rep?.byAnySource?.libcal >= 1 && rep?.multiSourceEvents >= 1,
@@ -927,7 +927,7 @@ async function main() {
 
   r = await call("listLaunchAreas", {}, rep1.idToken);
   ok("areas: any signed-in user can list launch areas (to explain coverage honestly)",
-     Array.isArray(r.result?.areas) && r.result.areas[0]?.id === "cleveland-oh", JSON.stringify(r.result));
+     Array.isArray(r.result?.areas) && r.result.areas[0]?.id === "san-jose-ca", JSON.stringify(r.result));
 
   // ────────────────────────────────────────────────────────────────────────
   // SOCIAL — follows, Going/RSVP, invites, friends-going (Part 2 §4)
@@ -959,8 +959,8 @@ async function main() {
     title: "Thursday Trail Cleanup", organizer: "Metroparks Friends", date: new Date(Date.now() + 5 * 86_400_000),
     time: "6:00 PM", locationName: "Edgewater Park", attendeeCount: 0, category: "Cleanup",
     imagePlaceholder: "sparkles", pointValue: 200, creatorID: "system:ingest", createdAt: new Date(),
-    hidden: false, active: true, broadcast: true, source: "libcal", areaId: "cleveland-oh",
-    latitude: 41.4903, longitude: -81.7381,
+    hidden: false, active: true, broadcast: true, source: "libcal", areaId: "san-jose-ca",
+    latitude: 37.3230, longitude: -121.9200,
   });
 
   // ── Follows ──
@@ -1161,13 +1161,13 @@ async function main() {
 
   // Unverified organizer publishes: visible to followers only.
   r = await call("createEvent", { title: "Pickup Soccer", description: "All levels.", locationName: "Edgewater Park", time: "6:00 PM",
-    startMs: Date.now() + 3 * 86_400_000, category: "Sports", latitude: 41.4903, longitude: -81.7381 }, orgOwner.idToken);
+    startMs: Date.now() + 3 * 86_400_000, category: "Sports", latitude: 37.3230, longitude: -121.9200 }, orgOwner.idToken);
   const orgEventId = r.result?.eventId;
   ok("organizer: pending organizer CAN create — but not broadcast", !!orgEventId && r.result?.broadcast === false && r.result?.organizerStatus === "pending", JSON.stringify(r));
   const orgEv = (await db.doc(`events/${orgEventId}`).get()).data();
   ok("organizer: event carries organizer provenance, area, honest flags",
      orgEv?.source === "organizer" && orgEv?.organizerId === organizerId && orgEv?.organizerOwnerUid === orgOwner.uid
-     && orgEv?.areaId === "cleveland-oh" && orgEv?.active === true && orgEv?.hidden === false && orgEv?.broadcast === false && orgEv?.pointValue === 150,
+     && orgEv?.areaId === "san-jose-ca" && orgEv?.active === true && orgEv?.hidden === false && orgEv?.broadcast === false && orgEv?.pointValue === 150,
      JSON.stringify(orgEv && { s: orgEv.source, o: orgEv.organizerId, a: orgEv.areaId, b: orgEv.broadcast, p: orgEv.pointValue }));
 
   const publicIds = (await getDocs(query(collection(nonfan.fdb, "events"),

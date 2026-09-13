@@ -45,7 +45,7 @@ final class GameStateManager {
 
     /// Bookmarked events (local only — not cloud-synced).
     var savedEventIDs: Set<String> {
-        didSet { save(savedEventIDs, forKey: "savedEventIDs"); scheduleSync() }
+        didSet { save(savedEventIDs, forKey: "savedEventIDs"); scheduleSyncIfNeeded() }
     }
 
     /// Bookmarked places (local only).
@@ -500,41 +500,60 @@ final class GameStateManager {
     /// Single-flight guard so rapid double-taps can't fire two redemptions.
     private var isRedeeming = false
 
+    /// What a redemption produced. Perks come back with a code the user must be
+    /// shown — the previous API discarded it, so a perk purchase completed with
+    /// nothing to display.
+    struct RedeemOutcome: Equatable {
+        let result: RedeemResult
+        var kind: String = "cash"
+        var code: String? = nil
+        var title: String? = nil
+        var partner: String? = nil
+    }
+
     /// Redeem a reward. When signed in this goes through the server (no optimistic
-    /// deduction — redemptions require connectivity). Signed out, it falls back to
-    /// local demo behavior since there's no real fulfillment without an account.
+    /// deduction — redemptions require connectivity). Signed out, it refuses:
+    /// without an account no fulfilment is possible.
     func redeemReward(_ reward: Reward) async -> RedeemResult {
-        guard !isRedeeming else { return .failed("A redemption is already in progress.") }
-        guard !redeemedRewardIDs.contains(reward.id) else { return .alreadyRedeemed }
-        guard pointsBalance >= reward.pointCost else { return .notEnoughPoints }
+        await redeem(rewardId: reward.id, pointCost: reward.pointCost).result
+    }
+
+    /// ID-based redemption, used by both cash cards and partner perks. Perks
+    /// exist only on the server, so there is no local `Reward` to pass.
+    func redeem(rewardId: String, pointCost: Int) async -> RedeemOutcome {
+        guard !isRedeeming else { return RedeemOutcome(result: .failed("A redemption is already in progress.")) }
+        guard !redeemedRewardIDs.contains(rewardId) else { return RedeemOutcome(result: .alreadyRedeemed) }
+        guard pointsBalance >= pointCost else { return RedeemOutcome(result: .notEnoughPoints) }
         isRedeeming = true
         defer { isRedeeming = false }
 
         guard let fx = functionsService else {
-            // No account → no fulfilment is possible. Pretending to redeem (the
-            // old "demo mode") took points and delivered nothing, which is a
-            // fabricated reward. Say so instead.
-            return .signInRequired
+            // No account → no fulfilment is possible. Pretending to redeem takes
+            // points and delivers nothing, which is a fabricated reward.
+            return RedeemOutcome(result: .signInRequired)
         }
 
         // Land any queued earns first so the server balance is current.
         await flushPendingOps()
 
         do {
-            let result = try await fx.redeemReward(rewardId: reward.id)
-            guard result.redeemed else { return .failed("Redemption failed. Please try again.") }
-            redeemedRewardIDs.insert(reward.id)
-            pointsBalance = result.remaining
-            return .success
+            let r = try await fx.redeemReward(rewardId: rewardId)
+            guard r.redeemed else { return RedeemOutcome(result: .failed("Redemption failed. Please try again.")) }
+            redeemedRewardIDs.insert(rewardId)
+            pointsBalance = r.remaining
+            return RedeemOutcome(result: .success, kind: r.kind, code: r.code,
+                                 title: r.title, partner: r.partner)
         } catch ServerCallError.offline {
-            return .offline
+            return RedeemOutcome(result: .offline)
         } catch ServerCallError.alreadyRedeemed {
-            redeemedRewardIDs.insert(reward.id)   // reconcile local view with server
-            return .alreadyRedeemed
+            redeemedRewardIDs.insert(rewardId)   // reconcile local view with server
+            return RedeemOutcome(result: .alreadyRedeemed)
         } catch ServerCallError.notEnoughPoints {
-            return .notEnoughPoints
+            return RedeemOutcome(result: .notEnoughPoints)
         } catch {
-            return .failed(error.localizedDescription)
+            // Server refusal messages here are specific and user-facing
+            // ("Verdure+ early access…", "out of codes for now") — surface them.
+            return RedeemOutcome(result: .failed(error.localizedDescription))
         }
     }
 

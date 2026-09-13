@@ -140,19 +140,26 @@ final class GameStateManagerTests: XCTestCase {
         XCTAssertFalse(state.isRedeemed(sampleReward.id))
     }
 
-    func testFastDoubleRedeemOnlyDeductsOnce() async {
+    /// Signed out, redemption must REFUSE rather than deduct.
+    ///
+    /// This test used to assert that one of two concurrent redemptions
+    /// succeeded locally. That behaviour was removed deliberately: without an
+    /// account no fulfilment is possible, so "succeeding" took points and
+    /// delivered nothing — a fabricated reward. The double-tap coverage is kept;
+    /// the expectation is now that BOTH are refused and no points move.
+    func testFastDoubleRedeemDeductsNothingWhenSignedOut() async {
         let state = freshManager()
         let reward = sampleReward                      // hoisted: async-let children may not touch self
-        state.pointsBalance = reward.pointCost         // can afford exactly one
+        state.pointsBalance = reward.pointCost         // could afford one, if it were allowed
 
-        // Fire two redemptions back-to-back (the "fast double-tap").
         async let a = state.redeemReward(reward)
         async let b = state.redeemReward(reward)
         let results = await [a, b]
 
-        XCTAssertEqual(results.filter { $0 == .success }.count, 1, "exactly one succeeds")
-        XCTAssertEqual(state.pointsBalance, 0, "points deducted exactly once")
-        XCTAssertTrue(state.isRedeemed(reward.id))
+        XCTAssertTrue(results.allSatisfy { $0 != .success }, "no redemption may succeed without an account")
+        XCTAssertTrue(results.contains(.signInRequired), "the refusal should say why")
+        XCTAssertEqual(state.pointsBalance, reward.pointCost, "no points may be deducted")
+        XCTAssertFalse(state.isRedeemed(reward.id))
     }
 
     // MARK: Queue persistence (offline replay survives relaunch)

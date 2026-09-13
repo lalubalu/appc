@@ -25,14 +25,15 @@ import { loadAreaIndex, upsertBatch, markStale } from "./store.js";
 import { fetchTicketmaster } from "./sources/ticketmaster.js";
 import { fetchIcsFeed } from "./sources/icsfeed.js";
 import { fetchLibCal } from "./sources/libcal.js";
+import { fetchBiblioCommons } from "./sources/bibliocommons.js";
 import { fetchLocalist } from "./sources/localist.js";
 import { fetchNps } from "./sources/nps.js";
 import { fetchSerpApi, serpApiBudgetAllows, SERPAPI_MONTHLY_CAP } from "./sources/serpapi.js";
 import { cleanText, cleanUrl, cleanCoord, classify, formatLocalTime } from "./normalize.js";
 
-const SOURCES: SourceId[] = ["ticketmaster", "libcal", "localist", "nps", "ics", "serpapi"];
+const SOURCES: SourceId[] = ["ticketmaster", "libcal", "bibliocommons", "localist", "nps", "ics", "serpapi"];
 const TICKETED: SourceId[] = ["ticketmaster"];
-const CIVIC: SourceId[] = ["libcal", "localist", "nps", "ics", "serpapi"];
+const CIVIC: SourceId[] = ["libcal", "bibliocommons", "localist", "nps", "ics", "serpapi"];
 
 interface Keys { ticketmaster?: string; nps?: string; serpapi?: string; }
 
@@ -45,6 +46,11 @@ async function fetchSource(source: SourceId, area: LaunchArea, keys: Keys): Prom
     case "libcal": {
       const all: NormalizedEvent[] = [];
       for (const feed of area.libcal) all.push(...await fetchLibCal(area, feed));
+      return all;
+    }
+    case "bibliocommons": {
+      const all: NormalizedEvent[] = [];
+      for (const feed of area.bibliocommons ?? []) all.push(...await fetchBiblioCommons(area, feed));
       return all;
     }
     case "ics": {

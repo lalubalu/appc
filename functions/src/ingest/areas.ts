@@ -8,11 +8,30 @@
  * Every URL and host below was fetched live on 2026-09-06 and returned data.
  * Re-verify before relying on any of them — feeds change without notice.
  *
- * Launch area: CLEVELAND, OH. Chosen because the differentiating civic layer is
- * verifiably real here today: Cleveland Public Library runs LibCal (public
- * iCal, 500 events), Tri-C runs Localist (61 events / 30 days with coordinates),
- * Cuyahoga Valley National Park has 39 NPS events, and Ticketmaster Discovery
- * lists 990 events within 25 miles.
+ * Launch area: SAN JOSE / SOUTH BAY, CA.
+ *
+ * This replaced Cleveland, OH on 2026-09-13. Cleveland was never a decision —
+ * it was a placeholder that survived into config. Verdure launches where its
+ * operators and first users are, and that is the South Bay.
+ *
+ * The civic layer is denser here than it was in Cleveland, but it is reached
+ * DIFFERENTLY, and that difference cost a new adapter. Surveyed live 2026-09-13
+ * (full write-up and every probe in docs/FEED-SURVEY-SAN-JOSE.md):
+ *
+ *   San José Public Library      BiblioCommons   6,477 events   ✅ sources/bibliocommons.ts
+ *   Santa Clara County Library   BiblioCommons   2,106 events   ✅ same adapter
+ *   San José State University    Localist          100+/30d     ✅ with coordinates
+ *   Stanford University          Localist          100+/30d     ✅ (~17 mi, inside radius)
+ *   Ticketmaster Discovery       API                  —         ✅ SAP Center et al.
+ *   Santa Clara University       Localist         403 blocked   ❌ recruit directly
+ *   City of San José             no ICS (403)        —          ❌ recruit directly
+ *
+ * NEITHER library system runs LibCal, and neither publishes iCal — SJPL's
+ * /events/calendar.ics is a hard 404. The existing .ics and LibCal adapters
+ * could not read either one, which is why sources/bibliocommons.ts exists.
+ * Unlike LibCal, BiblioCommons ships branch coordinates in the feed
+ * (mapLocation.centrePoint, isGeocoded), so there is no hand-kept venue table
+ * below and no branch silently missing coordinates.
  */
 
 export interface IcsFeed {
@@ -37,6 +56,19 @@ export interface LibCalFeed {
   tags?: string[];
 }
 
+/**
+ * A BiblioCommons library system, read through the public gateway API
+ * (see sources/bibliocommons.ts). No venue table: the feed geocodes branches.
+ */
+export interface BiblioFeed {
+  name: string;
+  /** Gateway library slug, e.g. "sjpl" — prefixes source ids so systems never collide. */
+  library: string;
+  /** Public site host, used to build event links. Defaults to `<library>.bibliocommons.com`. */
+  host?: string;
+  tags?: string[];
+}
+
 export interface LaunchArea {
   id: string;
   name: string;
@@ -46,6 +78,8 @@ export interface LaunchArea {
   ticketmaster: { enabled: boolean };
   /** Springshare LibCal calendars (one per library system). */
   libcal: LibCalFeed[];
+  /** BiblioCommons library systems (one per library system). */
+  bibliocommons: BiblioFeed[];
   /** Localist calendar hosts (city / university / community college). */
   localist: { host: string; name: string }[];
   /** National Park Service park codes with events near the area. */
@@ -56,76 +90,59 @@ export interface LaunchArea {
   serpapi: { enabled: boolean; query: string };
 }
 
-export const CLEVELAND: LaunchArea = {
-  id: "cleveland-oh",
-  name: "Cleveland, OH",
-  center: { lat: 41.4993, lng: -81.6944 },
+export const SAN_JOSE: LaunchArea = {
+  id: "san-jose-ca",
+  name: "San Jose, CA",
+  // Downtown San José (City Hall). 25 miles reaches Palo Alto and Stanford to
+  // the north-west, Gilroy to the south, and Fremont across the bay.
+  center: { lat: 37.3382, lng: -121.8863 },
   radiusMiles: 25,
-  timeZone: "America/New_York",
+  timeZone: "America/Los_Angeles",
   ticketmaster: { enabled: true },
-  libcal: [
+  // No LibCal in this area — both library systems are BiblioCommons. The
+  // adapter stays in the tree because it is verified and the next launch area
+  // may well need it.
+  libcal: [],
+  bibliocommons: [
     {
-      // Verified 2026-09-06: rss.php?m=month returns 300 upcoming items with
-      // structured libcal:* fields. (The iCal subscription for the same calendar
-      // is a rolling 500-event window that ends BEFORE today — unusable for
-      // upcoming events; see sources/libcal.ts.)
-      name: "Cleveland Public Library",
-      calendarId: "8758",
-      rssUrl: "https://cpl.libcal.com/rss.php?m=month&cid=8758",
-      venues: {
-        // Coordinates verified against OpenStreetMap (Overpass, amenity=library,
-        // City of Cleveland bbox) on 2026-09-06 — 4-decimal precision (~11 m).
-        // Branches NOT present in OSM (Fleet, Mt. Pleasant, Walz) deliberately
-        // have no entry: an event there gets no coordinates rather than a guess,
-        // so the check-in proximity gate stays off instead of wrong.
-        "Main Library - Downtown": { lat: 41.5013, lng: -81.6914 },
-        "Glenville": { lat: 41.5410, lng: -81.6025 },
-        "Rice": { lat: 41.4848, lng: -81.6033 },
-        "Eastman": { lat: 41.4624, lng: -81.7680 },
-        "Harvard-Lee": { lat: 41.4496, lng: -81.5616 },
-        "Jefferson": { lat: 41.4793, lng: -81.6856 },
-        "Rockport": { lat: 41.4338, lng: -81.7903 },
-        "South Brooklyn": { lat: 41.4384, lng: -81.7072 },
-        "West Park": { lat: 41.4514, lng: -81.8075 },
-        "Lorain": { lat: 41.4711, lng: -81.7416 },
-        "Fulton": { lat: 41.4579, lng: -81.7127 },
-        "Carnegie West": { lat: 41.4824, lng: -81.7113 },
-        "Woodland": { lat: 41.4877, lng: -81.6487 },
-        "Sterling": { lat: 41.4975, lng: -81.6667 },
-        "Hough": { lat: 41.5107, lng: -81.6448 },
-        "Addison": { lat: 41.5192, lng: -81.6426 },
-        "Langston Hughes": { lat: 41.5213, lng: -81.6172 },
-        "Collinwood": { lat: 41.5560, lng: -81.5758 },
-        "Memorial-Nottingham": { lat: 41.5829, lng: -81.5619 },
-        "Union": { lat: 41.4644, lng: -81.6209 },
-        "East 131st": { lat: 41.4546, lng: -81.5916 },
-        "Garden Valley": { lat: 41.4798, lng: -81.6379 },
-        "Martin Luther King": { lat: 41.5040, lng: -81.6140 },
-        "Brooklyn": { lat: 41.4542, lng: -81.7017 },
-      },
+      // Verified 2026-09-13: gateway reports 6,477 events. calendar.ics → 404.
+      name: "San José Public Library",
+      library: "sjpl",
+      host: "sjpl.bibliocommons.com",
+      tags: ["library"],
+    },
+    {
+      // Verified 2026-09-13: gateway reports 2,106 events.
+      name: "Santa Clara County Library District",
+      library: "sccl",
+      host: "sccl.bibliocommons.com",
       tags: ["library"],
     },
   ],
   localist: [
-    // Verified 2026-09-06: /api/2/events returns 61 events (30 days), with geo.
-    // Cuyahoga Community College — Cleveland's community college; most events
-    // are tagged "General Public".
-    { host: "events.tri-c.edu", name: "Tri-C" },
+    // Verified 2026-09-13: /api/2/events returns a full page with geo.
+    { host: "events.sjsu.edu", name: "San José State University" },
+    // Verified 2026-09-13. Palo Alto is ~17 mi from centre, inside the radius.
+    { host: "events.stanford.edu", name: "Stanford University" },
+    // Santa Clara University (events.scu.edu) returns 403 to server-side
+    // requests — deliberately absent rather than silently failing every run.
   ],
   nps: {
-    // Cuyahoga Valley National Park — verified 39 events, recurring farmers market etc.
-    parkCodes: ["cuva"],
+    // No NPS unit sits inside the radius. Pinnacles is ~80 mi and Golden Gate
+    // ~50 mi, both outside it, and isInsideArea would discard their events
+    // anyway. Empty is the honest value; the previous area had Cuyahoga Valley
+    // genuinely inside its radius, and this one has nothing.
+    parkCodes: [],
   },
   ics: [
-    // Cleveland Metroparks and the City of Cleveland publish NO iCal/RSS feed
-    // (checked clevelandmetroparks.com and clevelandohio.gov on 2026-09-06).
-    // Cuyahoga County Public Library's calendar (attend.cuyahogalibrary.org)
-    // has ICS export disabled. Recruit these via organizer accounts instead.
+    // City of San José returns 403 to its calendar ICS endpoint from servers.
+    // Midpeninsula Regional Open Space and County Parks publish no iCal.
+    // Recruit these via organizer accounts instead.
   ],
-  serpapi: { enabled: true, query: "events in Cleveland, OH" },
+  serpapi: { enabled: true, query: "events in San Jose, CA" },
 };
 
-export const LAUNCH_AREAS: LaunchArea[] = [CLEVELAND];
+export const LAUNCH_AREAS: LaunchArea[] = [SAN_JOSE];
 
 export function areaById(id: string | undefined): LaunchArea | undefined {
   return LAUNCH_AREAS.find((a) => a.id === id);

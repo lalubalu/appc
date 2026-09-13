@@ -37,6 +37,7 @@ struct RootView: View {
     @State private var storeService = StoreService()
     @State private var moderationService = ModerationService()
     @State private var socialService = SocialService()
+    @State private var economyService = EconomyService()
     @State private var discoveryFilters = DiscoveryFilters()
     @State private var dailyGemFact: GemFact?
 
@@ -53,6 +54,7 @@ struct RootView: View {
                     .environment(storeService)
                     .environment(moderationService)
                     .environment(socialService)
+                    .environment(economyService)
                     .environment(discoveryFilters)
                     .onAppear {
                         locationManager.requestPermission()

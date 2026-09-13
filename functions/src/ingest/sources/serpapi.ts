@@ -87,6 +87,13 @@ export function parseSerpDate(d: SerpEvent["date"], timeZone: string, now = new 
   return date;
 }
 
+/** yyyy-mm-dd as it reads on a wall calendar in the area's timezone. */
+function localDateKey(d: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone, year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(d);
+}
+
 export function mapSerp(e: SerpEvent, area: LaunchArea): NormalizedEvent | null {
   const title = cleanText(e.title, 120);
   if (!title) return null;
@@ -98,7 +105,17 @@ export function mapSerp(e: SerpEvent, area: LaunchArea): NormalizedEvent | null 
   const link = cleanUrl(e.link) ?? cleanUrl(tickets[0]?.link);
   return {
     source: "serpapi",
-    sourceEventId: stableHash(`${title}|${venue}|${start.toISOString().slice(0, 10)}`),
+    // Hash on the LOCAL calendar date, not the UTC one.
+    //
+    // SerpApi's `when` is optional: the same event can arrive once as
+    // "Sat, Sep 20, 6 PM" and once as bare "Sep 20". Both are the same event and
+    // must produce the same id. With a UTC date they only do so east of
+    // Greenwich-ish — in America/Los_Angeles a 6 PM PDT start is 01:00Z the NEXT
+    // day, so the two records hash differently and the event ingests twice.
+    // This was invisible while the launch area was America/New_York (where a
+    // 6 PM start is still 22:00Z the same day) and surfaced the moment it moved
+    // to the West Coast.
+    sourceEventId: stableHash(`${title}|${venue}|${localDateKey(start, area.timeZone)}`),
     areaId: area.id,
     title,
     description: cleanText(e.description, 400),

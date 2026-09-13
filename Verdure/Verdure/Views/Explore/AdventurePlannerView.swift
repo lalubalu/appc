@@ -21,7 +21,21 @@ struct AdventurePlannerView: View {
     @State private var plan: AdventurePlan?
     @State private var isPlanning = false
     @State private var errorMessage: String?
+    /// Set when the server refuses on quota. Presenting the paywall from here
+    /// rather than replacing the screen is what preserves the in-progress
+    /// request: `duration` and the loaded `places` stay exactly as they were,
+    /// so dismissing the paywall returns the user to a filled-in form, and
+    /// subscribing re-runs it for them without retyping anything.
+    @State private var quotaWall: QuotaWall?
+    @State private var pendingRetry = false
+    @Environment(StoreService.self) private var store
     @Environment(\.dismiss) private var dismiss
+
+    private struct QuotaWall: Identifiable {
+        let id = UUID()
+        let limit: Int
+        let resetsOn: Date?
+    }
 
     private let durations = [60, 120, 180, 240]
 
@@ -39,11 +53,20 @@ struct AdventurePlannerView: View {
                         durationPicker
                         planButton
                         if let errorMessage { errorCard(errorMessage) }
-                        if let plan { planCard(plan) }
+                        if let plan {
+                            planCard(plan)
+                            remainingFooter(plan)
+                        }
                     }
                     .padding(Spacing.lg)
                     .padding(.bottom, Spacing.xxl)
                 }
+            }
+            .sheet(item: $quotaWall, onDismiss: { Task { await paywallDismissed() } }) { wall in
+                PaywallView()
+                    .environment(store)
+                    .onAppear { pendingRetry = true }
+                    .accessibilityLabel("Verdure Plus. You have used all \(wall.limit) free plans this month.")
             }
             .navigationTitle("Adventure Planner")
             .navigationBarTitleDisplayMode(.inline)
@@ -215,9 +238,37 @@ struct AdventurePlannerView: View {
                 longitude: longitude
             )
             Haptics.success()
+        } catch AdventurePlannerError.quotaExhausted(let limit, let resetsOn) {
+            // Not an error state. The form stays populated underneath.
+            plan = nil
+            quotaWall = QuotaWall(limit: limit, resetsOn: resetsOn)
         } catch {
             plan = nil
             errorMessage = error.localizedDescription
+        }
+    }
+
+    /// After the paywall closes: if they subscribed, run the plan they already
+    /// asked for. If they didn't, leave the form untouched and say nothing —
+    /// they just declined, which isn't an error worth an alert.
+    private func paywallDismissed() async {
+        guard pendingRetry else { return }
+        pendingRetry = false
+        if store.isPlus { await runPlan() }
+    }
+
+    @ViewBuilder
+    private func remainingFooter(_ plan: AdventurePlan) -> some View {
+        if let left = plan.plansRemaining {
+            HStack(spacing: 6) {
+                Image(systemName: left == 0 ? "lock.fill" : "sparkles")
+                Text(left == 1 ? "1 free plan left this month"
+                               : "\(left) free plans left this month")
+            }
+            .font(VType.scaledBody(13, .medium))
+            .foregroundStyle(Palette.inkSoft)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .accessibilityElement(children: .combine)
         }
     }
 

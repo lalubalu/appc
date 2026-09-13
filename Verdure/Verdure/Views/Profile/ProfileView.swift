@@ -10,6 +10,7 @@ struct ProfileView: View {
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = true
     @AppStorage("accountType") private var accountTypeRaw = AccountType.visitor.rawValue
     @Environment(GameStateManager.self) private var gameState
+    @Environment(EconomyService.self) private var economy
     @Environment(AuthService.self) private var authService
     @Environment(StoreService.self) private var store
     @Environment(ModerationService.self) private var moderation
@@ -56,7 +57,7 @@ struct ProfileView: View {
             }
             .background(VerdureBackground())
             .sheet(isPresented: $showRewardsStore) {
-                RewardsStoreView().environment(gameState)
+                RewardsStoreView().environment(gameState).environment(economy)
             }
             .sheet(isPresented: $showAllBadges) {
                 AllBadgesView(badges: badges)

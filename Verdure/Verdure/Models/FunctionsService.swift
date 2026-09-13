@@ -24,6 +24,15 @@ struct ServerAwardResult: Sendable {
 struct ServerRedeemResult: Sendable {
     let redeemed: Bool
     let remaining: Int
+    /// "cash" or "perk". The server decides which branch ran; the client must
+    /// not infer it from the id, because only the server knows the catalog.
+    let kind: String
+    /// Perk redemptions return the claimed code. Dropping it (as this type used
+    /// to) makes the perk flow impossible to complete — the user spends points
+    /// and is never shown what they bought.
+    let code: String?
+    let title: String?
+    let partner: String?
 }
 
 enum ServerCallError: LocalizedError, Sendable {
@@ -88,10 +97,16 @@ final class FunctionsService: Sendable {
     }
 
     func redeemReward(rewardId: String) async throws -> ServerRedeemResult {
-        let data = try await Self.call("redeemReward", ["rewardId": rewardId])
+        // Preserve server messages: the refusals here are user-facing and
+        // specific ("Verdure+ early access…", "out of codes for now").
+        let data = try await Self.callPreservingMessages("redeemReward", ["rewardId": rewardId])
         return ServerRedeemResult(
             redeemed: data["redeemed"] as? Bool ?? false,
-            remaining: data["remaining"] as? Int ?? 0
+            remaining: data["remaining"] as? Int ?? 0,
+            kind: data["kind"] as? String ?? "cash",
+            code: data["code"] as? String,
+            title: data["title"] as? String,
+            partner: data["partner"] as? String
         )
     }
 

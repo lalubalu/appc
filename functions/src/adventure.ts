@@ -25,6 +25,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret, defineString } from "firebase-functions/params";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
+import { plusActiveFrom } from "./common.js";
 
 const db = () => getFirestore();
 
@@ -33,6 +34,30 @@ const ADVENTURE_MODEL = defineString("ADVENTURE_MODEL", { default: "claude-sonne
 
 /** Planning costs a vendor call per request, so it's bounded per user. */
 const PLAN_LIMIT = { max: 30, windowMs: 60 * 60 * 1000 };
+
+/// Free-tier monthly quota. The hourly rate limit above is an abuse brake, not
+/// an economic one: at 30/hour a single free account could bill 720 Anthropic
+/// calls a day, forever. This is the actual cost ceiling, and it is the thing
+/// Verdure+ sells (see PaywallView.features, first row).
+export const FREE_PLANS_PER_MONTH = 5;
+
+/// What one plan costs us in vendor spend, in cents. One Claude call plus the
+/// Open-Meteo lookup (free). Rounded up deliberately — an under-estimate here
+/// silently understates the treasury burn that decides whether this feature
+/// can stay free at all.
+export const PLAN_VENDOR_COST_CENTS = 2;
+
+/// Calendar month in UTC. Quota keys and treasury buckets must agree on this,
+/// so both call the same function.
+export function monthKey(now = new Date()): string {
+  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+/// When a quota-exhausted free user gets their plans back. Sent to the client
+/// so the paywall can say a date instead of "later".
+export function nextMonthISO(now = new Date()): string {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString();
+}
 
 interface Candidate {
   id: string;
@@ -210,24 +235,61 @@ export const planAdventure = onCall(
     const uid = req.auth?.uid;
     if (!uid) throw new HttpsError("unauthenticated", "Sign in to plan an adventure.");
 
-    // Inline rate limit (same shape as index.ts's, kept local so this module
-    // stays self-contained). Counters live in the server-only collection.
+    // Rate limit AND monthly quota, both in ONE transaction.
+    //
+    // They are deliberately not two transactions. Checking the quota, then
+    // separately incrementing it, lets N concurrent calls all read 4 and all
+    // write 5 — the exact race that makes a "5 a month" limit mean "5 a month
+    // unless you tap fast", and the planner is billed per call.
     const ref = db().collection("rateLimits").doc(`${uid}_planAdventure`);
+    const userRef = db().collection("users").doc(uid);
+    const mk = monthKey();
+    let isPlus = false;
+    let usedAfter = 0;
+
     await db().runTransaction(async (tx) => {
-      const snap = await tx.get(ref);
+      // Both reads must happen before any write in a Firestore transaction.
+      const [snap, userSnap] = await Promise.all([tx.get(ref), tx.get(userRef)]);
       const d = snap.data();
       const now = Date.now();
+
+      // --- hourly abuse brake -------------------------------------------
       const startedAt = typeof d?.windowStart?.toMillis === "function" ? d.windowStart.toMillis() : 0;
       const expired = now - startedAt >= PLAN_LIMIT.windowMs;
       const count = expired ? 0 : (Number(d?.count) || 0);
       if (count >= PLAN_LIMIT.max) {
         throw new HttpsError("resource-exhausted", "Too many plans this hour. Try again shortly.");
       }
+
+      // --- monthly economic quota ---------------------------------------
+      // Entitlement is read from the same snapshot inside the transaction, so
+      // a subscription that lapses mid-call can't be used to skip the count.
+      isPlus = plusActiveFrom(userSnap.data(), now);
+      const used = Number(userSnap.data()?.plannerUsage?.[mk]) || 0;
+
+      if (!isPlus && used >= FREE_PLANS_PER_MONTH) {
+        // DISTINCT from the hourly "resource-exhausted" above: this one is a
+        // sales moment, not an error, and the client routes it to the paywall.
+        // The details payload is the contract — AdventurePlannerService keys
+        // off `reason`, never off the message text.
+        throw new HttpsError(
+          "permission-denied",
+          `You've used all ${FREE_PLANS_PER_MONTH} plans this month. Verdure+ members plan without limits.`,
+          { reason: "planner_quota_exhausted", used, limit: FREE_PLANS_PER_MONTH, resetsOn: nextMonthISO() },
+        );
+      }
+
       tx.set(ref, {
         uid, action: "planAdventure", count: count + 1,
         windowStart: expired ? new Date(now) : (d?.windowStart ?? new Date(now)),
         updatedAt: FieldValue.serverTimestamp(),
       }, { merge: true });
+
+      // Members are counted too. The quota doesn't apply to them, but the
+      // number is what tells us what unlimited actually costs before we price
+      // it — and it's what the treasury report reconciles against.
+      usedAfter = used + 1;
+      tx.set(userRef, { plannerUsage: { [mk]: usedAfter } }, { merge: true });
     });
 
     const lat = Number(req.data?.lat);
@@ -306,6 +368,22 @@ export const planAdventure = onCall(
       throw new HttpsError("internal", "Couldn't build a plan from nearby places. Try again.");
     }
 
+    // Vendor spend, recorded only once the plan actually succeeded — a failed
+    // Claude call bills nothing and must not show up as burn. Best-effort: a
+    // bookkeeping write must never fail a plan the user already paid a quota
+    // slot for. Same /treasury/{yyyy-mm} bucket the cash ledger uses, under a
+    // separate key so gift-card liability and API spend stay distinguishable.
+    try {
+      await db().collection("treasury").doc(mk).set({
+        plannerCalls: FieldValue.increment(1),
+        plannerCostCents: FieldValue.increment(PLAN_VENDOR_COST_CENTS),
+        plannerPlusCalls: FieldValue.increment(isPlus ? 1 : 0),
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+    } catch (e) {
+      console.error("[planAdventure] treasury write failed", e);
+    }
+
     return {
       title: plan.title,
       intro: plan.intro,
@@ -313,6 +391,8 @@ export const planAdventure = onCall(
       weather: weather
         ? { temperatureF: Math.round(weather.temperatureF), summary: weather.summary }
         : null,
+      plansRemaining: isPlus ? null : Math.max(0, FREE_PLANS_PER_MONTH - usedAfter),
+      isPlus,
       generatedAtMs: Date.now(),
     };
   }

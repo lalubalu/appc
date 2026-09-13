@@ -8,11 +8,16 @@ import CoreLocation
 @MainActor
 final class DiscoveryFiltersTests: XCTestCase {
 
-    private let cleveland = CLLocation(latitude: 41.4993, longitude: -81.6944)
+    private let sanJose = CLLocation(latitude: 37.3382, longitude: -121.8863)
     private var suite: UserDefaults!
 
-    override func setUp() {
-        super.setUp()
+    // `override func setUp()` is nonisolated, so it cannot touch this
+    // @MainActor class's stored properties (that is why the test target stopped
+    // compiling). The async form inherits the class's isolation.
+    override func setUp() async throws {
+        // NOTE: no `super.setUp()` call — forwarding to the nonisolated
+        // superclass method from this @MainActor context sends a non-Sendable
+        // XCTestCase across isolation. XCTest runs the superclass setup itself.
         suite = UserDefaults(suiteName: "DiscoveryFiltersTests")!
         suite.removePersistentDomain(forName: "DiscoveryFiltersTests")
     }
@@ -29,10 +34,10 @@ final class DiscoveryFiltersTests: XCTestCase {
 
     func testRadiusFilterKeepsUnlocatedEventsAndDropsFarOnes() {
         var state = DiscoveryFilterState(); state.radiusMiles = 5
-        let near = event("near", title: "Near", lat: 41.50, lng: -81.70)          // downtown
-        let far = event("far", title: "Far", lat: 41.36, lng: -81.76)             // Parma, ~11 mi
+        let near = event("near", title: "Near", lat: 37.34, lng: -121.89)        // downtown
+        let far = event("far", title: "Far", lat: 37.25, lng: -122.03)        // Los Gatos, ~11 mi
         let unknown = event("unknown", title: "No coords")
-        let out = DiscoveryFilters.filterEvents([near, far, unknown], state: state, query: "", userLocation: cleveland)
+        let out = DiscoveryFilters.filterEvents([near, far, unknown], state: state, query: "", userLocation: sanJose)
         XCTAssertEqual(Set(out.map(\.id)), ["near", "unknown"])
     }
 
@@ -65,13 +70,13 @@ final class DiscoveryFiltersTests: XCTestCase {
 
     func testSortByPointsDistanceAndRecent() {
         var state = DiscoveryFilterState()
-        let a = event("a", title: "A", category: .market, daysAhead: 1, lat: 41.50, lng: -81.70)     // 75 pts, close
-        let b = event("b", title: "B", category: .festival, daysAhead: 3, lat: 41.58, lng: -81.56)   // 250 pts, farther
+        let a = event("a", title: "A", category: .market, daysAhead: 1, lat: 37.34, lng: -121.89)   // 75 pts, close
+        let b = event("b", title: "B", category: .festival, daysAhead: 3, lat: 37.42, lng: -121.75)  // 250 pts, farther
         let c = event("c", title: "C", category: .social, daysAhead: 2)                             // 100 pts, no coords
         state.eventSort = .points
         XCTAssertEqual(DiscoveryFilters.filterEvents([a, b, c], state: state, query: "", userLocation: nil).map(\.id), ["b", "c", "a"])
         state.eventSort = .distance
-        XCTAssertEqual(DiscoveryFilters.filterEvents([a, b, c], state: state, query: "", userLocation: cleveland).map(\.id), ["a", "b", "c"],
+        XCTAssertEqual(DiscoveryFilters.filterEvents([a, b, c], state: state, query: "", userLocation: sanJose).map(\.id), ["a", "b", "c"],
                        "unlocated events sort last when sorting by distance")
         state.eventSort = .recent
         XCTAssertEqual(DiscoveryFilters.filterEvents([a, b, c], state: state, query: "", userLocation: nil).map(\.id), ["b", "c", "a"])
@@ -104,14 +109,14 @@ final class DiscoveryFiltersTests: XCTestCase {
             return CollectiblePlace(id: id, place: place, rarity: rarity, coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lng))
         }
         let items = [
-            mk("bluff", .scenic, .legendary, 41.50, -81.70),
-            mk("marina", .waterfront, .rare, 41.49, -81.71),
-            mk("park", .parks, .common, 41.50, -81.69),
-            mk("far-overlook", .scenic, .legendary, 41.20, -81.90),   // ~28 mi
+            mk("bluff", .scenic, .legendary, 37.34, -121.89),
+            mk("marina", .waterfront, .rare, 37.33, -121.91),
+            mk("park", .parks, .common, 37.34, -121.89),
+            mk("far-overlook", .scenic, .legendary, 37.05, -122.10),  // ~28 mi
         ]
-        let out = DiscoveryFilters.filterCollectibles(items, state: state, query: "", userLocation: cleveland)
+        let out = DiscoveryFilters.filterCollectibles(items, state: state, query: "", userLocation: sanJose)
         XCTAssertEqual(out.map(\.id), ["bluff", "marina"])
-        XCTAssertEqual(DiscoveryFilters.filterCollectibles(items, state: state, query: "mar", userLocation: cleveland).map(\.id), ["marina"])
+        XCTAssertEqual(DiscoveryFilters.filterCollectibles(items, state: state, query: "mar", userLocation: sanJose).map(\.id), ["marina"])
     }
 
     // MARK: Persistence + recents

@@ -34,6 +34,11 @@ struct AdventurePlan: Sendable, Hashable {
     let temperatureF: Int?
 
     var totalMinutes: Int { stops.reduce(0) { $0 + $1.minutes } }
+
+    /// Free-tier plans left this month. `nil` for members (unlimited) and for
+    /// a server that predates the quota.
+    var plansRemaining: Int? = nil
+    var isPlus: Bool = false
 }
 
 enum AdventurePlannerError: LocalizedError, Sendable {
@@ -41,6 +46,11 @@ enum AdventurePlannerError: LocalizedError, Sendable {
     case notEnoughPlaces
     case notConfigured
     case rateLimited(String)
+    /// The free monthly quota is spent. Deliberately its OWN case rather than a
+    /// flavour of `rateLimited`: this one is a sales moment, and the view routes
+    /// it to the paywall instead of showing an error. Keyed off the server's
+    /// `reason` detail, never off message text, so copy edits can't break it.
+    case quotaExhausted(limit: Int, resetsOn: Date?)
     case offline
     case failed(String)
 
@@ -50,6 +60,8 @@ enum AdventurePlannerError: LocalizedError, Sendable {
         case .notEnoughPlaces: return "Not enough nearby places to plan an outing yet. Try again once Explore has loaded."
         case .notConfigured: return "The planner isn't switched on yet."
         case .rateLimited(let m): return m
+        case .quotaExhausted(let limit, _):
+            return "You've used all \(limit) free plans this month."
         case .offline: return "You appear to be offline."
         case .failed(let m): return m
         }
@@ -127,7 +139,9 @@ final class AdventurePlannerService: Sendable {
             intro: data["intro"] as? String ?? "",
             stops: stops,
             weatherSummary: weather?["summary"] as? String,
-            temperatureF: weather?["temperatureF"] as? Int
+            temperatureF: weather?["temperatureF"] as? Int,
+            plansRemaining: data["plansRemaining"] as? Int,
+            isPlus: data["isPlus"] as? Bool ?? false
         )
     }
 
@@ -136,6 +150,18 @@ final class AdventurePlannerService: Sendable {
         if error.domain == FunctionsErrorDomain {
             switch FunctionsErrorCode(rawValue: error.code) {
             case .unauthenticated: return .notSignedIn
+            case .permissionDenied:
+                // Read the structured details, not the sentence. The server
+                // sends { reason: "planner_quota_exhausted", limit, resetsOn }.
+                let details = error.userInfo[FunctionsErrorDetailsKey] as? [String: Any]
+                if details?["reason"] as? String == "planner_quota_exhausted" {
+                    let limit = details?["limit"] as? Int ?? 5
+                    let resets = (details?["resetsOn"] as? String).flatMap {
+                        ISO8601DateFormatter().date(from: $0)
+                    }
+                    return .quotaExhausted(limit: limit, resetsOn: resets)
+                }
+                return .failed(error.localizedDescription)
             case .resourceExhausted: return .rateLimited(error.localizedDescription)
             case .failedPrecondition:
                 // The server uses failed-precondition for both "not enough

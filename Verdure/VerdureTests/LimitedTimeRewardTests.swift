@@ -110,20 +110,18 @@ final class LimitedTimeRewardTests: XCTestCase {
 
     // MARK: The shipped catalog stays coherent
 
-    func testShippedLimitedCatalogIsWellFormed() {
-        let drops = SampleData.rewards.filter(\.isLimitedTime)
-        XCTAssertFalse(drops.isEmpty, "catalog should demonstrate limited-time drops")
-        for d in drops {
-            if let from = d.availableFrom, let until = d.availableUntil {
-                XCTAssertLessThan(from, until, "\(d.id): window must open before it closes")
-            }
-            XCTAssertGreaterThan(d.pointCost, 0)
-            XCTAssertNotNil(REWARDS_WITH_SERVER_RULES.first { $0 == d.id },
-                            "\(d.id) must also exist in the server catalog or it can never be redeemed")
-        }
+    /// The client no longer ships limited-time drops.
+    ///
+    /// `rei-15-trail-season` and `patagonia-30-earth` were both `active: false`
+    /// on the server, so every redemption was refused — browsable rewards that
+    /// could never be bought. They are deleted. Real limited-time behaviour now
+    /// lives in partner perks, where `earlyAccessUntil` is enforced server-side.
+    ///
+    /// The `Reward.Availability` date logic these used to exercise is still
+    /// fully covered by the constructed-fixture tests above.
+    func testNoInactiveLimitedDropsAreShipped() {
+        XCTAssertTrue(SampleData.rewards.filter(\.isLimitedTime).isEmpty,
+                      "client must not ship limited-time drops the server refuses")
     }
 
-    /// Mirror of the ids declared in functions/src/index.ts LIMITED_TIME_REWARDS.
-    /// Kept in sync deliberately: a drop the server doesn't know is unredeemable.
-    private let REWARDS_WITH_SERVER_RULES = ["rei-15-trail-season", "patagonia-30-earth"]
 }

@@ -21,7 +21,10 @@ enum Legal {
     static let termsOfUseURL = URL(string: "\(siteBase)/terms")!
     static let supportURL = URL(string: "\(siteBase)/support")!
 
-    static let contactEmail = ModerationService.contactEmail
+    /// The single source of truth for the support address. Declared HERE rather
+    /// than on ModerationService: that type is @MainActor, so a nonisolated
+    /// static like this one cannot read from it (it did not compile).
+    static let contactEmail = "support@verdure.app"
     static let lastUpdated = "August 28, 2026"
 
     /// Subscription facts, stated once so the paywall, the terms and the store

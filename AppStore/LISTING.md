@@ -70,12 +70,13 @@ feature ships or is pulled, update this file in the same commit.
 >
 > **Verdure+ (optional)**
 > $4.99/month or $49.99/year:
-> • Premium Rewards — unlock the Gold and Platinum tiers ($25 and $50 gift cards)
-> • Early Access — redeem limited-time seasonal drops up to a week early
+> • Unlimited Adventure Planner — free members get 5 plans a month
+> • Early access to partner perks — see and claim new local offers first
+> • Cash gift cards — $5 and $10, members only
 > • Member badge on your player card
 >
 > Verdure is free to use. A subscription is entirely optional and never required
-> to earn points or redeem the standard rewards.
+> to earn points or redeem partner perks.
 >
 > ---
 > Location is used to find nearby places, to verify you're actually at an event
@@ -105,6 +106,12 @@ binary** (`LegalView`), linked from the paywall, the sign-up form and Profile �
 Settings › Terms & Privacy — so the links are live even before DNS is.
 
 ---
+
+> **Copy rule.** This block and `PaywallView.features` must say the same thing
+> and change in the same commit. The previous version advertised "the Gold and
+> Platinum tiers ($25 and $50 gift cards)" in both places — rewards the server
+> has as `active: false` and refuses to redeem. Do not list a tier here without
+> checking `CASH_CATALOG` in functions/src/economy.ts first.
 
 ## Privacy nutrition label answers
 

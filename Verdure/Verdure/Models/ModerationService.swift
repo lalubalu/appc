@@ -64,7 +64,8 @@ final class ModerationService {
 
     /// Published contact for content concerns — the same address is in
     /// AppStore/LISTING.md and functions/src/moderation.ts. Keep all three equal.
-    static let contactEmail = "support@verdure.app"
+    /// Mirrors `Legal.contactEmail` — one literal, declared there.
+    static let contactEmail = Legal.contactEmail
 
     /// Distinct reporters that hide content automatically (server constant, shown in copy).
     static let autoHideThreshold = 3

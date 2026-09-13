@@ -119,10 +119,19 @@ struct PaywallView: View {
     /// description in the same commit — AppStore/LISTING.md carries the exact
     /// copy and the same instruction, so the two can never drift apart.
     private let features: [PlusFeature] = [
-        PlusFeature(icon: "gift.fill", title: "Premium Rewards",
-                    detail: "Unlock the Gold & Platinum tiers — redeem $25 and $50 gift cards", kind: .gold),
-        PlusFeature(icon: "bolt.fill", title: "Early Access to Drops",
-                    detail: "Redeem limited-time seasonal rewards up to a week before everyone else", kind: .terracotta),
+        // ORDER MATTERS: the planner leads because it is the benefit a member
+        // uses on day one. What was here before led with "Unlock the Gold &
+        // Platinum tiers — redeem $25 and $50 gift cards", which the server
+        // refuses: those four rewards are `active: false` in CASH_CATALOG.
+        // Charging $4.99/month for a benefit the backend declines is an App
+        // Review rejection under the auto-renewing subscription guidelines and a
+        // consumer-protection exposure independent of Apple.
+        PlusFeature(icon: "wand.and.stars", title: "Unlimited Adventure Planner",
+                    detail: "Plan as many outings as you like — free members get 5 a month", kind: .teal),
+        PlusFeature(icon: "bolt.fill", title: "Early Access to Partner Perks",
+                    detail: "See and claim new local perks before everyone else", kind: .terracotta),
+        PlusFeature(icon: "giftcard.fill", title: "Cash Gift Cards",
+                    detail: "$5 and $10 cards, members only", kind: .gold),
         PlusFeature(icon: "medal.fill", title: "Member Badge",
                     detail: "A gold Verdure+ badge on your player card", kind: .spruce),
     ]

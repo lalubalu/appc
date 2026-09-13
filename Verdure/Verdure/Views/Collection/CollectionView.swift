@@ -2,6 +2,7 @@ import SwiftUI
 
 struct CollectionView: View {
     @Environment(GameStateManager.self) private var gameState
+    @Environment(EconomyService.self) private var economy
     @Environment(PlacesAPIService.self) private var placesService
     @State private var showRewardsStore = false
     @State private var selectedCollectible: CollectiblePlace? = nil
@@ -36,7 +37,7 @@ struct CollectionView: View {
                 AccessibilityNotification.Announcement("\(count) \(count == 1 ? "place" : "places")").post()
             }
             .background(VerdureBackground())
-            .sheet(isPresented: $showRewardsStore) { RewardsStoreView().environment(gameState) }
+            .sheet(isPresented: $showRewardsStore) { RewardsStoreView().environment(gameState).environment(economy) }
             .sheet(item: $selectedCollectible) { collectible in
                 CollectibleDetailSheet(collectible: collectible)
                     .environment(gameState)

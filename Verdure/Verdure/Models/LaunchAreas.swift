@@ -6,7 +6,7 @@ import CoreLocation
 // Events are ingested server-side ONLY for configured launch areas
 // (functions/src/ingest/areas.ts). The app mirrors that list so it can tell the
 // truth when someone opens it 500 miles away: not "no events", but "Verdure
-// hasn't launched here yet — the nearest area is Cleveland". Keep this in step
+// hasn't launched here yet — the nearest area is San Jose". Keep this in step
 // with the server file; `listLaunchAreas` returns the authoritative copy and
 // `EventsAPIService` refreshes from it when online.
 
@@ -32,7 +32,7 @@ struct LaunchArea: Identifiable, Equatable, Codable {
 
     /// Mirrors LAUNCH_AREAS in functions/src/ingest/areas.ts.
     static let builtIn: [LaunchArea] = [
-        LaunchArea(id: "cleveland-oh", name: "Cleveland, OH", latitude: 41.4993, longitude: -81.6944, radiusMiles: 25),
+        LaunchArea(id: "san-jose-ca", name: "San Jose, CA", latitude: 37.3382, longitude: -121.8863, radiusMiles: 25),
     ]
 
     static func nearest(to coordinate: CLLocationCoordinate2D, in areas: [LaunchArea] = builtIn) -> LaunchArea? {
