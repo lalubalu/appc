@@ -63,7 +63,7 @@ struct AdventurePlannerView: View {
                 }
             }
             .sheet(item: $quotaWall, onDismiss: { Task { await paywallDismissed() } }) { wall in
-                PaywallView()
+                PaywallView(source: "planner_quota")
                     .environment(store)
                     .onAppear { pendingRetry = true }
                     .accessibilityLabel("Verdure Plus. You have used all \(wall.limit) free plans this month.")
@@ -225,6 +225,7 @@ struct AdventurePlannerView: View {
     // MARK: - Actions
 
     private func runPlan() async {
+        Analytics.log(event: .plannerOpened, params: ["durationMinutes": duration])
         isPlanning = true
         errorMessage = nil
         defer { isPlanning = false }
@@ -238,9 +239,15 @@ struct AdventurePlannerView: View {
                 longitude: longitude
             )
             Haptics.success()
+            // Q2 cohort entry point.
+            Analytics.log(event: .plannerCompleted, params: [
+                "stops": plan?.stops.count ?? 0,
+                "isPlus": plan?.isPlus ?? false,
+            ])
         } catch AdventurePlannerError.quotaExhausted(let limit, let resetsOn) {
             // Not an error state. The form stays populated underneath.
             plan = nil
+            Analytics.log(event: .plannerQuotaHit, params: ["limit": limit])
             quotaWall = QuotaWall(limit: limit, resetsOn: resetsOn)
         } catch {
             plan = nil

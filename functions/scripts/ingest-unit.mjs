@@ -16,7 +16,7 @@ import { parseIcs, unfold, unescapeText, expandRRule, parseIcsDate } from "../li
 import { titleKey, venueKey, classify, zonedToUtc, cleanText, cleanUrl, eventDocId } from "../lib/ingest/normalize.js";
 import { mapTicketmaster } from "../lib/ingest/sources/ticketmaster.js";
 import { mapIcsEvent } from "../lib/ingest/sources/icsfeed.js";
-import { parseBiblioPayload, mapBiblioItem } from "../lib/ingest/sources/bibliocommons.js";
+import { parseBiblioPayload, mapBiblioItem, trustedCoordinateIds } from "../lib/ingest/sources/bibliocommons.js";
 import { parseLibCalRss, mapLibCalItem } from "../lib/ingest/sources/libcal.js";
 import { mapLocalist } from "../lib/ingest/sources/localist.js";
 import { mapNps } from "../lib/ingest/sources/nps.js";
@@ -214,6 +214,40 @@ ok("bibliocommons: indexStart is already UTC — no timezone maths applied",
    bcMapped[0].start.toISOString() === new Date(bcItems[0].startISO).toISOString());
 ok("bibliocommons: HTML descriptions are stripped to text",
    bcMapped.every((e) => !/<[a-z]/i.test(e.description)));
+
+// Coordinate trust. The first version of this adapter accepted a coordinate
+// only when `mapLocation.isGeocoded === true`. A live run showed SJPL sets that
+// flag and Santa Clara County Library District does not — on ANY branch — while
+// publishing plainly correct per-branch coordinates. That rule discarded good
+// data for 2,106 events and silently disabled check-in proximity for a whole
+// library system. The replacement keeps the protection it was actually there
+// for (a city centroid repeated across every branch) without the collateral.
+const geo = (lat, lng, flag) => ({ mapLocation: { centrePoint: { lat, lng }, isGeocoded: flag } });
+ok("bibliocommons: a flagged coordinate is trusted",
+   trustedCoordinateIds({ a: geo(37.1, -121.1, true) }).has("a"));
+ok("bibliocommons: an UNflagged but distinct coordinate is trusted (the SCCLD case)",
+   (() => {
+     const t = trustedCoordinateIds({
+       a: geo(37.3178, -122.0290, false), b: geo(37.4324, -121.9065, false), c: geo(37.1241, -121.6628, false),
+     });
+     return t.size === 3;
+   })());
+ok("bibliocommons: a point REPEATED across every branch is discarded for all of them",
+   (() => {
+     const t = trustedCoordinateIds({
+       a: geo(37.3382, -121.8863, false), b: geo(37.3382, -121.8863, false), c: geo(37.3382, -121.8863, false),
+     });
+     return t.size === 0;
+   })(), "that is the city-centroid signature");
+ok("bibliocommons: a flagged coordinate survives even if it collides with a centroid",
+   (() => {
+     const t = trustedCoordinateIds({
+       a: geo(37.3382, -121.8863, true), b: geo(37.3382, -121.8863, false),
+     });
+     return t.has("a") && !t.has("b");
+   })());
+ok("bibliocommons: a location with no coordinate at all is simply absent",
+   trustedCoordinateIds({ a: { mapLocation: {} }, b: {} }).size === 0);
 
 // A feed that hands back an unrecognised shape must yield nothing, not throw:
 // a library changing its API should degrade to zero events for that system,

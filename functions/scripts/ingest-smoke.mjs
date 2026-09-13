@@ -10,14 +10,15 @@
 // Prints one line per source: count, a sample title, and how many records
 // carry coordinates. Exit code 1 if any configured source returns zero.
 
-import { CLEVELAND } from "../lib/ingest/areas.js";
+import { SAN_JOSE } from "../lib/ingest/areas.js";
 import { fetchTicketmaster } from "../lib/ingest/sources/ticketmaster.js";
 import { fetchIcsFeed } from "../lib/ingest/sources/icsfeed.js";
 import { fetchLibCal } from "../lib/ingest/sources/libcal.js";
+import { fetchBiblioCommons } from "../lib/ingest/sources/bibliocommons.js";
 import { fetchLocalist } from "../lib/ingest/sources/localist.js";
 import { fetchNps } from "../lib/ingest/sources/nps.js";
 
-const area = CLEVELAND;
+const area = SAN_JOSE;
 let failures = 0;
 
 function report(name, records) {
@@ -41,6 +42,7 @@ if (process.env.TICKETMASTER_KEY) {
   await run("ticketmaster", () => fetchTicketmaster(area, process.env.TICKETMASTER_KEY));
 } else console.log("⏭  ticketmaster: TICKETMASTER_KEY not set");
 for (const feed of area.libcal) await run(`libcal · ${feed.name}`, () => fetchLibCal(area, feed));
+for (const feed of area.bibliocommons ?? []) await run(`bibliocommons · ${feed.name}`, () => fetchBiblioCommons(area, feed));
 for (const cal of area.localist) await run(`localist · ${cal.name}`, () => fetchLocalist(area, cal.host, cal.name));
 if (process.env.NPS_API_KEY) {
   await run("nps", () => fetchNps(area, process.env.NPS_API_KEY));

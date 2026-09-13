@@ -88,6 +88,10 @@ struct NotificationPrimer: View {
                     Task {
                         // The ONLY place the app asks iOS. See the note above.
                         await NotificationManager.shared.requestPermission()
+                        Analytics.log(event: .pushPrimerAccepted, params: [
+                            "trigger": trigger.rawValue,
+                            "granted": NotificationManager.shared.permissionGranted,
+                        ])
                         Self.markPrimed()
                         onDecision(NotificationManager.shared.permissionGranted)
                         dismiss()

@@ -13,11 +13,26 @@
  * why this is a third source rather than a config entry.
  *
  * ONE REAL ADVANTAGE OVER LIBCAL: branch coordinates come from the feed. Each
- * location carries `mapLocation.centrePoint {lat,lng}` with `isGeocoded: true`,
- * so there is no hand-maintained venue table here and no branch silently
- * missing coordinates — the failure mode that forced the Cleveland config to
- * leave three branches uncoordinated. Check-in proximity therefore works for
- * every branch the feed geocodes, and only for those.
+ * location carries `mapLocation.centrePoint {lat,lng}`, so there is no
+ * hand-maintained venue table here and no branch silently missing coordinates —
+ * the failure mode that forced the Cleveland config to leave three branches
+ * uncoordinated.
+ *
+ * WHY WE DO NOT SIMPLY TRUST `isGeocoded`. The obvious rule — accept a
+ * coordinate only when `mapLocation.isGeocoded === true` — was the first
+ * implementation, and a live run showed why it is wrong: SJPL sets the flag,
+ * Santa Clara County Library District does NOT set it on any branch, yet SCCLD's
+ * coordinates are plainly correct (Cupertino Library at 37.3178,-122.0290 is the
+ * actual building). That rule threw away good coordinates for 2,106 events and
+ * silently disabled check-in proximity for an entire library system.
+ *
+ * The danger the flag was guarding against is real but specific: an ungeocoded
+ * centre point can be a CITY CENTROID, which would put the 500 ft check-in gate
+ * around the wrong building. A centroid has a signature, though — it is the
+ * SAME point for every branch in the system. So the actual test is per-payload
+ * and mechanical: trust `isGeocoded` outright, and otherwise accept a coordinate
+ * only if it is distinct from the other branches' in the same response. A
+ * shared point is discarded, exactly as before.
  *
  * SHAPE. The response is normalized-by-id: `entities.events` holds the event
  * records, `entities.locations` the branches, `entities.images` the artwork, and
@@ -63,6 +78,11 @@ export function parseBiblioPayload(payload: unknown, host: string): BiblioItem[]
   const p = (payload ?? {}) as GatewayPayload;
   const events = p.entities?.events ?? {};
   const locations = p.entities?.locations ?? {};
+
+  // Which locations carry a coordinate we are willing to believe? See the
+  // header: `isGeocoded` is trusted when present, and an unflagged point is
+  // accepted only when it is not shared with another branch.
+  const trustedLocationIds = trustedCoordinateIds(locations);
   const images = p.entities?.images ?? {};
   const types = p.entities?.eventTypes ?? {};
   const audiences = p.entities?.eventAudiences ?? {};
@@ -78,9 +98,10 @@ export function parseBiblioPayload(payload: unknown, host: string): BiblioItem[]
     const def = ev?.definition;
     if (!ev || !def || typeof def !== "object") continue;
 
-    const loc = locations[String(def.branchLocationId ?? "")] ?? {};
+    const locId = String(def.branchLocationId ?? "");
+    const loc = locations[locId] ?? {};
     const centre = loc?.mapLocation?.centrePoint;
-    const geocoded = loc?.mapLocation?.isGeocoded === true;
+    const trusted = trustedLocationIds.has(locId);
 
     const img = images[String(def.featuredImageId ?? "")];
 
@@ -93,11 +114,8 @@ export function parseBiblioPayload(payload: unknown, host: string): BiblioItem[]
       endISO: ev.indexEnd ? String(ev.indexEnd) : undefined,
       branch: String(loc?.name ?? ""),
       room: String(def.locationDetails ?? ""),
-      // Only trust a coordinate the feed says it actually geocoded. An
-      // ungeocoded centrePoint is a city centroid, which would put the
-      // check-in gate around the wrong building.
-      lat: geocoded ? cleanCoord(centre?.lat, 90) : undefined,
-      lng: geocoded ? cleanCoord(centre?.lng, 180) : undefined,
+      lat: trusted ? cleanCoord(centre?.lat, 90) : undefined,
+      lng: trusted ? cleanCoord(centre?.lng, 180) : undefined,
       types: (Array.isArray(def.typeIds) ? def.typeIds : [])
         .map((t: unknown) => String(types[String(t)]?.name ?? "")).filter(Boolean),
       audiences: (Array.isArray(def.audienceIds) ? def.audienceIds : [])
@@ -108,6 +126,35 @@ export function parseBiblioPayload(payload: unknown, host: string): BiblioItem[]
     });
   }
   return out;
+}
+
+/**
+ * Location ids whose centre point may be used as a venue coordinate.
+ *
+ * Exported for the tests, which assert both halves: a flagged coordinate is
+ * kept, and a point repeated across every branch (the city-centroid signature)
+ * is dropped for all of them.
+ */
+export function trustedCoordinateIds(locations: Record<string, any>): Set<string> {
+  const entries = Object.entries(locations);
+  const counts = new Map<string, number>();
+  for (const [, loc] of entries) {
+    const c = loc?.mapLocation?.centrePoint;
+    if (typeof c?.lat !== "number" || typeof c?.lng !== "number") continue;
+    const key = `${c.lat.toFixed(5)},${c.lng.toFixed(5)}`;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+
+  const trusted = new Set<string>();
+  for (const [id, loc] of entries) {
+    const c = loc?.mapLocation?.centrePoint;
+    if (typeof c?.lat !== "number" || typeof c?.lng !== "number") continue;
+    if (loc?.mapLocation?.isGeocoded === true) { trusted.add(id); continue; }
+    // Unflagged: believable only if no other branch claims the same point.
+    const key = `${c.lat.toFixed(5)},${c.lng.toFixed(5)}`;
+    if ((counts.get(key) ?? 0) === 1) trusted.add(id);
+  }
+  return trusted;
 }
 
 export function mapBiblioItem(i: BiblioItem, area: LaunchArea, feed: BiblioFeed): NormalizedEvent | null {

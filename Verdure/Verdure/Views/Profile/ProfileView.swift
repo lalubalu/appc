@@ -412,7 +412,7 @@ struct ProfileView: View {
 
             deleteAccountButton
             .sheet(isPresented: $showPaywall) {
-                PaywallView()
+                PaywallView(source: "profile")
                     .presentationDetents([.large]).presentationDragIndicator(.visible)
             }
         }

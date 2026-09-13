@@ -109,6 +109,9 @@ export const RATE_LIMITS: Record<string, RateLimit> = {
   recommendedEvents:{ max: 240, windowMs: HOUR },
   setNotificationPrefs: { max: 60, windowMs: HOUR },
   dismissSuggestion:    { max: 120, windowMs: HOUR },
+  sponsoredPlacement:   { max: 120, windowMs: HOUR },
+  dismissPerk:          { max: 60,  windowMs: HOUR },
+  recordPerkTap:        { max: 120, windowMs: HOUR },
   trackEvent:       { max: 600, windowMs: HOUR },
 };
 

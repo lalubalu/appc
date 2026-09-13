@@ -453,6 +453,11 @@ export { planAdventure } from "./adventure.js";
 // directly rather than re-implementing the ordering.
 export { recommendedEvents } from "./ranking.js";
 
+// Partner surfacing. Separate from ranking.ts on purpose: that module has no
+// partner input and this one cannot reach into it, so a paid placement is
+// structurally incapable of moving an organic result.
+export { sponsoredPlacement, dismissPerk, recordPerkTap } from "./partners.js";
+
 // ── Content moderation ──────────────────────────────────────────────────────
 // Report flow, auto-hide threshold, 24-hour SLA sweep and staff decisions.
 // See moderation.ts for the model; firestore.rules for the visibility guarantee.

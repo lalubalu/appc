@@ -435,6 +435,14 @@ final class GameStateManager {
                           proofFile: proofFile))
         record(EarnRecord(kind: .event, id: event.id, category: event.category.rawValue,
                           rarity: nil, points: pts, date: Date()))
+        // Q1 outcome. Logged here rather than at the server confirmation
+        // because the question is about the USER's action; whether the pending
+        // op later drains is a different question with a different answer.
+        Analytics.log(event: .checkinSucceeded, params: [
+            "category": event.category.rawValue,
+            "points": pts,
+            "hadProof": proofPhoto != nil,
+        ])
         NotificationManager.shared.push(AppNotification(
             kind: .points, title: "+\(pts) points earned",
             message: "Thanks for checking in to \(event.title).", timeAgo: "now"))
@@ -456,6 +464,8 @@ final class GameStateManager {
         } else {
             savedEventIDs.insert(event.id); Haptics.success()
             NotificationManager.shared.scheduleEventReminder(for: event)
+            // Q1 cohort entry point — see the schema note in Analytics.swift.
+            Analytics.log(event: .eventSaved, params: ["category": event.category.rawValue])
             // C3: the first save is a value moment — they've just told us what
             // they care about, so "we'll tell you when a friend is going" now
             // has an obvious referent. Only ever sets a flag; the primer sheet

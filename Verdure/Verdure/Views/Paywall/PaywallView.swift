@@ -17,6 +17,10 @@ import StoreKit
 struct PaywallView: View {
     @Environment(StoreService.self) private var store
     @Environment(\.dismiss) private var dismiss
+
+    /// Where the paywall was opened from, so conversion can be attributed to a
+    /// surface rather than averaged into one meaningless rate.
+    var source: String = "unspecified"
     @State private var selectedID = StoreService.yearlyID
     @State private var isWorking = false
 
@@ -40,6 +44,7 @@ struct PaywallView: View {
             }
             .background(VerdureBackground())
             .navigationTitle("Verdure+").navigationBarTitleDisplayMode(.inline)
+            .onAppear { Analytics.log(event: .paywallShown, params: ["source": source]) }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { dismiss() } label: {

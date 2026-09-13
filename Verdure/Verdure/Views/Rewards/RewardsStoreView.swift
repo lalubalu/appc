@@ -98,7 +98,7 @@ struct RewardsStoreView: View {
             .sheet(item: $redeemedCode) { PerkCodeSheet(sheet: $0) }
             .sheet(isPresented: $showMyCodes) { MyCodesView().environment(economy) }
             .sheet(isPresented: $showPaywall) {
-                PaywallView().presentationDetents([.large]).presentationDragIndicator(.visible)
+                PaywallView(source: "rewards").presentationDetents([.large]).presentationDragIndicator(.visible)
             }
         }
     }

@@ -79,10 +79,49 @@ service cloud.firestore {
     // redeemReward so Verdure+ early-access visibility is decided server-side.
     // The code pool must never be readable: it IS the reward.
     match /partnerPerks/{perkId} {
+      // Clients never read this directly — listRewardsCatalog and
+      // sponsoredPlacement decide what a given account may SEE, and reading the
+      // raw collection would leak early-access perks to free members before
+      // their window opens, which is the benefit Verdure+ is sold on.
       allow read, write: if false;
       match /codes/{codeId} {
         allow read, write: if false;
       }
+    }
+
+    // ──────────────────────────────────────────────
+    // ANALYTICS: /analytics/{yyyy-mm-dd}/events/{id}
+    // ──────────────────────────────────────────────
+    // Append-only, and only ever by a signed-in client writing a row that
+    // claims its own uid (or no uid at all). Nobody can READ it back: these
+    // rows are behavioural data about real people, and a client that could
+    // query the collection could reconstruct another account's session.
+    //
+    // No update and no delete, deliberately. An analytics row that can be
+    // rewritten after the fact is not evidence of anything.
+    match /analytics/{day} {
+      allow read, write: if false;
+      match /events/{eventId} {
+        allow read: if false;
+        allow create: if request.auth != null
+                      && request.resource.data.keys().hasAll(['event', 'installID', 'ts'])
+                      && request.resource.data.event is string
+                      && request.resource.data.event.size() <= 60
+                      && request.resource.data.installID is string
+                      && request.resource.data.installID.size() <= 64
+                      // A row may be anonymous, but it may not impersonate.
+                      && (request.resource.data.uid == null
+                          || request.resource.data.uid == request.auth.uid)
+                      && request.resource.data.ts == request.time;
+        allow update, delete: if false;
+      }
+    }
+
+    // Partner attribution counters (impressions, taps, dismissals per surface).
+    // Server-only in both directions: a client that could write these could
+    // invoice a partner for traffic that never happened.
+    match /partnerAttribution/{perkId} {
+      allow read, write: if false;
     }
 
     // ──────────────────────────────────────────────
@@ -174,6 +213,24 @@ service cloud.firestore {
       // ── Perk codes: /users/{userId}/perkCodes/{perkId} ──
       // The member's copy of a redeemed partner code. Written by redeemReward.
       match /perkCodes/{perkId} {
+        allow read: if isOwner(userId);
+        allow write: if false;
+      }
+
+      // ── Partner dismissals: /users/{userId}/dismissedPerks/{perkId} ──
+      // "Don't show me this again", remembered server-side. Readable by the
+      // owner, written only by dismissPerk — a client that could DELETE a row
+      // here could un-dismiss a perk the user rejected, which is the one thing
+      // the dismissal is for.
+      match /dismissedPerks/{perkId} {
+        allow read: if isOwner(userId);
+        allow write: if false;
+      }
+
+      // ── Per-session placement counter: /users/{userId}/adSessions/{sessionId} ──
+      // Enforces "at most one sponsored placement per session". Client-writable
+      // would make the cap advisory.
+      match /adSessions/{sessionId} {
         allow read: if isOwner(userId);
         allow write: if false;
       }
