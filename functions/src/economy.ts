@@ -119,10 +119,23 @@ export function treasuryRef(month = utcMonthKey()) {
   return db.collection("treasury").doc(month);
 }
 
-/** Record issued points (and a first-earn-this-month marker) — called from the earn callables. */
+/**
+ * Record issued points — called from the earn callables.
+ *
+ * Returns the fields to merge into the user document, so the caller's existing
+ * transaction writes them atomically with the points themselves. A separate
+ * write would let a crash between the two leave a balance the monthly total
+ * disagrees with.
+ *
+ * `monthlyEarnPoints` is RESET rather than incremented on the first earn of a
+ * new month. Storing it alongside `lastEarnMonth` means there is no cron to
+ * miss: a stale month is simply ignored by every reader, so a user who does not
+ * open the app for three months still reads 0 for the current one instead of
+ * last-seen-month's total.
+ */
 export function recordPointsIssued(
   tx: FirebaseFirestore.Transaction, userData: FirebaseFirestore.DocumentData | undefined, points: number,
-): { lastEarnMonth: string } {
+): { lastEarnMonth: string; monthlyEarnPoints: number } {
   const month = utcMonthKey();
   const firstThisMonth = userData?.lastEarnMonth !== month;
   tx.set(treasuryRef(month), {
@@ -130,7 +143,8 @@ export function recordPointsIssued(
     ...(firstThisMonth ? { earnersCount: FieldValue.increment(1) } : {}),
     updatedAt: FieldValue.serverTimestamp(),
   }, { merge: true });
-  return { lastEarnMonth: month };
+  const priorThisMonth = firstThisMonth ? 0 : (Number(userData?.monthlyEarnPoints) || 0);
+  return { lastEarnMonth: month, monthlyEarnPoints: priorThisMonth + points };
 }
 
 /** Called by fulfillment when a card is actually delivered. */

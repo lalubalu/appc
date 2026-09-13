@@ -6,6 +6,7 @@ struct ProfileView: View {
     static let signOutRed = Color(red: 0.82, green: 0.28, blue: 0.25)
     @AppStorage("prefersDarkMode") private var prefersDarkMode = false
     @State private var analyticsEnabled = Analytics.isEnabled
+    @State private var showStats = false
     @AppStorage("profileImageData") private var profileImageData = Data()
     @State private var photoItem: PhotosPickerItem?
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = true
@@ -68,6 +69,7 @@ struct ProfileView: View {
             }
             .sheet(isPresented: $showAbout) { AboutVerdureView() }
             .sheet(isPresented: $showNotifSettings) { NotificationSettingsView() }
+            .sheet(isPresented: $showStats) { StatsAndLeaderboardView().environment(gameState) }
             .sheet(item: $selectedBadge) { BadgeDetailSheet(badge: $0) }
             .sheet(item: $selectedChallenge) { ChallengeDetailSheet(challenge: $0) }
             .onChange(of: photoItem) { _, item in
@@ -340,6 +342,15 @@ struct ProfileView: View {
                 settingsRow(icon: "moon.fill", label: "Dark Mode", accent: .spruce) {
                     Toggle("", isOn: $prefersDarkMode).tint(Palette.spruce.base).labelsHidden()
                 }
+                rowDivider
+                Button { Haptics.tap(); showStats = true } label: {
+                    settingsRow(icon: "chart.bar.fill", label: "Stats & Friends", accent: .gold) {
+                        chevron
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Stats and friends leaderboard")
+                .accessibilityHint("Your points breakdown and how you compare with people you follow.")
                 rowDivider
                 // The privacy policy promises this switch by name ("You can
                 // switch them off in Profile › Settings"), so it has to exist

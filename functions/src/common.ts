@@ -112,6 +112,7 @@ export const RATE_LIMITS: Record<string, RateLimit> = {
   sponsoredPlacement:   { max: 120, windowMs: HOUR },
   dismissPerk:          { max: 60,  windowMs: HOUR },
   recordPerkTap:        { max: 120, windowMs: HOUR },
+  friendsLeaderboard:   { max: 120, windowMs: HOUR },
   trackEvent:       { max: 600, windowMs: HOUR },
 };
 

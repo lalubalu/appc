@@ -8,14 +8,14 @@
   "main": "lib/index.js",
   "scripts": {
     "build": "tsc",
-    "e2e": "cd .. && npx firebase-tools@13 emulators:exec --only auth,functions,firestore,storage \"node functions/scripts/e2e-backend.mjs\"",
+    "e2e": "npm run build && cd .. && npx firebase-tools@13 emulators:exec --only auth,functions,firestore,storage \"node functions/scripts/e2e-backend.mjs\"",
     "serve": "npm run build && firebase emulators:start --only functions",
     "deploy": "firebase deploy --only functions",
     "logs": "firebase functions:log",
-    "redteam": "cd .. && npx firebase-tools@13 emulators:exec --only auth,functions,firestore,storage \"node functions/scripts/redteam.mjs\"",
+    "redteam": "npm run build && cd .. && npx firebase-tools@13 emulators:exec --only auth,functions,firestore,storage \"node functions/scripts/redteam.mjs\"",
     "test:units": "npm run build && node scripts/fulfillment-unit.mjs && node scripts/subscription-unit.mjs && node scripts/ingest-unit.mjs && node scripts/ranking-unit.mjs && node scripts/notifications-unit.mjs && node scripts/partners-unit.mjs",
     "ingest:smoke": "npm run build && node scripts/ingest-smoke.mjs",
-    "seed:partners": "cd .. && npx firebase-tools@13 emulators:exec --only firestore \"node functions/scripts/seed-partners.mjs\"",
+    "seed:partners": "npm run build && cd .. && npx firebase-tools@13 emulators:exec --only firestore \"node functions/scripts/seed-partners.mjs\"",
     "coverage": "npm run build && node scripts/coverage-check.mjs",
     "coverage:emulator": "cd .. && npx firebase-tools@13 emulators:exec --only firestore \"node functions/scripts/coverage-check.mjs\"",
     "seed:review": "node scripts/seed-review-account.mjs"

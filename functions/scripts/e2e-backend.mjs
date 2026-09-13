@@ -230,6 +230,16 @@ async function main() {
   ok("rules: client write to pointsBalance DENIED", code === "permission-denied", `got ${code}`);
   code = await userWrite(`users/${uid}`, { checkedInEventIDs: ["cheat"] });
   ok("rules: client write to checkedInEventIDs DENIED", code === "permission-denied", `got ${code}`);
+  // G4 — a leaderboard is only meaningful if a position cannot be claimed.
+  // These two fields ARE the leaderboard, so the denial is the feature.
+  code = await userWrite(`users/${uid}`, { monthlyEarnPoints: 999999 });
+  ok("rules: client write to monthlyEarnPoints DENIED (leaderboard)", code === "permission-denied", `got ${code}`);
+  code = await userWrite(`users/${uid}`, { lifetimePoints: 999999 });
+  ok("rules: client write to lifetimePoints DENIED (leaderboard)", code === "permission-denied", `got ${code}`);
+  code = await userWrite(`users/${uid}`, { notifyBudget: { week: "2099-W01", sent: 0 } });
+  ok("rules: client write to notifyBudget DENIED (push cap)", code === "permission-denied", `got ${code}`);
+  code = await userWrite(`users/${uid}`, { plannerUsage: { "2026-09": 0 } });
+  ok("rules: client write to plannerUsage DENIED (planner quota)", code === "permission-denied", `got ${code}`);
   code = await userWrite(`users/${uid}`, { redeemedRewardIDs: ["free-stuff"] });
   ok("rules: client write to redeemedRewardIDs DENIED", code === "permission-denied", `got ${code}`);
   code = await userWrite(`users/${uid}`, { collectedPlaceIDs: ["osm-123"] });
@@ -1044,6 +1054,25 @@ async function main() {
   ok("friendsGoing: Quinn sees Sarah (mutual follow) with count 1", fg?.count === 1 && fg?.friends?.[0]?.uid === sarah.uid && fg.friends[0].initials === "SP", JSON.stringify(r.result));
   r = await call("friendsGoing", { eventIds: [socialEventId] }, stranger.idToken);
   ok("friendsGoing: a stranger sees 0 (not a friend)", r.result?.events?.[socialEventId]?.count === 0, JSON.stringify(r.result));
+  // ── Friends leaderboard (G4) ──
+  //
+  // The point of these is the DENIALS. A leaderboard is only meaningful if a
+  // position cannot be claimed, so the tests that matter assert that a client
+  // cannot write its own score and that a blocked account disappears from it.
+  r = await call("friendsLeaderboard", { period: "allTime" }, quinn.idToken);
+  const board = r.result?.rows ?? [];
+  ok("leaderboard: includes me and the people I follow",
+     board.some((x) => x.isMe) && board.some((x) => x.uid === sarah.uid),
+     `err=${JSON.stringify(r.error)} result=${JSON.stringify(r.result)}`);
+  ok("leaderboard: rows expose only display fields, never email or subscription state",
+     board.every((x) => Object.keys(x).every((k) =>
+       ["uid", "displayName", "initials", "points", "isMe", "rank"].includes(k))),
+     JSON.stringify(board[0]));
+  ok("leaderboard: sorted descending by points",
+     board.every((x, i) => i === 0 || board[i - 1].points >= x.points), JSON.stringify(board.map((x) => x.points)));
+  ok("leaderboard: a solo user is told so rather than shown an empty board",
+     (await call("friendsLeaderboard", {}, stranger.idToken)).result?.isSolo === true);
+
   // One-way follow + friends-only privacy: Sarah must follow the viewer for her RSVP to show.
   const oneway = await mk("oneway");
   await call("followUser", { targetId: sarah.uid, kind: "user" }, oneway.idToken);

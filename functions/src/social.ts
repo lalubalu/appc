@@ -346,3 +346,75 @@ export const friendsGoing = onCall(async (req) => {
 
 /** Exported for organizer / feed modules. */
 export { profileBits, follows };
+
+// ── Friends leaderboard (G4) ────────────────────────────────────────────────
+//
+// WHY THIS IS A CALLABLE AND NOT A QUERY. A leaderboard is the one social
+// feature where the ranking IS the payload, so it has to be computed somewhere
+// the numbers can be trusted. If the client read friends' point balances
+// directly it would need read access to other users' documents, which would
+// leak their email, their RSVPs and their subscription state alongside the
+// score. Rules therefore deny that read outright, and this returns the only
+// three fields a leaderboard needs.
+//
+// Scores are never written here. `pointsBalance` and `lifetimePoints` are
+// already server-owned and client-unwritable (see noServerOwnedFieldChanges),
+// which is what makes a leaderboard position meaningful rather than a claim.
+export const friendsLeaderboard = onCall(async (req) => {
+  const uid = requireUid(req.auth);
+  await enforceRateLimit(uid, "friendsLeaderboard");
+
+  const period = safeString(req.data?.period) === "month" ? "month" : "allTime";
+
+  const [meSnap, followingSnap] = await Promise.all([
+    db.collection("users").doc(uid).get(),
+    db.collection(`users/${uid}/following`).where("kind", "==", "user").limit(200).get(),
+  ]);
+
+  const candidates = [uid, ...followingSnap.docs.map((d) => d.id)];
+  const rows: { uid: string; displayName: string; initials: string; points: number; isMe: boolean }[] = [];
+
+  for (const id of candidates) {
+    const snap = id === uid ? meSnap : await db.collection("users").doc(id).get();
+    const d = snap.data();
+    if (!d || d.suspended === true) continue;
+    // Blocks are symmetric and win over everything — including a leaderboard
+    // that would otherwise reintroduce a blocked person into someone's feed.
+    if (id !== uid && await isBlockedEitherWay(uid, id)) continue;
+
+    // Monthly uses the same ledger the earn cap reads, so the two can never
+    // disagree about what this month's points were.
+    // A stale lastEarnMonth means they have earned nothing THIS month, so the
+    // total is 0 — no cron needed to reset it. See recordPointsIssued.
+    const points = period === "month"
+      ? (String(d.lastEarnMonth ?? "") === currentMonthKey() ? Number(d.monthlyEarnPoints) || 0 : 0)
+      : Number(d.lifetimePoints) || 0;
+
+    rows.push({
+      uid: id,
+      displayName: safeText(d.displayName, 60) || "Verdure member",
+      initials: safeText(d.initials, 3) || safeText(d.displayName, 1).toUpperCase(),
+      points,
+      isMe: id === uid,
+    });
+  }
+
+  rows.sort((a, b) => b.points - a.points || a.displayName.localeCompare(b.displayName));
+
+  return {
+    period,
+    // Rank is assigned AFTER sorting so ties share a position rather than
+    // silently ordering one friend above another on a coin flip.
+    rows: rows.map((r, i) => ({
+      ...r,
+      rank: i > 0 && rows[i - 1].points === r.points ? undefined : i + 1,
+    })),
+    // Said plainly so a one-row leaderboard reads as "follow someone" rather
+    // than "you have no friends".
+    isSolo: rows.length <= 1,
+  };
+});
+
+function currentMonthKey(now = new Date()): string {
+  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+}

@@ -535,7 +535,7 @@ service cloud.firestore {
         // Set by createOrganizer; points at the profile this account owns.
         'organizerId',
         // Economy ledgers written only by redeemReward / the earn callables.
-        'redemptionBudget', 'lastEarnMonth',
+        'redemptionBudget', 'lastEarnMonth', 'monthlyEarnPoints',
         // Adventure-planner monthly quota, written only by planAdventure. A map
         // keyed yyyy-mm. Listed here for the reason spelled out above — the
         // moment the server stamps a key this list doesn't know, hasOnly()
@@ -693,7 +693,7 @@ service cloud.firestore {
                    'rsvpEventIDs', 'followerCount', 'followingCount', 'organizerId',
                    // The rolling 12-month cash ledger — a client that could edit
                    // it could reset its own ceiling.
-                   'redemptionBudget', 'lastEarnMonth',
+                   'redemptionBudget', 'lastEarnMonth', 'monthlyEarnPoints',
                    // Planner quota — a client that could edit this would hand
                    // itself unlimited plans, which are billed per call to a
                    // paid vendor. This is the whole gate.
