@@ -106,6 +106,7 @@ export const RATE_LIMITS: Record<string, RateLimit> = {
   createOrganizer:  { max: 3,   windowMs: HOUR },
   createEvent:      { max: 20,  windowMs: HOUR },
   planAdventure:    { max: 30,  windowMs: HOUR },
+  recommendedEvents:{ max: 240, windowMs: HOUR },
   trackEvent:       { max: 600, windowMs: HOUR },
 };
 

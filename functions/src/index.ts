@@ -448,6 +448,12 @@ export { linkSubscription, appStoreNotifications, refreshMySubscription, getAppA
 // and any stop it invents is dropped server-side. See adventure.ts.
 export { planAdventure } from "./adventure.js";
 
+// Personalized ranking. Nothing read users/{uid}.interests before this — the
+// field was collected at onboarding and used by no query on either side.
+// Notifications (sendEventReminders) and partner surfacing call recommendFor()
+// directly rather than re-implementing the ordering.
+export { recommendedEvents } from "./ranking.js";
+
 // ── Content moderation ──────────────────────────────────────────────────────
 // Report flow, auto-hide threshold, 24-hour SLA sweep and staff decisions.
 // See moderation.ts for the model; firestore.rules for the visibility guarantee.
