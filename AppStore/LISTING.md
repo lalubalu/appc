@@ -112,6 +112,13 @@ Settings › Terms & Privacy — so the links are live even before DNS is.
 > Platinum tiers ($25 and $50 gift cards)" in both places — rewards the server
 > has as `active: false` and refuses to redeem. Do not list a tier here without
 > checking `CASH_CATALOG` in functions/src/economy.ts first.
+>
+> Two things deliberately absent. The **member badge** is real and still shows
+> on the player card, but it is a cosmetic delight rather than a reason to pay,
+> and padding a four-item list with it weakens the four. The **streak freeze**
+> is absent because it is FREE for every account: selling relief from a
+> punishment we invented would make the streak a lever on the subscription, and
+> a unit test fails if any paywall string mentions it.
 
 ## Privacy nutrition label answers
 
@@ -210,7 +217,9 @@ switch it off in Profile › Settings › Product Analytics.
 > **About the subscription**
 > Verdure+ unlocks an unlimited Adventure Planner (free members get 5 plans a
 > calendar month), early access to partner perks, cash gift cards ($5 and $10),
-> and a profile badge. Everything else in the app is free. The paywall lists
+> and advanced stats. Everything else in the app is free — including the daily
+> streak and its one-missed-day freeze, which is not a paid feature and is not
+> sold anywhere. The paywall lists
 > only features that are live in this build — it previously advertised $25/$50
 > reward tiers that the server declines, and those are gone from both the
 > paywall and this listing.

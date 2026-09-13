@@ -15,6 +15,7 @@ import { fetchTicketmaster } from "../lib/ingest/sources/ticketmaster.js";
 import { fetchIcsFeed } from "../lib/ingest/sources/icsfeed.js";
 import { fetchLibCal } from "../lib/ingest/sources/libcal.js";
 import { fetchBiblioCommons } from "../lib/ingest/sources/bibliocommons.js";
+import { fetchMidpen } from "../lib/ingest/sources/midpen.js";
 import { fetchLocalist } from "../lib/ingest/sources/localist.js";
 import { fetchNps } from "../lib/ingest/sources/nps.js";
 
@@ -47,6 +48,7 @@ for (const cal of area.localist) await run(`localist · ${cal.name}`, () => fetc
 if (process.env.NPS_API_KEY) {
   await run("nps", () => fetchNps(area, process.env.NPS_API_KEY));
 } else console.log("⏭  nps: NPS_API_KEY not set");
+for (const feed of area.midpen ?? []) await run(`midpen · ${feed.name}`, () => fetchMidpen(area, feed));
 for (const feed of area.ics) await run(`ics · ${feed.name}`, () => fetchIcsFeed(area, feed, "ics"));
 
 console.log(failures ? `\n${failures} source(s) returned nothing or failed` : "\nall configured sources returned real data");

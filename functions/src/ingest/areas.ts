@@ -5,8 +5,33 @@
  * loops over this list, and every fetcher receives one area. Adding a city is a
  * config change here plus a verification pass on its feeds.
  *
- * Every URL and host below was fetched live on 2026-09-06 and returned data.
- * Re-verify before relying on any of them — feeds change without notice.
+ * Every URL and host below was fetched live and returned data on the date noted
+ * against it. Re-verify before relying on any of them — feeds change silently.
+ *
+ * ── WHAT WE MAY INGEST FROM ──────────────────────────────────────────────────
+ *
+ * Parse public feeds and open data freely. Do NOT scrape any source whose terms
+ * prohibit it.
+ *
+ * This supersedes an earlier, stricter rule ("APIs and public feeds only"),
+ * which was broader than the facts support and would have cost real supply for
+ * no benefit. City calendars, library systems and parks departments are fair
+ * game and always were. Where a source publishes a public HTML calendar and no
+ * feed, parsing it is acceptable PROVIDED its terms do not forbid automated
+ * access — checked per source, before the adapter is written, with the evidence
+ * recorded in the adapter's header and in docs/FEED-SURVEY-<area>.md.
+ *
+ * Two standing exceptions, off-limits regardless of how useful they look:
+ *   • Google Maps / Places — prohibited by their terms, AND strategically
+ *     self-defeating: the premise of this corpus is events Google does not
+ *     have, so seeding it from Google would invalidate coverage-check.mjs
+ *     along with the product claim.
+ *   • Meetup — prohibited by their terms.
+ *
+ * A 403 is not a licence to try harder. If a source blocks automated requests
+ * outright — especially if it blocks robots.txt itself, so its rules cannot
+ * even be read — it is a RECRUITMENT target, not a parsing target. Santa Clara
+ * County Parks is the worked example; see the survey doc.
  *
  * Launch area: SAN JOSE / SOUTH BAY, CA.
  *
@@ -69,6 +94,16 @@ export interface BiblioFeed {
   tags?: string[];
 }
 
+/**
+ * Midpeninsula Regional Open Space District. Parsed from their events listing —
+ * they publish no feed. See sources/midpen.ts for the permission check that
+ * precedes that decision, and docs/FEED-SURVEY-SAN-JOSE.md for the evidence.
+ */
+export interface MidpenFeed {
+  name: string;
+  tags?: string[];
+}
+
 export interface LaunchArea {
   id: string;
   name: string;
@@ -80,6 +115,8 @@ export interface LaunchArea {
   libcal: LibCalFeed[];
   /** BiblioCommons library systems (one per library system). */
   bibliocommons: BiblioFeed[];
+  /** Midpeninsula Regional Open Space District (HTML listing; no feed exists). */
+  midpen: MidpenFeed[];
   /** Localist calendar hosts (city / university / community college). */
   localist: { host: string; name: string }[];
   /** National Park Service park codes with events near the area. */
@@ -127,11 +164,22 @@ export const SAN_JOSE: LaunchArea = {
     // Santa Clara University (events.scu.edu) returns 403 to server-side
     // requests — deliberately absent rather than silently failing every run.
   ],
+  midpen: [
+    // Verified 2026-09-13: 64 events across 22 preserves, 19 of which geocode
+    // INSIDE the radius. This is what replaces NPS for this area — see below.
+    { name: "Midpeninsula Regional Open Space District", tags: ["outdoors", "parks"] },
+  ],
   nps: {
     // No NPS unit sits inside the radius. Pinnacles is ~80 mi and Golden Gate
     // ~50 mi, both outside it, and isInsideArea would discard their events
     // anyway. Empty is the honest value; the previous area had Cuyahoga Valley
     // genuinely inside its radius, and this one has nothing.
+    //
+    // The ADAPTER stays in the tree deliberately. It is verified, it costs
+    // nothing to keep, and the next launch area may well have a park in range.
+    // Outdoor/nature supply for THIS area comes from `midpen` above, which is
+    // nearer, larger and carries more family programming than Cuyahoga Valley
+    // did — so the category is replaced, not absorbed as a loss.
     parkCodes: [],
   },
   ics: [

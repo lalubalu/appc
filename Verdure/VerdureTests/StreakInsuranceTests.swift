@@ -1,12 +1,18 @@
 import XCTest
 @testable import Verdure
 
-// MARK: - Streak insurance (G2)
+// MARK: - Streak freeze (G2)
 //
 // Before this, one missed day reset a 40-day streak to 1 — a punishment for
 // having a life, landing hardest on the users with the most invested. These
-// tests pin the forgiveness AND its limits, because "insurance" that quietly
+// tests pin the forgiveness AND its limits, because a freeze that quietly
 // forgives everything is just a streak that never breaks, which means nothing.
+//
+// They also pin that it is UNIVERSAL. The freeze must reach every account on
+// identical terms: no purchase, no tier, no entitlement check anywhere on the
+// path. That is the assertion most likely to be quietly undone later, because
+// the cost-side argument for selling it is easy to make and the reason not to
+// is a product judgement rather than a technical one.
 
 @MainActor
 final class StreakInsuranceTests: XCTestCase {
@@ -90,16 +96,62 @@ final class StreakInsuranceTests: XCTestCase {
                       "a new user has not spent anything")
     }
 
-    // MARK: It is not a paid benefit
+    // MARK: It is universal
 
-    func testInsuranceIsNotGatedOnMembership() {
-        // Deliberate product decision, asserted so it can't drift into the
-        // paywall later: selling relief from a punishment we invented would
-        // make the streak a lever on the subscription.
+    /// The freeze applies with no subscription, no entitlement, and no purchase
+    /// anywhere on the path.
+    ///
+    /// `GameStateManager` has no reference to StoreService and this test runs
+    /// with no signed-in account and no products loaded — so if a tier check
+    /// were ever introduced, the forgiveness below would stop happening and
+    /// this fails. That is the point: it is a tripwire, not a description.
+    func testEveryAccountGetsTheFreezeOnIdenticalTerms() {
         state.recordActiveDay(now: day(0))
         let used = state.recordActiveDay(now: day(2))
-        XCTAssertTrue(used, "forgiveness applies without any subscription check")
+        XCTAssertTrue(used, "a plain, signed-out, non-member account is forgiven")
         XCTAssertEqual(GameStateManager.streakInsuranceDays, 1)
         XCTAssertEqual(GameStateManager.streakInsuranceWindowDays, 30)
+    }
+
+    /// The allowance is a constant, not a function of anything.
+    ///
+    /// A tiered freeze would most naturally arrive as "members get 2" — so the
+    /// values are asserted to be fixed scalars that no state can vary.
+    func testTheAllowanceIsAFixedConstantWithNoTierDimension() {
+        XCTAssertEqual(GameStateManager.streakInsuranceDays, 1,
+                       "one day for everyone; a second tier would change this")
+        XCTAssertEqual(GameStateManager.streakInsuranceWindowDays, 30)
+
+        // Two fresh accounts, no membership state of any kind, same outcome.
+        let a = GameStateManager()
+        a.recordActiveDay(now: day(0))
+        let aUsed = a.recordActiveDay(now: day(2))
+        XCTAssertTrue(aUsed)
+        XCTAssertEqual(a.currentStreak, 2)
+    }
+
+    /// The freeze must not be sold. Nothing in the paywall may name it.
+    ///
+    /// This is the copy half of the same decision: even a truthful mention
+    /// ("members keep their streak safe") would imply the freeze is a benefit
+    /// of paying when it is not. PaywallView.features is the one place that
+    /// could reintroduce it, so it is checked here.
+    func testNoPaywallFeatureMentionsTheStreak() {
+        let copy = PaywallView.featureCopyForTesting
+
+        // Guard against a vacuous pass: an empty list also "mentions no
+        // streak". Pin that the list is real and is the expected four before
+        // asserting what is absent from it.
+        XCTAssertEqual(copy.count, 8, "four features, each a title and a detail")
+        let sold = copy.joined(separator: " ").lowercased()
+        XCTAssertTrue(sold.contains("adventure planner"), "the list under test must be the real one")
+
+        XCTAssertFalse(sold.contains("streak"), "the streak freeze is free and must not be sold")
+        XCTAssertFalse(sold.contains("freeze"), "the streak freeze is free and must not be sold")
+
+        // The A2 rule, enforced on the same copy: no deactivated reward tier.
+        for dead in ["$25", "$50", "gold tier", "platinum"] {
+            XCTAssertFalse(sold.contains(dead), "paywall must not name a deactivated tier (\(dead))")
+        }
     }
 }

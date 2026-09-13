@@ -97,7 +97,7 @@ struct PaywallView: View {
 
     // MARK: - Features (from the subscription model doc)
 
-    private struct PlusFeature: Identifiable {
+    struct PlusFeature: Identifiable {
         let icon: String
         let title: String
         let detail: String
@@ -106,6 +106,13 @@ struct PaywallView: View {
     }
 
     /// ONLY shipped features belong in this list — see the honest-copy policy above.
+    ///
+    /// FOUR, not five. The Verdure+ member badge is still real and still shows
+    /// on the player card, but it is a cosmetic delight rather than a reason to
+    /// pay, and padding the list with it weakens the four that are. The streak
+    /// freeze is deliberately absent for a different reason: it is FREE for
+    /// every account (see GameStateManager.streakInsuranceDays), and a test
+    /// fails if any string here mentions it.
     ///
     /// NOTE: the Verdure+ earn multiplier is deliberately ABSENT, and the reason
     /// has NARROWED but not gone away.
@@ -123,7 +130,7 @@ struct PaywallView: View {
     /// When both are true, add the multiplier here AND to the App Store
     /// description in the same commit — AppStore/LISTING.md carries the exact
     /// copy and the same instruction, so the two can never drift apart.
-    private let features: [PlusFeature] = [
+    let features: [PlusFeature] = [
         // ORDER MATTERS: the planner leads because it is the benefit a member
         // uses on day one. What was here before led with "Unlock the Gold &
         // Platinum tiers — redeem $25 and $50 gift cards", which the server
@@ -137,9 +144,19 @@ struct PaywallView: View {
                     detail: "See and claim new local perks before everyone else", kind: .terracotta),
         PlusFeature(icon: "giftcard.fill", title: "Cash Gift Cards",
                     detail: "$5 and $10 cards, members only", kind: .gold),
-        PlusFeature(icon: "medal.fill", title: "Member Badge",
-                    detail: "A gold Verdure+ badge on your player card", kind: .spruce),
+        PlusFeature(icon: "chart.bar.fill", title: "Advanced Stats",
+                    detail: "Where your points come from, and your last 30 days", kind: .spruce),
     ]
+
+    /// The feature COPY, exposed for tests.
+    ///
+    /// Two rules are asserted against this rather than trusted: nothing here may
+    /// name a reward tier the server has as `active: false`, and nothing here
+    /// may mention the streak freeze — that is free for every account and
+    /// selling it would make the streak a lever on the subscription.
+    static var featureCopyForTesting: [String] {
+        PaywallView().features.flatMap { [$0.title, $0.detail] }
+    }
 
     private var featureList: some View {
         VStack(spacing: 12) {

@@ -11,7 +11,9 @@ import FirebaseFunctions
 struct StatsAndLeaderboardView: View {
 
     @Environment(GameStateManager.self) private var gameState
+    @Environment(StoreService.self) private var store
     @Environment(\.dismiss) private var dismiss
+    @State private var showPaywall = false
 
     @State private var tab = 0
     @State private var board: [LeaderRow] = []
@@ -56,6 +58,9 @@ struct StatsAndLeaderboardView: View {
                 }
             }
             .task(id: period) { await loadBoard() }
+            .sheet(isPresented: $showPaywall) {
+                PaywallView(source: "advanced_stats").environment(store)
+            }
         }
     }
 
@@ -80,10 +85,50 @@ struct StatsAndLeaderboardView: View {
                 message: "Check in to an event or collect a place and your numbers start here. We don't estimate anything — this stays empty until you've actually earned something."
             )
         } else {
+            // The four headline numbers stay FREE — they are already on the
+            // player card, and paywalling something the user can see elsewhere
+            // is the kind of gate that reads as petty rather than premium.
             grid(s)
-            if !s.byCategory.isEmpty { categoryBreakdown(s) }
-            rhythm(s)
+
+            if store.isPlus {
+                if !s.byCategory.isEmpty { categoryBreakdown(s) }
+                rhythm(s)
+            } else {
+                // Locked, but honest about WHAT is behind it: the sections are
+                // named and described, so the paywall is selling something the
+                // user can evaluate rather than a mystery.
+                advancedLocked
+            }
         }
+    }
+
+    /// The Plus gate on the advanced sections.
+    ///
+    /// PaywallView advertises "Advanced Stats — where your points come from,
+    /// and your last 30 days". Those two phrases name exactly the two sections
+    /// hidden here, so the sale and the gate cannot drift apart.
+    private var advancedLocked: some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            HStack(spacing: 8) {
+                Image(systemName: "lock.fill").foregroundStyle(Palette.gold.base)
+                Text("Advanced stats").font(VType.scaledDisplay(17, .semibold))
+                    .foregroundStyle(Palette.ink)
+            }
+            Text("Where your points come from, broken down by category, and your last 30 days — active days, your average, and your best day.")
+                .font(VType.scaledBody(13))
+                .foregroundStyle(Palette.inkSoft)
+                .fixedSize(horizontal: false, vertical: true)
+            VerdureButton(title: "See with Verdure+", style: .primary) {
+                Haptics.tap(); showPaywall = true
+            }
+            .padding(.top, 4)
+        }
+        .padding(Spacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(ClayBackground(style: .inset, radius: Radius.md))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Advanced stats, a Verdure Plus feature")
+        .accessibilityHint("Shows where your points come from and your last 30 days.")
     }
 
     private func grid(_ s: PersonalStats) -> some View {

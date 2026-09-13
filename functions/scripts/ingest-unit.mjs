@@ -17,6 +17,7 @@ import { titleKey, venueKey, classify, zonedToUtc, cleanText, cleanUrl, eventDoc
 import { mapTicketmaster } from "../lib/ingest/sources/ticketmaster.js";
 import { mapIcsEvent } from "../lib/ingest/sources/icsfeed.js";
 import { parseBiblioPayload, mapBiblioItem, trustedCoordinateIds } from "../lib/ingest/sources/bibliocommons.js";
+import { parseMidpenListing, mapMidpenItem, parseMidpenDate, MIDPEN_PRESERVES } from "../lib/ingest/sources/midpen.js";
 import { parseLibCalRss, mapLibCalItem } from "../lib/ingest/sources/libcal.js";
 import { mapLocalist } from "../lib/ingest/sources/localist.js";
 import { mapNps } from "../lib/ingest/sources/nps.js";
@@ -126,7 +127,7 @@ ok("ics feed: all-day events read 'All day'", libMapped.filter((e) => e.time ===
 // BiblioCommons and has no LibCal calendars at all).
 const CPL_AREA = { id: "fixture-cle", name: "Cleveland, OH", center: { lat: 41.4993, lng: -81.6944 },
   radiusMiles: 25, timeZone: "America/New_York", ticketmaster: { enabled: false },
-  libcal: [], bibliocommons: [], localist: [], nps: { parkCodes: [] }, ics: [],
+  libcal: [], bibliocommons: [], midpen: [], localist: [], nps: { parkCodes: [] }, ics: [],
   serpapi: { enabled: false, query: "" } };
 const CPL_LIBCAL_FEED = { name: "Cleveland Public Library", calendarId: "8758",
   rssUrl: "https://cpl.libcal.com/rss.php?m=month&cid=8758",
@@ -254,6 +255,61 @@ ok("bibliocommons: a location with no coordinate at all is simply absent",
 // leaving every other source in the run intact.
 ok("bibliocommons: junk payload yields no items instead of throwing",
    parseBiblioPayload({ nope: true }, "x").length === 0 && parseBiblioPayload(null, "x").length === 0);
+
+
+// ── Midpen (the outdoor source that replaced NPS) ────────────────────────────
+//
+// This adapter parses HTML, so its tests carry more weight than a feed
+// parser's: there is no contract upstream, only a page that can change. The
+// fixture is a trimmed live capture (2026-09-13).
+console.log("\n── midpen ──");
+const mpHtml = fixture("midpen-events-listing.html");
+const mpItems = parseMidpenListing(mpHtml);
+ok("midpen: parses the Views table into one item per event",
+   mpItems.length === 6 && mpItems.every((i) => i.title && i.dateText && i.preserve && i.link),
+   `n=${mpItems.length} ${JSON.stringify(mpItems[0] ?? {})}`);
+ok("midpen: the 'Image' alt-text prefix is stripped off the activity",
+   mpItems.every((i) => !/^Image/i.test(i.activity)), JSON.stringify(mpItems.map((i) => i.activity)));
+
+const MIDPEN_FEED = { name: "Midpeninsula Regional Open Space District", tags: ["outdoors", "parks"] };
+const mpMapped = mpItems.map((i) => mapMidpenItem(i, SAN_JOSE, MIDPEN_FEED)).filter(Boolean);
+ok("midpen: every parsed row maps to a normalized event", mpMapped.length === mpItems.length,
+   `${mpMapped.length}/${mpItems.length}`);
+ok("midpen: preserve coordinates attach from the verified table",
+   mpMapped.some((e) => typeof e.latitude === "number"),
+   JSON.stringify(mpMapped.map((e) => [e.locationName, e.latitude])));
+ok("midpen: all programming is free and tagged outdoors",
+   mpMapped.every((e) => e.isFree === true && e.tags.includes("outdoors")));
+ok("midpen: volunteer projects classify as Volunteer regardless of title wording",
+   mapMidpenItem({ ...mpItems[0], kind: "Volunteer Project", title: "Trail Maintenance" },
+                 SAN_JOSE, MIDPEN_FEED).category === "Volunteer");
+
+// Dates. A misparse here silently shifts an event by hours or a year.
+ok("midpen: 12-hour times convert correctly, including the noon/midnight edges", (() => {
+    const pm = parseMidpenDate("Saturday, Sep 12, 2026 6:00 pm");
+    const am = parseMidpenDate("Sunday, Sep 13, 2026 9:30 am");
+    const noon = parseMidpenDate("Monday, Sep 14, 2026 12:00 pm");
+    const mid = parseMidpenDate("Monday, Sep 14, 2026 12:30 am");
+    return pm.hh === 18 && am.hh === 9 && am.mm === 30 && noon.hh === 12 && mid.hh === 0 && mid.mm === 30;
+  })(), "12pm must be 12 and 12am must be 0");
+ok("midpen: an unparseable date drops the row instead of defaulting to now",
+   parseMidpenDate("sometime next spring") === null &&
+   mapMidpenItem({ ...mpItems[0], dateText: "sometime next spring" }, SAN_JOSE, MIDPEN_FEED) === null);
+
+// Coordinates: every preserve we claim to know must be inside the area, or the
+// check-in gate would sit around a hillside 40 miles away.
+ok("midpen: every preserve in the table geocodes inside the launch area",
+   Object.values(MIDPEN_PRESERVES).every((v) => isInsideArea(SAN_JOSE, v.lat, v.lng)),
+   JSON.stringify(Object.entries(MIDPEN_PRESERVES).filter(([, v]) => !isInsideArea(SAN_JOSE, v.lat, v.lng))));
+ok("midpen: an unknown preserve yields NO coordinates rather than a guess",
+   mapMidpenItem({ ...mpItems[0], preserve: "Somewhere Unlisted Preserve" }, SAN_JOSE, MIDPEN_FEED).latitude === undefined);
+
+// The loud-failure contract. Returning [] on a redesign would read as "no
+// events this week" and drain the outdoor category silently over three cycles.
+ok("midpen: unrecognisable markup yields zero rows (so fetchMidpen can throw)",
+   parseMidpenListing("<html><body><p>we redesigned</p></body></html>").length === 0);
+ok("midpen: a table with no event links is not mistaken for events",
+   parseMidpenListing("<table><tr><td>a</td><td>b</td><td>c</td><td>d</td><td>e</td></tr></table>").length === 0);
 
 console.log("\n── dedupe + scoping ──");
 const ts = (d) => ({ toMillis: () => new Date(d).getTime() });

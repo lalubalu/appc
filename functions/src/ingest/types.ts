@@ -12,6 +12,7 @@ export type SourceId =
   | "ticketmaster"
   | "libcal"
   | "bibliocommons"
+  | "midpen"
   | "localist"
   | "nps"
   | "ics"

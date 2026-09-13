@@ -89,19 +89,33 @@ final class GameStateManager {
         didSet { UserDefaults.standard.set(lastActiveDay, forKey: "streakLastDay") }
     }
 
-    // MARK: Streak insurance
+    // MARK: Streak freeze
     //
     // One missed day used to reset a 40-day streak to 1. That is a punishment
-    // for having a life, and the people it hits hardest are the ones who had
-    // most invested — the exact users you least want to lose.
+    // for having a life, and it hits hardest the people who had most invested —
+    // the exact users you least want to lose.
     //
-    // So: ONE forgiven day per rolling 30, applied automatically. Deliberately
-    // not purchasable and not a Verdure+ benefit. Selling relief from a
-    // punishment we invented is a dark pattern, and putting it behind the
-    // paywall would make the streak a lever on the subscription rather than an
-    // encouragement to go outside.
+    // ONE forgiven day per rolling 30, automatic, for EVERY user. Not a
+    // purchase, not a tier, not a Verdure+ benefit.
+    //
+    // That is a product decision, not an oversight, and the reasoning is worth
+    // keeping because the cost-side argument for selling it is genuinely
+    // tempting (zero marginal cost, protects retention). Selling relief from a
+    // punishment we invented is a dark pattern. The usual comparison —
+    // Duolingo sells streak freezes — does not transfer: their streak tracks
+    // daily practice, a thing people independently want to keep up. Ours tracks
+    // check-ins, a mechanic we invented and that no interviewee raised
+    // unprompted. Charging for anxiety relief about that, to an audience that
+    // includes students and minors, is not a business we want.
+    //
+    // The retention benefit is kept in full. Only the lever is removed.
+    //
+    // ROLLING 30 DAYS, not a calendar month. A calendar reset would forgive a
+    // miss on Jan 31 and another on Feb 1 — two misses in two days — which is
+    // the gaming a per-month allowance invites.
 
     /// How many days may be missed without breaking the streak, per window.
+    /// Identical for every account — there is no tier that changes either value.
     static let streakInsuranceDays = 1
     static let streakInsuranceWindowDays = 30
 

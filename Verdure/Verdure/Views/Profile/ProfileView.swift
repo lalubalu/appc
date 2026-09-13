@@ -69,7 +69,7 @@ struct ProfileView: View {
             }
             .sheet(isPresented: $showAbout) { AboutVerdureView() }
             .sheet(isPresented: $showNotifSettings) { NotificationSettingsView() }
-            .sheet(isPresented: $showStats) { StatsAndLeaderboardView().environment(gameState) }
+            .sheet(isPresented: $showStats) { StatsAndLeaderboardView().environment(gameState).environment(store) }
             .sheet(item: $selectedBadge) { BadgeDetailSheet(badge: $0) }
             .sheet(item: $selectedChallenge) { ChallengeDetailSheet(challenge: $0) }
             .onChange(of: photoItem) { _, item in
