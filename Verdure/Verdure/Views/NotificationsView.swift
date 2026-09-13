@@ -151,11 +151,19 @@ struct NotificationsInboxView: View {
     private var emptyState: some View {
         VStack(spacing: Spacing.md) {
             ClayIconTile(systemImage: "bell.slash", kind: .spruce, size: 66, radius: Radius.md)
-            Text("You're all caught up").font(VType.display(19, .semibold)).foregroundStyle(Palette.ink)
+            Text("You're all caught up")
+                .font(VType.scaledDisplay(19, .semibold, relativeTo: .headline))
+                .foregroundStyle(Palette.ink)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
             Text("Reminders, badges, and community activity will show up here.")
-                .font(VType.body(14)).foregroundStyle(Palette.inkSoft).multilineTextAlignment(.center)
+                .font(VType.scaledBody(14, relativeTo: .subheadline))
+                .foregroundStyle(Palette.inkSoft)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity).padding(.top, 90).padding(.horizontal, Spacing.xl)
+        .accessibilityElement(children: .combine)
     }
 }
 

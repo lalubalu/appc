@@ -17,7 +17,8 @@
     "ingest:smoke": "npm run build && node scripts/ingest-smoke.mjs",
     "seed:partners": "cd .. && npx firebase-tools@13 emulators:exec --only firestore \"node functions/scripts/seed-partners.mjs\"",
     "coverage": "npm run build && node scripts/coverage-check.mjs",
-    "coverage:emulator": "cd .. && npx firebase-tools@13 emulators:exec --only firestore \"node functions/scripts/coverage-check.mjs\""
+    "coverage:emulator": "cd .. && npx firebase-tools@13 emulators:exec --only firestore \"node functions/scripts/coverage-check.mjs\"",
+    "seed:review": "node scripts/seed-review-account.mjs"
   },
   "dependencies": {
     "@apple/app-store-server-library": "^3.1.0",

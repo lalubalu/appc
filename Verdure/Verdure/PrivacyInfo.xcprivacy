@@ -5,11 +5,21 @@
 	<!--
 	  Verdure privacy manifest.
 
-	  Verdure does NOT track users: no ad SDKs, no analytics, no data brokers, and
-	  nothing is linked to third-party data for advertising or measurement. Every
-	  collected type below is used solely to make the app function, and each is
-	  linked to the user's account because the account is what gives them their
-	  points, collection, and rewards.
+	  Verdure does NOT track users: no ad SDKs, no third-party analytics, no data
+	  brokers, and nothing is linked to third-party data for advertising or
+	  measurement. Nothing here follows a user across other apps or websites,
+	  which is what Apple's "tracking" means — so NSPrivacyTracking stays false.
+
+	  Verdure DOES keep first-party product analytics (which screens and features
+	  get used), declared below as Product Interaction. It is keyed to a random
+	  per-install identifier, NOT to the account, and carries no names, no message
+	  or post content and no location — so it is declared UNLINKED, and it is the
+	  one collected type here that is not tied to the user's account. Users can
+	  switch it off in Profile > Settings.
+
+	  Every other collected type below is used solely to make the app function,
+	  and each is linked to the user's account because the account is what gives
+	  them their points, collection, and rewards.
 	-->
 	<key>NSPrivacyTracking</key>
 	<false/>
@@ -18,6 +28,25 @@
 
 	<key>NSPrivacyCollectedDataTypes</key>
 	<array>
+		<!-- Product interaction: first-party analytics. Which screens are opened
+		     and which features are used, so we can tell whether what we build is
+		     worth building. Keyed to a random per-install UUID rather than the
+		     account, so it is NOT linked to the user. No names, no content, no
+		     location. Never leaves our own Firestore and is never sold or shared.
+		     Opt-out lives in Profile > Settings > Product Analytics. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeProductInteraction</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAnalytics</string>
+			</array>
+		</dict>
+
 		<!-- Precise location: proximity gate for event check-in + place collection,
 		     and to find what's nearby. Sent to our Cloud Function to validate that
 		     the user is really at the event. Never used for tracking. -->

@@ -408,11 +408,15 @@ struct EventsView: View {
         VStack(spacing: Spacing.md) {
             ClayIconTile(systemImage: "calendar.badge.exclamationmark", kind: .gold, size: 60, radius: Radius.md)
             Text(sourceEvents.isEmpty ? "No events loaded yet" : "No events match")
-                .font(VType.display(18, .semibold)).foregroundStyle(Palette.ink)
+                .font(VType.scaledDisplay(18, .semibold, relativeTo: .headline))
+                .foregroundStyle(Palette.ink)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
             Text(sourceEvents.isEmpty
                  ? (eventsService.lastError ?? "We only show real events from real sources. Pull to refresh, or check back soon — new events are ingested every hour.")
                  : (searchText.isEmpty ? "Try a different category." : "Try a different search or category."))
-                .font(VType.body(13)).foregroundStyle(Palette.inkSoft).multilineTextAlignment(.center)
+                .font(VType.scaledBody(13, relativeTo: .footnote))
+                .foregroundStyle(Palette.inkSoft).multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity).frame(minHeight: 300)

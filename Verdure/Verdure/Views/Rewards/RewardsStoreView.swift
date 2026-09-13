@@ -57,7 +57,13 @@ struct RewardsStoreView: View {
                             .font(VType.scaledBody(14, .semibold))
                     }
                     .tint(Palette.spruce.base)
-                    .accessibilityLabel("My redeemed codes")
+                    // The label must CONTAIN the visible text. Voice Control
+                    // users say what they see ("tap My Codes"), so an override
+                    // that replaces the on-screen words with a synonym makes the
+                    // control unreachable by voice. The extra detail belongs in
+                    // the hint, which Voice Control does not match against.
+                    .accessibilityLabel("My Codes")
+                    .accessibilityHint("Partner codes you've already redeemed")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }

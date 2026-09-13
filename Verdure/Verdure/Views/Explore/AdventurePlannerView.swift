@@ -139,16 +139,34 @@ struct AdventurePlannerView: View {
         }
     }
 
+    /// The planner can only choose from places the app has already fetched — the
+    /// server treats that list as a strict allowlist, which is what stops it
+    /// inventing locations. So with too few candidates there is nothing honest
+    /// to plan, and saying so beats letting someone tap a button that will
+    /// return a server error.
+    private var hasEnoughPlaces: Bool { places.count >= 3 }
+
+    @ViewBuilder
     private var planButton: some View {
-        ClayButton(isPlanning ? "Planning…" : "Plan my adventure",
-                   systemImage: isPlanning ? nil : "sparkles",
-                   kind: .spruce,
-                   fullWidth: true) {
-            Task { await runPlan() }
+        if hasEnoughPlaces {
+            ClayButton(isPlanning ? "Planning…" : "Plan my adventure",
+                       systemImage: isPlanning ? nil : "sparkles",
+                       kind: .spruce,
+                       fullWidth: true) {
+                Task { await runPlan() }
+            }
+            .disabled(isPlanning)
+            .opacity(isPlanning ? 0.7 : 1)
+            .accessibilityHint("Builds an itinerary from places near you")
+        } else {
+            EmptyStateCard(
+                icon: "map",
+                title: "Not enough nearby places yet",
+                message: places.isEmpty
+                    ? "The planner only uses real places we've already found near you — it never invents one. Open Explore to load what's around, then come back."
+                    : "We've only found \(places.count) place\(places.count == 1 ? "" : "s") nearby so far. A plan needs at least three real ones.",
+            )
         }
-        .disabled(isPlanning)
-        .opacity(isPlanning ? 0.7 : 1)
-        .accessibilityHint("Builds an itinerary from places near you")
     }
 
     private func errorCard(_ message: String) -> some View {

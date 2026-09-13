@@ -371,7 +371,10 @@ struct ExploreView: View {
             if filteredPlaces.isEmpty {
                 HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass").foregroundStyle(Palette.inkFaint)
-                    Text("No places match.").font(VType.body(14, .medium)).foregroundStyle(Palette.inkSoft)
+                    Text("No places match.")
+                        .font(VType.scaledBody(14, .medium, relativeTo: .subheadline))
+                        .foregroundStyle(Palette.inkSoft)
+                        .fixedSize(horizontal: false, vertical: true)
                     Spacer()
                 }
                 .padding(Spacing.md)

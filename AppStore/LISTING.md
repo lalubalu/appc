@@ -118,10 +118,13 @@ Settings › Terms & Privacy — so the links are live even before DNS is.
 These must match `Verdure/Verdure/PrivacyInfo.xcprivacy` exactly.
 
 **Does your app collect data?** → **Yes**
-**Do you use data for tracking?** → **No** (no ad SDKs, no analytics, no brokers)
+**Do you use data for tracking?** → **No** — no ad SDKs, no third-party
+analytics, no data brokers, and nothing follows a user across other apps or
+websites, which is what Apple's "tracking" means.
 
 | Data type | Collected | Linked to user | Tracking | Purpose |
 |---|---|---|---|---|
+| Product Interaction | Yes | **No** | No | Analytics |
 | Precise Location | Yes | Yes | No | App Functionality |
 | Email Address | Yes | Yes | No | App Functionality |
 | Name | Yes | Yes | No | App Functionality |
@@ -134,13 +137,42 @@ These must match `Verdure/Verdure/PrivacyInfo.xcprivacy` exactly.
 Nothing else is collected — no contacts, health, browsing, search history,
 diagnostics, or advertising data.
 
+**On Product Interaction (the one unlinked row).** Verdure keeps first-party
+analytics: which screens are opened and which features are used. It is keyed to
+a random per-install UUID, not to the account, and carries no names, no message
+or post content and no location — which is why it is declared Not Linked while
+everything else here is Linked. It never leaves our own Firestore. Users can
+switch it off in Profile › Settings › Product Analytics.
+
 ---
 
 ## App Review notes
 
-> **Signing in**
-> Create an account with any email on the sign-up screen, or tap "Continue as
-> guest" to browse without one.
+> **Demo account**
+> Sign in with:
+>
+> ```
+> Email:    appreview@verdure.app
+> Password: (see the Demo Account fields in App Store Connect)
+> ```
+>
+> This account is pre-seeded so the reviewer does not have to earn anything to
+> see the app: it has a points balance large enough to redeem a reward, several
+> saved and RSVP'd events, an unlocked badge, and a claimed partner perk code
+> visible under Collect › Rewards › My Codes. Creating a fresh account works
+> too ("Continue as guest" also browses without one), but a new account starts
+> at zero points and cannot exercise the redemption flow at all.
+>
+> **SETUP REQUIRED BEFORE SUBMISSION — this account does not exist yet.**
+> It cannot be created until Cloud Functions are deployed, because points and
+> redemptions are server-authoritative and a client cannot mint them. Steps,
+> once the backend is live:
+>   1. Register `appreview@verdure.app` through the normal sign-up screen.
+>   2. Run `node functions/scripts/seed-review-account.mjs <uid>` against the
+>      live project to grant the balance, RSVPs, badge and perk code.
+>   3. Put the credentials in App Store Connect › App Review Information.
+> Submitting without this leaves the reviewer unable to reach the reward flow,
+> which is the most likely cause of a 2.1 rejection for this app.
 >
 > **About check-ins (important for review)**
 > Checking in to an event requires two things by design: being physically within
@@ -176,9 +208,18 @@ diagnostics, or advertising data.
 > are rendered from the StoreKit product objects, never hardcoded.
 >
 > **About the subscription**
-> Verdure+ unlocks the Gold/Platinum reward tiers, early access to limited-time
-> drops, and a profile badge. Everything else in the app is free. The paywall
-> lists only features that are live in this build.
+> Verdure+ unlocks an unlimited Adventure Planner (free members get 5 plans a
+> calendar month), early access to partner perks, cash gift cards ($5 and $10),
+> and a profile badge. Everything else in the app is free. The paywall lists
+> only features that are live in this build — it previously advertised $25/$50
+> reward tiers that the server declines, and those are gone from both the
+> paywall and this listing.
+>
+> **About partner offers**
+> Some screens may show a labelled offer from a local partner. Partners receive
+> no personal information, a partner offer never changes the order of organic
+> recommendations, at most one is shown per session, and each can be dismissed
+> permanently. Offers never appear in Friends Activity.
 >
 > **About "Plan my adventure"**
 > This builds an itinerary using a language model, but the model is only ever

@@ -57,6 +57,35 @@ final class AccessibilityAuditTests: XCTestCase {
         try QA.audit(app, screen: "adventure-planner")
     }
 
+    // MARK: Surfaces added this sprint
+    //
+    // H4. Each of these is a screen a user can reach and act on, so each gets
+    // the same audit the older screens get rather than a visual once-over.
+
+    func testAuditNotificationSettings() throws {
+        let app = QA.launch(tab: "profile")
+        addTeardownBlock { app.terminate() }
+        QA.waitFor(app.staticTexts["Notifications"].firstMatch, "notifications settings row").tap()
+        QA.waitFor(app.staticTexts["What we send"], "notification settings sheet")
+        try QA.audit(app, screen: "notification-settings")
+    }
+
+    func testAuditMyPerkCodes() throws {
+        let app = QA.launch(tab: "profile")
+        addTeardownBlock { app.terminate() }
+        QA.waitFor(app.buttons["Rewards"].firstMatch, "rewards button").tap()
+        QA.waitFor(app.staticTexts["AVAILABLE POINTS"], "rewards store")
+        // My Codes is reachable whether or not any code has been claimed — the
+        // empty state is itself a surface that has to pass.
+        let myCodes = app.buttons["My Codes"].firstMatch
+        if myCodes.waitForExistence(timeout: 4) {
+            myCodes.tap()
+            try QA.audit(app, screen: "my-perk-codes")
+        } else {
+            XCTFail("My Codes entry point is missing from the rewards store")
+        }
+    }
+
     func testAuditOnboardingFirstPage() throws {
         let app = XCUIApplication()
         app.launchArguments += ["-hasCompletedOnboarding", "NO", "-QADisableMotion", "YES"]
