@@ -38,7 +38,10 @@ the week.
 | P3 read budget | Open | Measure against a populated live index before releasing C1; add bounded candidate retrieval, Everything pagination, caching, and treasury read telemetry. |
 | C1–C11 | Not shipped | Ranking retrieval, signals, modes, golden set, instrumentation and client wiring. Human golden-set owner needed. |
 | D5 | Partial | Computer after screenshots for remaining screens and visual accessibility sweep; Simulator capture timed out after the Events screen. |
-| E / F / G / I / H | Not shipped | Five-tab navigation, mutual friends, event planner, Opportunities/student mode, Plus personalization, then group planning. These depend on C's validated data and ranking work. |
+| E1 navigation | Local UI built | Five tabs and rehomed surfaces compile; Plan was visually inspected on Simulator. Complete visual matrix and automated accessibility review remain. |
+| E2–E4 friends | Open | Mutual requests, accepted-only activity, invite links and QR, minor search safety, rules, account deletion cleanup, then live tab data. The new Friends tab currently shows an honest invite/Community entry without exposing follow-based location activity. |
+| F planner | Partial UI | Options-first local event picker and in-place swap/remove are built. Server-ranked candidate assembly, model sequence, session quota, accepted friend signals and acceptance tests remain. |
+| G / I / H | Not shipped | Opportunities/student mode, Plus personalization, then group planning. These depend on C's validated data and ranking work. |
 | G4 Idealist application | Open | Application contact and organizational details, then submit through the official access process. |
 
 No production deployment, account upgrade, Apple Developer action, or

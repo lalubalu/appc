@@ -18,6 +18,7 @@ struct ProfileView: View {
     @Environment(ModerationService.self) private var moderation
     @Environment(SocialService.self) private var social
     @State private var showRewardsStore = false
+    @State private var showCollection = false
     @State private var showDeleteConfirm = false
     @State private var isDeletingAccount = false
     @State private var deleteAccountError: String?
@@ -48,6 +49,7 @@ struct ProfileView: View {
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: Spacing.xl) {
                     playerCard.dramaticRise(index: 0)
+                    collectionEntry.dramaticRise(index: 1)
                     statsOrbit.dramaticRise(index: 1)
                     badgesConstellation.dramaticRise(index: 2)
                     challengesRail.dramaticRise(index: 3)
@@ -61,6 +63,7 @@ struct ProfileView: View {
             .sheet(isPresented: $showRewardsStore) {
                 RewardsStoreView().environment(gameState).environment(economy)
             }
+            .sheet(isPresented: $showCollection) { CollectionView() }
             .sheet(isPresented: $showAllBadges) {
                 AllBadgesView(badges: badges)
             }
@@ -92,6 +95,31 @@ struct ProfileView: View {
     }
 
     // MARK: - Profile summary
+
+    private var collectionEntry: some View {
+        Button { Haptics.soft(); showCollection = true } label: {
+            HStack(spacing: Spacing.md) {
+                Image(systemName: "leaf.fill")
+                    .font(.system(size: 22, weight: .medium))
+                    .foregroundStyle(Palette.spruce.base)
+                    .frame(width: 48, height: 48)
+                    .background(Palette.spruce.base.opacity(0.1), in: RoundedRectangle(cornerRadius: Radius.sm))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Your collection")
+                        .font(VType.display(20, .semibold)).foregroundStyle(Palette.ink)
+                    Text("\(gameState.totalCollected) places collected")
+                        .font(VType.body(13, .medium)).foregroundStyle(Palette.inkSoft)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold)).foregroundStyle(Palette.inkSoft)
+            }
+            .padding(Spacing.md)
+            .claySurface(.surface, radius: Radius.md, elevation: 0.8)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Your collection, \(gameState.totalCollected) places collected")
+    }
 
     private var playerCard: some View {
         let avatarInitials = initials

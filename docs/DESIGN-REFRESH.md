@@ -18,6 +18,7 @@ Plus simulator before D1-D4.
 | Collect | [before](design-refresh/before/collect.png) | Pending |
 | Community | [before](design-refresh/before/community.png) | Pending |
 | Profile | [before](design-refresh/before/profile.png) | Pending |
+| Plan (new) | — | [Simulator capture](design-refresh/after/plan.png) |
 
 ## Token contract
 
@@ -53,3 +54,18 @@ capture subsequently timed out on
 the Simulator window, so their after screenshots and visual accessibility
 review remain pending. No physical-device contrast or Dynamic Type result is
 claimed. Re-run the full screen matrix once the Simulator window is reachable.
+
+## Five-tab follow-up
+
+The new navigation has Discover, Plan, Friends, Rewards, and Profile. Events,
+Places, and Map are modes inside Discover; Community is under Friends;
+Collection opens from Profile. The old `QATab` surface names remain routable.
+The new Plan screen uses options first and displays only real indexed events.
+The linked Plan capture above was taken with Computer on the iPhone 16 Plus
+Simulator. The live `/events` index is empty, so its honest no-listings state
+is visible below the option controls. Computer lost the Simulator window after
+that capture; the other four new-tab screenshots remain to be taken.
+
+This is navigation and a local planner UI, not the full sprint planner or
+friend system. The server-ranked plan assembly, accepted-only friendship,
+friend availability, and complete For You / Everything retrieval are open.

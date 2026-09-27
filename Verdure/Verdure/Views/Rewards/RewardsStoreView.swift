@@ -16,6 +16,7 @@ import SwiftUI
 // deactivated. The local catalog is now a DEBUG-only offline fallback.
 
 struct RewardsStoreView: View {
+    var showsDoneButton = true
     @Environment(GameStateManager.self) private var gameState
     @Environment(StoreService.self) private var store
     @Environment(EconomyService.self) private var economy
@@ -65,9 +66,11 @@ struct RewardsStoreView: View {
                     .accessibilityLabel("My Codes")
                     .accessibilityHint("Partner codes you've already redeemed")
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
-                        .font(VType.scaledBody(15, .semibold)).foregroundStyle(Palette.spruce.base)
+                if showsDoneButton {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Done") { dismiss() }
+                            .font(VType.scaledBody(15, .semibold)).foregroundStyle(Palette.spruce.base)
+                    }
                 }
             }
             .task { await economy.refresh(); await economy.loadMyCodes() }
