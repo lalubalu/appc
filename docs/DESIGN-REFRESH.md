@@ -21,6 +21,7 @@ Plus simulator before D1-D4.
 | Plan (new) | — | [current](design-refresh/after/plan-current.jpg) · [date picker](design-refresh/after/plan-date.jpg) · [populated QA card](design-refresh/after/plan-populated-qa.jpg) · [accessibility XL](design-refresh/after/plan-xl.jpg) |
 | Friends (new) | — | [current](design-refresh/after/friends.jpg) · [accessibility XL](design-refresh/after/friends-xl.jpg) |
 | Rewards (new) | — | [current](design-refresh/after/rewards.jpg) |
+| Populated local feed | — | [For You](design-refresh/after/discover-for-you-populated-emulator.png) · [Everything](design-refresh/after/discover-everything-populated-emulator.png) · [event detail](design-refresh/after/event-detail-populated-emulator.png) |
 
 ## Token contract
 
@@ -51,8 +52,17 @@ showed a 35-mile card under the same label. A separate DEBUG offline QA fixture
 renders the populated Plan card and its Details, Going? and Refine actions in
 the linked screenshot. That fixture is explicitly labeled QA, is excluded from
 rewards, and is not evidence of a live indexed event. These are visual checks
-of displayed states, not a populated-corpus or physical-device accessibility
-pass.
+of displayed states, not a physical-device accessibility pass.
+
+A later iPhone 16 Plus Simulator run connected the DEBUG build to a locally
+seeded Firestore emulator. Computer inspection confirmed 48 events on For You,
+the first 40 indexed records on Everything, and a working detail sheet for a
+San José Public Library event. The three screenshots above are from that local
+emulator, not the live Firebase project. The For You card rail extends toward
+the screen edge and the floating tab bar covers the lower portion of the next
+card at the captured scroll position; these are visual review items for the
+owner's later design decision. Live event imagery and real RSVP states remain
+untested.
 
 The Profile and Collection summaries were compressed in code. Explore starts
 with nearby places; level, points and challenges stay in Profile. Arbitrary
@@ -73,6 +83,8 @@ Places, and Map are modes inside Discover; Community is under Friends;
 Collection opens from Profile. The old `QATab` surface names remain routable.
 Plan uses options first and displays only indexed events in normal operation.
 The current capture shows the date picker, group-plan entry and honest empty
-state. The DEBUG offline capture exercises a populated card. Live event-card
-imagery, RSVP and friend-going states still need a populated-index review.
+state. The DEBUG offline capture exercises a populated Plan card. The later
+local Firestore capture exercises populated Discover cards and detail. Live
+event-card imagery, RSVP and friend-going states still need a production-index
+review.
 The model path also needs its configured secret and a populated-index review.

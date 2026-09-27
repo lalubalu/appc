@@ -202,7 +202,8 @@ final class EventsAPIService {
                 .order(by: "date")
                 .limit(to: 40)
             if let everythingCursor { query = query.start(afterDocument: everythingCursor) }
-            let page = try await query.getDocuments()
+            // An empty local Firestore cache is not a successful feed refresh.
+            let page = try await query.getDocuments(source: .server)
             everythingCursor = page.documents.last
             everythingHasMore = page.documents.count == 40
             let seen = Set(everythingEvents.map(\.id))
@@ -363,7 +364,7 @@ final class EventsAPIService {
                 .whereField("date", isGreaterThanOrEqualTo: now)
                 .order(by: "date")
                 .limit(to: maxEvents)
-                .getDocuments()
+                .getDocuments(source: .server)
             return snapshot.documents.compactMap { Self.mapFirestoreDocument($0) }
         } catch {
             lastError = "Couldn't reach the event store. Showing what was saved on this device."
@@ -387,7 +388,7 @@ final class EventsAPIService {
                     .whereField("organizerId", isEqualTo: orgId)
                     .whereField("date", isGreaterThanOrEqualTo: cutoff)
                     .limit(to: 100)
-                    .getDocuments()
+                    .getDocuments(source: .server)
                 out.append(contentsOf: snap.documents.compactMap { Self.mapFirestoreDocument($0) })
             } catch {
                 print("[EventsAPI] organizer \(orgId) query failed: \(error.localizedDescription)")

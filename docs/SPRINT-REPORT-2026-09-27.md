@@ -151,6 +151,12 @@ The local rules and backend are not deployed, per the owner's instruction.
 The same read-only audit found zero deployed Cloud Functions and zero composite
 Firestore indexes, so production needs a coordinated release rather than a
 single rule update.
+An opt-in DEBUG simulator build subsequently used a populated local Firestore
+emulator: For You displayed 48 events, Everything loaded 40, and an event
+detail opened. [The screenshots](DESIGN-REFRESH.md) show the actual iOS UI on
+local public-source records. The feed queries now demand a server response so
+an empty Firestore disk cache cannot masquerade as a successful refresh and
+erase the app's own saved events. This does not close the production feed gate.
 The same full-size corpus exposed and helped fix backfill drift: the final
 dry run proposed zero changes to 9,832 already enriched documents. A separate
 emulator check proved legacy migration and second-pass idempotence. It counted

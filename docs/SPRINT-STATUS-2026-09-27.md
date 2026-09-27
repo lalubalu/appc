@@ -140,6 +140,14 @@ Cloud Functions and zero composite Firestore indexes. No deployment occurred.
 This environment gap must be resolved in
 addition to populating the currently empty live corpus.
 
+**Populated iOS Simulator pass:** an opt-in DEBUG-only simulator connection to
+the local Firestore emulator displayed 48 For You events, 40 Everything
+listings, and an opened event detail. [Screenshots](DESIGN-REFRESH.md) show the
+actual app with public source records. Server-only feed reads now distinguish a
+failed refresh from a successful empty local cache, preserving the app's saved
+events on an offline failure. This is local UI evidence; the live guest feed
+still fails under deployed rules, and no production data was written.
+
 **Free follow-up on September 27:** all 11 public adapters responded again;
 3,213 dated, geocoded source records fell within 25 miles over the next 30
 days, including 55 provisional Volunteer classifications before deduplication
@@ -162,7 +170,7 @@ populated-production-corpus evaluation.
 | C0/P2 | Named human reviewer for all 200 sampled classifications, category accuracy and fixes; review a populated-corpus backfill dry run before writing it live. |
 | P3/C1 | Measure full Firestore reads against a populated index, including user context, client reads and index entries, before enabling the feed at scale. |
 | C3/C10/C11 | Full radius and filter behavior against a dense corpus; named reviewer and 20-profile golden set; live measurement of impression/outcome coverage and cost. |
-| D/E | Populated live-event screens, full VoiceOver reading order, broader dark-mode and physical-device QA; real installed-app invite round trip. The shared-past-event friend path is implemented and emulator-tested. Structural audits and targeted XL Simulator captures pass. The website invite page needs deployment before public links work. |
+| D/E | Populated **production** event screens, full VoiceOver reading order, broader dark-mode and physical-device QA; real installed-app invite round trip. The local-emulator Discover and detail screens are captured. The shared-past-event friend path is implemented and emulator-tested. Structural audits and targeted XL Simulator captures pass. The website invite page needs deployment before public links work. |
 | F | Configure and exercise the actual model secret; review sequencing, sponsor trust and session spend against a populated index. Emulator tests prove the verified-ID fallback and session mechanics. |
 | G | At least 30 live local volunteer listings before surfacing that subtype; the Volunteer chip is hidden below this threshold. Partner/API access and Idealist application remain; any post-freeze source addition requires a renewed classification audit. |
 | I/H | Profile and group-plan controls need device QA and a real two-phone invite test. Offline packs and AR stay deferred and are no longer advertised. |

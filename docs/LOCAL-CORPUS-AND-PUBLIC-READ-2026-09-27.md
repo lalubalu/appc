@@ -76,6 +76,23 @@ The live environment therefore lacks the local server behavior and query
 indexes as well as the updated rules. A rules-only change would not complete
 the app's production path.
 
+## Populated iOS Simulator review
+
+For UI review, a persistent local Firestore emulator was seeded with the same
+public ingest path. The iPhone 16 Plus Debug build used the opt-in simulator
+launch argument `-QAUseFirestoreEmulator YES`, which routes Firestore to
+`127.0.0.1:8899` with plaintext transport and an in-memory SDK cache. Normal
+launches and Release builds keep their configured Firebase connection. The
+final Debug build showed 48 events in For You; Everything loaded 40 records,
+and an event detail sheet opened. The saved [screen captures](DESIGN-REFRESH.md)
+are explicitly local-emulator evidence. The emulator was stopped after QA.
+
+The iOS feed, Everything and followed-organizer fetches now request a server
+result. This prevents Firestore's empty disk cache from being interpreted as a
+successful refresh when the actual server read fails; the app's separately
+saved event cache can then remain visible with an error. It does not bypass
+the live Firestore rules failure.
+
 ## What this does and does not close
 
 The local pass gives an actual populated-corpus exercise of ingestion,

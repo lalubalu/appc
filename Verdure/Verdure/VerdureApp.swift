@@ -1,5 +1,8 @@
 import SwiftUI
 import FirebaseCore
+#if DEBUG && targetEnvironment(simulator)
+import FirebaseFirestore
+#endif
 
 @main
 struct VerdureApp: App {
@@ -9,6 +12,21 @@ struct VerdureApp: App {
 
     init() {
         FirebaseApp.configure()
+        #if DEBUG && targetEnvironment(simulator)
+        // Opt-in only for local populated-screen QA. Release builds and normal
+        // simulator launches continue to use the configured Firebase project.
+        let qaEmulator = UserDefaults.standard.bool(forKey: "QAUseFirestoreEmulator")
+        if qaEmulator {
+            let firestore = Firestore.firestore()
+            firestore.useEmulator(withHost: "127.0.0.1", port: 8899)
+            // Firebase's iOS useEmulator sets the host but does not disable
+            // TLS. The local Firestore emulator serves plaintext gRPC.
+            let settings = firestore.settings
+            settings.isSSLEnabled = false
+            settings.cacheSettings = MemoryCacheSettings()
+            firestore.settings = settings
+        }
+        #endif
         PushService.shared.start()
     }
 
