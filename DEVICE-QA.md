@@ -119,12 +119,13 @@ two numbers.
 | 4.21 | Organizer posts an accessible outdoor event with age/size details | Details persist and display under Before you go; invalid minimum/maximum ages are refused | ☐ |
 | 4.22 | Create a student account and browse Opportunities | Student/school affect ordering without hiding events; private fields are absent from public profiles | ☐ |
 | 4.23 | Create and switch two Verdure+ interest profiles in Discover and Plan | Each name, distance preset, exclusion and saved filter persists; switching changes order; free account sees no Plus controls | ☐ |
-| 4.24 | Set youngest child age in Profile, then open a late or adult-only event | Suitable events rise in For You; an age or late-ending warning appears in details | ☐ |
+| 4.24 | Save two child ages, accessibility needs, usual transport and typical distance in Profile; relaunch; open a late, adult-only or accessibility-unconfirmed event | All preferences persist; suitable/confirmed events rise in For You; age, late-ending and unconfirmed-accessibility warnings appear where supported; clearing preferences removes them | ☐ |
 | 4.25 | Build a Plan from real events, swap, make it shorter/longer, then reopen | Cards and RSVP work; refinement stays in the same session and never invents a stop | ☐ |
 | 4.26 | Two accepted friends share a group plan | Invitee opts in, both shortlist, each independently RSVPs; an unaccepted user cannot find the plan | ☐ |
 | 4.27 | Scroll For You, tap, save, RSVP and dismiss a card | Server impression records position, score, signals and the strongest outcome only for displayed cards | ☐ |
 | 4.28 | Filter by setting, age audience, group size, accessibility and public venue, then relaunch | Only listings with matching confirmed details remain; selections persist; Reset clears them; an empty result never restores unrelated cards | ☐ |
 | 4.29 | Build a Plan with one event image and one missing image while an accepted friend is going | Real image loads without stretching, fallback icon remains legible, friend avatars appear, and RSVP/Refine controls fit at large Dynamic Type | ☐ |
+| 4.30 | With two adult accounts that RSVP'd before an event ended, open Add Friends after it ends; repeat while it is upcoming and with a minor account | Adult shared-event suggestion appears only after the end; upcoming attendees and minors never appear; request/accept works | ☐ |
 | 4.30 | Deny location, then open Places and Map | Browse from the named launch area, radius count matches displayed cards, no GPS-based check-in is enabled, and a later GPS fix refreshes the list | ☐ |
 
 ## Reporting

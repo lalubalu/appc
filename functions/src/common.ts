@@ -105,6 +105,7 @@ export const RATE_LIMITS: Record<string, RateLimit> = {
   myFriendInvite:   { max: 30,  windowMs: HOUR },
   claimUsername:    { max: 12,  windowMs: HOUR },
   findFriendByUsername: { max: 60, windowMs: HOUR },
+  sharedPastEventMembers: { max: 30, windowMs: HOUR },
   registerAgeBand:  { max: 6,   windowMs: HOUR },
   sendFriendRequest:{ max: 30,  windowMs: HOUR },
   respondToFriendRequest: { max: 60, windowMs: HOUR },

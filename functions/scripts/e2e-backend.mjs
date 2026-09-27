@@ -998,6 +998,39 @@ async function main() {
   r = await call("registerAgeBand", { birthYear: adultYear }, sarah.idToken);
   ok("friends: adult age band recorded", r.result?.ageBand === "adult", JSON.stringify(r));
   await call("registerAgeBand", { birthYear: adultYear }, quinn.idToken);
+  await call("registerAgeBand", { birthYear: adultYear }, blocker.idToken);
+  const sharedEventId = `e2e-shared-past-${Date.now()}`;
+  await db.doc(`events/${sharedEventId}`).set({
+    title: "Shared Park Day", organizer: "Parks", date: new Date(Date.now() + 86_400_000),
+    endDate: new Date(Date.now() + 90_000_000), active: true, hidden: false,
+    creatorID: "system:ingest", attendeeCount: 0,
+  });
+  await call("rsvpToEvent", { eventId: sharedEventId, going: true }, quinn.idToken);
+  await call("rsvpToEvent", { eventId: sharedEventId, going: true }, blocker.idToken);
+  r = await call("sharedPastEventMembers", {}, quinn.idToken);
+  ok("friends: upcoming shared event never exposes attendees", r.result?.members?.length === 0, JSON.stringify(r));
+  await db.doc(`events/${sharedEventId}`).update({
+    date: new Date(Date.now() - 3 * 86_400_000), endDate: new Date(Date.now() - 2 * 86_400_000),
+  });
+  // Simulate the event crossing its end after both actual RSVP timestamps.
+  // Backdating these seeded attendee rows keeps the privacy predicate honest.
+  await db.doc(`events/${sharedEventId}/attendees/${quinn.uid}`).update({ createdAt: new Date(Date.now() - 4 * 86_400_000) });
+  await db.doc(`events/${sharedEventId}/attendees/${blocker.uid}`).update({ createdAt: new Date(Date.now() - 4 * 86_400_000) });
+  r = await call("sharedPastEventMembers", {}, quinn.idToken);
+  ok("friends: completed shared RSVP reveals an adult candidate",
+    r.result?.members?.some((member) => member.uid === blocker.uid && member.eventTitle === "Shared Park Day"), JSON.stringify(r));
+  await db.doc(`events/${sharedEventId}`).update({ active: false });
+  r = await call("sharedPastEventMembers", {}, quinn.idToken);
+  ok("friends: retired source listings preserve genuine past-event connections",
+    r.result?.members?.some((member) => member.uid === blocker.uid), JSON.stringify(r));
+  await db.doc(`events/${sharedEventId}/attendees/${blocker.uid}`).update({ createdAt: new Date() });
+  r = await call("sharedPastEventMembers", {}, quinn.idToken);
+  ok("friends: a late RSVP cannot enumerate past attendees", r.result?.members?.length === 0, JSON.stringify(r));
+  await db.doc(`events/${sharedEventId}/attendees/${blocker.uid}`).update({ createdAt: new Date(Date.now() - 4 * 86_400_000) });
+  await db.doc(`users/${blocker.uid}`).update({ ageBand: "minor" });
+  r = await call("sharedPastEventMembers", {}, quinn.idToken);
+  ok("friends: a minor is absent from shared-event discovery", r.result?.members?.length === 0, JSON.stringify(r));
+  await db.doc(`users/${blocker.uid}`).update({ ageBand: "adult" });
   await call("claimUsername", { username: "sarahpark" }, sarah.idToken);
   r = await call("findFriendByUsername", { username: "sarahpark" }, quinn.idToken);
   ok("friends: exact adult username lookup", r.result?.member?.uid === sarah.uid, JSON.stringify(r));
@@ -1053,6 +1086,35 @@ async function main() {
   ok("rules: requests visible only to participants", fcode === "permission-denied", `got ${fcode}`);
   try { fcode = await (async () => { await updateDoc(doc(quinn.fdb, `users/${quinn.uid}`), { followerCount: 999 }); return "ok"; })(); } catch (e) { fcode = e.code; }
   ok("rules: client cannot inflate its own follower count", fcode === "permission-denied", `got ${fcode}`);
+
+  // Optional household preferences stay owner-writable and constrained to the
+  // exact vocabulary the recommender understands.
+  let householdCode = await (async () => { try {
+    await updateDoc(doc(quinn.fdb, `users/${quinn.uid}`), {
+      householdYoungestAge: 7, householdChildAges: [7, 12], householdTransportMode: "transit",
+      householdRadiusMiles: 15, householdAccessibilityNeeds: ["stepFree", "seating"],
+    }); return "ok";
+  } catch (e) { return e.code; } })();
+  const household = (await getDoc(doc(quinn.fdb, `users/${quinn.uid}`))).data();
+  ok("rules: household preferences persist together",
+     householdCode === "ok" && household?.householdRadiusMiles === 15 &&
+     household?.householdChildAges?.length === 2 &&
+     household?.householdAccessibilityNeeds?.includes("stepFree"), `got ${householdCode}`);
+  householdCode = await (async () => { try {
+    await updateDoc(doc(quinn.fdb, `users/${quinn.uid}`), { householdAccessibilityNeeds: ["unverifiedClaim"] });
+    return "ok";
+  } catch (e) { return e.code; } })();
+  ok("rules: unknown accessibility claims are rejected", householdCode === "permission-denied", `got ${householdCode}`);
+  householdCode = await (async () => { try {
+    await updateDoc(doc(quinn.fdb, `users/${quinn.uid}`), { householdRadiusMiles: 500 });
+    return "ok";
+  } catch (e) { return e.code; } })();
+  ok("rules: out-of-range household radius is rejected", householdCode === "permission-denied", `got ${householdCode}`);
+  householdCode = await (async () => { try {
+    await updateDoc(doc(quinn.fdb, `users/${quinn.uid}`), { householdChildAges: [18] });
+    return "ok";
+  } catch (e) { return e.code; } })();
+  ok("rules: household child ages are bounded to 0–17", householdCode === "permission-denied", `got ${householdCode}`);
 
   // Blocks refuse friend requests server-side, in both directions.
   await setDoc(doc(blocker.fdb, `users/${blocker.uid}/blocks/${sarah.uid}`), { uid: sarah.uid, createdAt: serverTimestamp() });

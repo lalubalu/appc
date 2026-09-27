@@ -491,7 +491,7 @@ export {
 // honest; rules deny clients all writes to these subcollections. See social.ts.
 export { followUser, rsvpToEvent, inviteToEvent, respondToInvite, friendsGoing, friendsUpcoming, friendsLeaderboard } from "./social.js";
 export { sendFriendRequest, respondToFriendRequest, removeFriend, myFriendInvite,
-         claimUsername, findFriendByUsername, registerAgeBand } from "./friendships.js";
+         claimUsername, findFriendByUsername, sharedPastEventMembers, registerAgeBand } from "./friendships.js";
 
 // ── Organizer accounts (Part 2 §5) ──────────────────────────────────────────
 // Unverified organizers may create, not broadcast; approval is a staff action

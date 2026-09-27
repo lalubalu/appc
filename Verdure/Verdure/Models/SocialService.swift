@@ -23,6 +23,13 @@ struct FriendSummary: Identifiable, Hashable, Codable {
     }
 }
 
+struct SharedPastEventMember: Identifiable, Equatable {
+    let uid: String
+    let displayName: String
+    let eventTitle: String
+    var id: String { uid }
+}
+
 struct FriendRequestSummary: Identifiable, Equatable {
     let peerUid: String
     let peerName: String
@@ -102,6 +109,7 @@ final class SocialService {
     private(set) var friends: [FriendSummary] = []            // accepted, two-sided friendships
     private(set) var friendRequests: [FriendRequestSummary] = []
     private(set) var friendInviteURL: URL?
+    private(set) var sharedPastEventMembers: [SharedPastEventMember] = []
     private(set) var followedOrganizerIDs: Set<String> = []
     private(set) var goingEventIDs: Set<String> = []
     private(set) var friendsGoingByEvent: [String: FriendsGoing] = [:]
@@ -143,7 +151,7 @@ final class SocialService {
     }
 
     func clearLocal() {
-        followingIDs = []; friends = []; friendRequests = []; friendInviteURL = nil
+        followingIDs = []; friends = []; friendRequests = []; friendInviteURL = nil; sharedPastEventMembers = []
         followedOrganizerIDs = []; goingEventIDs = []
         friendsGoingByEvent = [:]; friendsUpcoming = []; invites = []; notifications = []; organizer = nil
         followerCount = 0; followingCount = 0; activityPrivacy = "friends"
@@ -333,6 +341,19 @@ final class SocialService {
             return FriendSummary(uid: id,
                 displayName: Sanitize.text(person["displayName"] as? String, max: 60).ifEmpty("Verdure member"))
         } catch { lastError = error.localizedDescription; return nil }
+    }
+
+    func loadSharedPastEventMembers() async {
+        do {
+            let data = try await Self.call("sharedPastEventMembers", [:])
+            let rows = data["members"] as? [[String: Any]] ?? []
+            sharedPastEventMembers = rows.compactMap { row in
+                guard let uid = row["uid"] as? String else { return nil }
+                return SharedPastEventMember(uid: uid,
+                    displayName: Sanitize.text(row["displayName"] as? String, max: 60).ifEmpty("Verdure member"),
+                    eventTitle: Sanitize.text(row["eventTitle"] as? String, max: 80).ifEmpty("a shared event"))
+            }
+        } catch { lastError = error.localizedDescription }
     }
 
     // MARK: - Going / RSVP

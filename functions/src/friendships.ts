@@ -5,7 +5,7 @@
  */
 import { randomBytes } from "node:crypto";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
-import { FieldValue } from "firebase-admin/firestore";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import {
   db, requireUid, enforceRateLimit, assertNotSuspended,
   safeText, isBlockedEitherWay,
@@ -89,6 +89,53 @@ export const findFriendByUsername = onCall(async (req) => {
   const data = profile.data();
   if (data?.ageBand !== "adult" || data.suspended === true) return { member: null };
   return { member: { uid: target, username: name, displayName: safeText(data.displayName, 60) || "Verdure member" } };
+});
+
+/** Opt-in discovery through a completed event. Never enumerate current or
+ * future attendees, and never show minor/unknown-age profiles to an adult. */
+export const sharedPastEventMembers = onCall(async (req) => {
+  const uid = requireUid(req.auth);
+  await enforceRateLimit(uid, "sharedPastEventMembers");
+  const mine = await user(uid).get();
+  const ids: string[] = Array.isArray(mine.data()?.rsvpEventIDs)
+    ? mine.data()!.rsvpEventIDs.filter((v: unknown): v is string =>
+      typeof v === "string" && v.length < 180 && !v.includes("/")).slice(-10) : [];
+  if (!ids.length) return { members: [] };
+  const alreadyFriends = new Set(await friendIds(uid, 200));
+  const members: Array<{ uid: string; displayName: string; eventTitle: string }> = [];
+  const seen = new Set<string>([uid]);
+  for (const eventId of ids.reverse()) {
+    const eventRef = db.collection("events").doc(eventId);
+    const event = await eventRef.get();
+    const eventData = event.data();
+    // Ingest marks old listings inactive after they disappear from a source;
+    // that does not erase a real shared RSVP. Moderated/removed rows stay out.
+    if (!eventData || eventData.hidden === true || eventData.removed === true) continue;
+    const starts = eventData.date instanceof Timestamp ? eventData.date.toMillis() : Infinity;
+    const ends = eventData.endDate instanceof Timestamp ? eventData.endDate.toMillis() :
+      starts + 24 * 60 * 60 * 1000;
+    if (starts > Date.now() || ends > Date.now() || ends < starts) continue;
+    const ownRsvp = await eventRef.collection("attendees").doc(uid).get();
+    const ownAt = ownRsvp.data()?.createdAt;
+    if (!(ownAt instanceof Timestamp) || ownAt.toMillis() > ends) continue;
+    const attendees = await eventRef.collection("attendees").limit(40).get();
+    for (const attendee of attendees.docs) {
+      const peerAt = attendee.data().createdAt;
+      if (!(peerAt instanceof Timestamp) || peerAt.toMillis() > ends) continue;
+      const peer = attendee.id;
+      if (seen.has(peer) || alreadyFriends.has(peer)) continue;
+      seen.add(peer);
+      if (await isBlockedEitherWay(uid, peer)) continue;
+      const profile = await user(peer).get();
+      if (profile.data()?.ageBand !== "adult" || profile.data()?.suspended === true) continue;
+      members.push({ uid: peer,
+        displayName: safeText(profile.data()?.displayName, 60) || "Verdure member",
+        eventTitle: safeText(eventData.title, 80) || "a shared event" });
+      if (members.length >= 12) break;
+    }
+    if (members.length >= 12) break;
+  }
+  return { members };
 });
 
 /** Record age privately, once. Unknown age remains private by default. */

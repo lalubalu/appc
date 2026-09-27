@@ -992,6 +992,7 @@ struct EventDetailSheet: View {
     @State private var geocodeFinished = false
     @State private var feedbackChoice: String? = nil
     @State private var householdYoungestAge: Int?
+    @State private var householdAccessibilityNeeds: [String] = []
 
     private var householdWarning: String? {
         guard let age = householdYoungestAge, age < 13 else { return nil }
@@ -1002,6 +1003,12 @@ struct EventDetailSheet: View {
             return "This event ends late for a household with a young child."
         }
         return nil
+    }
+
+    private var accessibilityWarning: String? {
+        let unconfirmed = householdAccessibilityNeeds.filter { !event.accessibilityFeatures.contains($0) }
+        guard !unconfirmed.isEmpty else { return nil }
+        return "This listing has not confirmed every accessibility feature you selected. Check with the organizer before you go."
     }
 
     private var isCheckedIn: Bool { gameState.isCheckedIn(event.id) }
@@ -1053,6 +1060,13 @@ struct EventDetailSheet: View {
                             Text("Organized by \(event.organizer)").font(VType.body(14)).foregroundStyle(Palette.inkSoft)
                             if let householdWarning {
                                 Label(householdWarning, systemImage: "exclamationmark.triangle")
+                                    .font(VType.body(12)).foregroundStyle(Palette.terracotta.base)
+                                    .padding(Spacing.sm)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .claySurface(.surface, radius: Radius.sm)
+                            }
+                            if let accessibilityWarning {
+                                Label(accessibilityWarning, systemImage: "accessibility")
                                     .font(VType.body(12)).foregroundStyle(Palette.terracotta.base)
                                     .padding(Spacing.sm)
                                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1118,7 +1132,9 @@ struct EventDetailSheet: View {
                 await eventsService.recordFeedEvent(for: event.id, action: "tap")
                 if let uid = Auth.auth().currentUser?.uid,
                    let snapshot = try? await Firestore.firestore().collection("users").document(uid).getDocument() {
-                    householdYoungestAge = snapshot.data()?["householdYoungestAge"] as? Int
+                    householdYoungestAge = (snapshot.data()?["householdChildAges"] as? [Int])?.min()
+                        ?? snapshot.data()?["householdYoungestAge"] as? Int
+                    householdAccessibilityNeeds = snapshot.data()?["householdAccessibilityNeeds"] as? [String] ?? []
                 }
             }
         }

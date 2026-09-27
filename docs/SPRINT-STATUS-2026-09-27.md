@@ -32,6 +32,11 @@ environment switch has been performed. `CLAUDE.md` deploy status is untouched.
   the new views. E has five tabs, mutual friend requests, invite links/QR,
   adult-only exact username lookup and accepted-only social activity. Friends
   has an honest zero-friend state. The active website has a local invite page.
+  Add Friends also offers adult accounts from a completed event only when both
+  RSVP'd before it ended; upcoming attendees, minors and blocked accounts are
+  excluded server-side. Friend-request creation and acceptance emit the
+  existing invite funnel events. Real share/install conversion remains a
+  device and deployed-link check.
 - F now has an options-first Plan UI backed by a server session. The ranker
   selects real candidate documents; the model can only sequence verified IDs,
   and a deterministic fallback serves the same verified IDs when the model key
@@ -56,9 +61,11 @@ environment switch has been performed. `CLAUDE.md` deploy status is untouched.
   Empty filter results no longer restore unrelated events. Places and Map now
   browse from San Jose when GPS is unavailable, with the same center applied
   to the radius filter; check-ins still require a real location fix.
-  C9 adds an optional youngest-child household setting, a family ranking lift
-  and age/late-ending warnings where event metadata supports them. App and
-  website privacy copy was updated for these fields. Volunteer filters stay
+  C9 now stores optional child ages, accessibility needs, usual transport and
+  typical distance in Household. They affect ranking without filtering;
+  event details warn about age, late endings and unconfirmed accessibility
+  features where metadata supports them. App and both website privacy copies
+  were updated for these fields. Volunteer filters stay
   hidden until 30 upcoming listings with coordinates fall within the chosen
   radius. Four G4 organizations were fingerprinted read-only; findings and
   the prepared Idealist inquiry are in `VOLUNTEER-SUPPLY-2026-09-27.md`.
@@ -81,7 +88,7 @@ environment switch has been performed. `CLAUDE.md` deploy status is untouched.
 ## Verification
 
 - iOS Simulator Debug build and the full unit suite passed **103/103** after
-  the final Plan fallback and accessibility changes. The focused
+  the final Household and Add Friends changes. The focused
   DiscoveryFilters suite passed **12/12**.
 - The previously stalled UI runner completed when parallel testing was
   disabled. The five-tab journey suite passed **10/10** after updating stale
@@ -95,14 +102,14 @@ environment switch has been performed. `CLAUDE.md` deploy status is untouched.
   corrected and its XL capture and audit passed. The XL captures are linked from
   `DESIGN-REFRESH.md`.
 - Functions TypeScript build: passed.
-- Ranking units: **49 passed, 0 failed**; planner units: **13 passed, 0 failed**
+- Ranking units: **52 passed, 0 failed**; planner units: **13 passed, 0 failed**
   after weekend, DST, venue-coordinate and child-suitability cases.
-- Backend emulator E2E was rerun after the planner changes: **328 passed,
+- Backend emulator E2E was rerun after the final household and friend changes: **337 passed,
   0 failed**, including group invitations, shortlist votes, telemetry opt-out
   and access revocation. The Functions emulator used temporary port 5002
   because an existing Python process occupies 5001; the temporary config was
   removed afterward.
-- Red team: **49 attacks blocked, 0 vulnerable** after the feedback addition.
+- Red team: **49 attacks blocked, 0 vulnerable** after the final rules and friend changes.
 - All Functions unit suites passed; active website tests and production build
   passed after the invite and pricing changes.
 - Computer inspected the five tabs plus Places, Map, Community, Collection and
@@ -121,7 +128,7 @@ environment switch has been performed. `CLAUDE.md` deploy status is untouched.
 | C0/P2 | Named human reviewer for all 200 sampled classifications, category accuracy and fixes; review a populated-corpus backfill dry run before writing it live. |
 | P3/C1 | Measure full Firestore reads against a populated index, including user context, client reads and index entries, before enabling the feed at scale. |
 | C3/C10/C11 | Full radius and filter behavior against a dense corpus; named reviewer and 20-profile golden set; live measurement of impression/outcome coverage and cost. |
-| D/E | Populated live-event screens, full VoiceOver reading order, broader dark-mode and physical-device QA; real installed-app invite round trip. Structural audits and targeted XL Simulator captures pass. The website invite page needs deployment before public links work. |
+| D/E | Populated live-event screens, full VoiceOver reading order, broader dark-mode and physical-device QA; real installed-app invite round trip. The shared-past-event friend path is implemented and emulator-tested. Structural audits and targeted XL Simulator captures pass. The website invite page needs deployment before public links work. |
 | F | Configure and exercise the actual model secret; review sequencing, sponsor trust and session spend against a populated index. Emulator tests prove the verified-ID fallback and session mechanics. |
 | G | At least 30 live local volunteer listings before surfacing that subtype; the Volunteer chip is hidden below this threshold. Partner/API access and Idealist application remain; any post-freeze source addition requires a renewed classification audit. |
 | I/H | Profile and group-plan controls need device QA and a real two-phone invite test. Offline packs and AR stay deferred and are no longer advertised. |

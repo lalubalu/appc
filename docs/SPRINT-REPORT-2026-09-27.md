@@ -27,9 +27,9 @@ model quality, real-device behavior, or launch readiness.
 | C0 classification | Ingest-time multi-label enrichment, confidence/quality and eligibility fields, geocode cache, resumable dry-run-first backfill, low-confidence CLI and stratified reviewer sample. | [Audit packet](CLASSIFICATION-AUDIT.md). The 200-item human review and live backfill approval are outstanding. |
 | C discovery and P3 cost | Bounded multi-strategy candidate retrieval, shared short-window area cache, client feed limit, 40-event Everything pages, interest synonyms, For You/Everything, implicit/explicit feedback, exploration, friends-going exception, and read counters. | [Read budget](READ-BUDGET.md), [ranking evaluation](RANKING-EVAL.md). Full Firestore read pricing and ranking quality require a populated corpus. |
 | D design | Editorial serif display type, calmer radii/depth, disciplined accents, five-tab shell and refreshed screen hierarchy. | [Before/after Simulator captures](DESIGN-REFRESH.md). A DEBUG-only populated Plan card and structural accessibility pass now exist; live event imagery, full visual XL/dark/VoiceOver review and device contrast remain open. |
-| E friends | Mutual request/accept/decline/remove, rules and server checks, minor protections, invite links/QR, accepted-only activity, Friends navigation and zero-friend state. | Emulator tests passed; a real two-device invite and public website link need device/deploy access. |
+| E friends | Mutual request/accept/decline/remove, rules and server checks, minor protections, invite links/QR, accepted-only activity, Friends navigation and zero-friend state. Add Friends now includes adult accounts from a shared completed event, only if both RSVP'd before it ended. | Emulator tests passed; a real two-device invite and public website link need device/deploy access. The external share sheet cannot prove an SMS was sent. |
 | F planner | Options-first UI, verified-event-only plan sessions, deterministic fallback, in-place refinements, date picker, quota and model cost accounting, group-plan entry, real image/fallback, RSVP and friends-going card elements. | Automated acceptance tests cover profile difference, repeat avoidance and no invention. The actual model secret and populated-event card review remain open. |
-| G opportunities | Student/household fields and ranking signals; Opportunity labels; organizer metadata capture/display/filter; volunteer/program minimum-count gates; four volunteer organizations fingerprinted. | [Supply findings](VOLUNTEER-SUPPLY-2026-09-27.md). Volunteer sources were not added after the P1 freeze because the C0 audit has not passed; the live threshold is unmet. |
+| G opportunities | Student/household fields and ranking signals; optional child ages, accessibility needs, usual transport and typical distance; Opportunity labels; organizer metadata capture/display/filter; volunteer/program minimum-count gates; four volunteer organizations fingerprinted. | [Supply findings](VOLUNTEER-SUPPLY-2026-09-27.md). Volunteer sources were not added after the P1 freeze because the C0 audit has not passed; the live threshold is unmet. |
 | I / H | Verdure+ named interest profiles, saved filters, distance presets, exclusions and verified entitlement; group-plan invites, shortlist voting and independent RSVPs. | Emulator checks passed. Real purchase and multi-device UX remain open. Offline packs and AR are deferred and removed from sales copy. |
 | Honest copy | App/website privacy, invite and pricing copy aligned with implemented benefits and the $49.99 annual paywall. | Local website build/tests passed. Website changes are not deployed. |
 
@@ -86,12 +86,38 @@ dates through daylight-saving changes. Walking and short-drive options require
 known venue coordinates. “With kids” requires confirmed child/family metadata
 instead of silently treating unknown suitability as a match.
 
+## Final local scope pass
+
+The brief's C9 household preferences were only partially represented by a
+youngest-child setting in the earlier build. Profile now stores up to ten
+children's ages and optional accessibility, transport and typical-distance
+preferences. The ranker uses the youngest age for family suitability, boosts
+events with every requested accessibility feature confirmed by the organizer,
+and applies transport and radius to distance decay without removing events.
+The event detail warns when selected accessibility features are unconfirmed;
+it does not call an unannotated venue inaccessible. Firestore rules bound the
+new fields, and the app, active website and legacy website privacy copy now
+describe them. The old youngest-age field remains readable for migration.
+
+The E3 shared-event friend path was also missing. A new rate-limited callable
+looks only at the requester's own RSVP event IDs. It excludes current and
+future events, requires both RSVP timestamps to precede the event end,
+excludes minors, unknown-age accounts, blocked accounts and existing friends,
+and caps candidate reads/results. An old feed listing may be marked inactive
+after it disappears from the source; that does not erase a verified past RSVP,
+while moderated or removed listings remain excluded. Add Friends shows these candidates below
+link/QR and exact username options. The invitation share action is prominent;
+the existing `invite_sent` and `invite_accepted` client events occur on friend
+request creation and acceptance. A share-sheet opening is not counted as a
+completed SMS send, so installed-app conversion still needs field validation.
+
 ## Verification record
 
-- Latest iOS Simulator build: **passed** after Plan eligibility and XL layout
-  changes. The full iOS unit suite passed **103 tests, 0 failures**; the
-  focused discovery-filter suite passed **12/12**. The latest full unit log is
-  `/tmp/verdure-plan-final-20260927.log` on this machine.
+- Latest iOS Simulator build: **passed** after the final Household and Add
+  Friends changes. The full iOS unit suite was rerun and passed **103 tests,
+  0 failures**; the focused discovery-filter suite previously passed **12/12**.
+  The latest full unit log is `/tmp/verdure-final-ios-units-20260927.log` on
+  this machine.
 - UI journeys: **10 tests, 0 failures**. Structural accessibility audits:
   **13 tests, 0 failures** after fixing the findings above. A ten-test
   Dynamic Type screenshot matrix initially had one failing Adventure Planner
@@ -102,15 +128,17 @@ instead of silently treating unknown suitability as a match.
   [DESIGN-REFRESH.md](DESIGN-REFRESH.md). This is simulator evidence, not a
   physical-device VoiceOver pass.
 - Functions TypeScript build and all Functions unit suites passed. Ranking:
-  **49/49**; planner: **13/13**, including current-weekend, DST, known venue
+  **52/52**; planner: **13/13**, including current-weekend, DST, known venue
   and confirmed child-suitability cases.
-- Backend emulator E2E rerun after the planner changes: **328/328**. It used a
+- Backend emulator E2E rerun after the final household and friend changes: **337/337**. It used a
   temporary port-5002 config because a pre-existing Python service owns 5001.
   The temporary config was removed and the checked-in Firebase config was not
-  changed. Log: `/tmp/verdure-e2e-plan-5002-20260927.log`.
-- Red team: **49 attacks blocked, 0 vulnerable** in the earlier pass. Active
+  changed. Log: `/tmp/verdure-final-e2e-20260927.log`.
+- Red team: **49 attacks blocked, 0 vulnerable** after the final rules and friend changes. Active
   website tests and production build passed after the invite and pricing
-  changes, as recorded in [SPRINT-STATUS-2026-09-27.md](SPRINT-STATUS-2026-09-27.md).
+  changes; the active website production build was repeated after the
+  household privacy update. Logs: `/tmp/verdure-final-redteam-20260927.log`
+  and `/tmp/verdure-active-web-household-build-20260927.log`.
 
 ## Exact remaining gates and inputs
 

@@ -999,6 +999,9 @@ private struct FriendsTabView: View {
         }
         .onAppear { if invite != nil { showAddFriend = true } }
         .onChange(of: invite) { _, newValue in if newValue != nil { showAddFriend = true } }
+        .onChange(of: showAddFriend) { _, shown in
+            if shown { Task { await social.loadSharedPastEventMembers() } }
+        }
     }
 
     private func friendCard(_ title: String, message: String) -> some View {
@@ -1096,7 +1099,7 @@ private struct FriendsTabView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: Spacing.lg) {
                     Text("Invite someone you know").font(VType.display(24, .semibold)).foregroundStyle(Palette.ink)
-                    Text("Share this private link or show its QR code. You choose whether to accept a request.")
+                    Text("Invite someone new to Verdure by Messages or any share option. Share this private link or show its QR code. You choose whether to accept a request.")
                         .font(VType.body(14)).foregroundStyle(Palette.inkSoft)
                     if let url = social.friendInviteURL {
                         if let qr = qrImage(url.absoluteString) {
@@ -1105,7 +1108,7 @@ private struct FriendsTabView: View {
                                 .accessibilityLabel("Private friend invite QR code")
                         }
                         ShareLink(item: url) {
-                            Label("Share invite", systemImage: "square.and.arrow.up")
+                            Label("Invite by Messages or share", systemImage: "square.and.arrow.up")
                                 .font(VType.body(15, .semibold)).foregroundStyle(Palette.spruce.onColor)
                                 .frame(maxWidth: .infinity).padding(14)
                                 .background(Palette.spruce.base, in: RoundedRectangle(cornerRadius: Radius.sm))
@@ -1141,6 +1144,30 @@ private struct FriendsTabView: View {
                             Button("Request") { Task { _ = await social.sendFriendRequest(to: foundFriend.uid); self.foundFriend = nil } }
                                 .font(VType.body(14, .semibold)).foregroundStyle(Palette.spruce.base)
                         }.padding(Spacing.md).claySurface(.surface, radius: Radius.sm, elevation: 0.3)
+                    }
+                    if !social.sharedPastEventMembers.isEmpty {
+                        Text("People from a past event")
+                            .font(VType.display(19, .semibold)).foregroundStyle(Palette.ink)
+                        Text("Only events that have ended appear here. Both of you RSVP'd.")
+                            .font(VType.body(12)).foregroundStyle(Palette.inkSoft)
+                        ForEach(social.sharedPastEventMembers) { member in
+                            HStack {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(member.displayName).font(VType.body(15, .semibold)).foregroundStyle(Palette.ink)
+                                    Text(member.eventTitle).font(VType.body(12)).foregroundStyle(Palette.inkSoft)
+                                }
+                                Spacer()
+                                Button("Request") {
+                                    Task {
+                                        if await social.sendFriendRequest(to: member.uid) {
+                                            await social.loadSharedPastEventMembers()
+                                        }
+                                    }
+                                }
+                                .font(VType.body(14, .semibold)).foregroundStyle(Palette.spruce.base)
+                            }
+                            .padding(Spacing.md).claySurface(.surface, radius: Radius.sm, elevation: 0.3)
+                        }
                     }
                     if auth.ageRegistrationPending {
                         DatePicker("Confirm birth date", selection: $birthDate,

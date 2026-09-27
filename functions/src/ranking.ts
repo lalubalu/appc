@@ -101,6 +101,7 @@ export interface RankableEvent {
   ageSuitability?: string;
   minimumAge?: number;
   endMs?: number;
+  accessibilityFeatures?: string[];
 }
 
 export interface RankingContext {
@@ -108,6 +109,8 @@ export interface RankingContext {
   studentStatus?: boolean;
   school?: string;
   householdYoungestAge?: number;
+  accessibilityNeeds?: string[];
+  transportMode?: "walk" | "transit" | "drive";
   preferredCategories?: string[];
   excludedCategories?: string[];
   radiusMiles?: number;
@@ -157,9 +160,12 @@ export function interestScore(ev: RankableEvent, ctx: RankingContext): number {
   const familyFloor = childAge !== undefined && childAge < 13 &&
     (ev.ageSuitability === "children" || ev.ageSuitability === "all") &&
     (ev.minimumAge === undefined || ev.minimumAge <= childAge) ? 0.85 : 0;
+  const access = ctx.accessibilityNeeds ?? [];
+  const accessibilityFloor = access.length > 0 &&
+    access.every((need) => (ev.accessibilityFeatures ?? []).includes(need)) ? 0.85 : 0;
   const hasStated = ctx.interests.length > 0;
   const attendedTotal = Object.values(ctx.attendedCategories).reduce((a, b) => a + b, 0);
-  if (!hasStated && attendedTotal === 0) return Math.max(0.5, studentFloor, familyFloor);
+  if (!hasStated && attendedTotal === 0) return Math.max(0.5, studentFloor, familyFloor, accessibilityFloor);
 
   let stated = 0;
   if (hasStated) {
@@ -176,9 +182,9 @@ export function interestScore(ev: RankableEvent, ctx: RankingContext): number {
     behavioural = Math.min(1, (ctx.attendedCategories[cat] ?? 0) / Math.max(1, attendedTotal / 2));
   }
 
-  if (!hasStated) return Math.max(behavioural, studentFloor, familyFloor);
-  if (attendedTotal === 0) return Math.max(stated, studentFloor, familyFloor);
-  return Math.max(0.4 * stated + 0.6 * behavioural, studentFloor, familyFloor);
+  if (!hasStated) return Math.max(behavioural, studentFloor, familyFloor, accessibilityFloor);
+  if (attendedTotal === 0) return Math.max(stated, studentFloor, familyFloor, accessibilityFloor);
+  return Math.max(0.4 * stated + 0.6 * behavioural, studentFloor, familyFloor, accessibilityFloor);
 }
 
 /**
@@ -191,7 +197,9 @@ export function distanceScore(ev: RankableEvent, ctx: RankingContext): number {
   if (ev.latitude === undefined || ev.longitude === undefined) return 0.4;   // unknown, mildly penalised
   const miles = haversineMiles(ctx.lat, ctx.lng, ev.latitude, ev.longitude);
   const radiusBase = ctx.radiusMiles ? Math.max(1, ctx.radiusMiles / 5) : 5;
-  const bias = ctx.distancePreset === "close" ? 0.6 : ctx.distancePreset === "drive" ? 1.8 : 1;
+  const bias = ctx.distancePreset === "close" ? 0.6 : ctx.distancePreset === "drive" ? 1.8 :
+    ctx.transportMode === "walk" ? 0.45 : ctx.transportMode === "transit" ? 0.8 :
+    ctx.transportMode === "drive" ? 1.2 : 1;
   return 1 / (1 + miles / (radiusBase * bias));
 }
 
@@ -353,6 +361,8 @@ function rankableFromDoc(d: FirebaseFirestore.DocumentSnapshot): RankableEvent |
     ageSuitability: safeText(x.ageSuitability, 20),
     minimumAge: typeof x.minimumAge === "number" ? x.minimumAge : undefined,
     endMs: x.endDate instanceof Timestamp ? x.endDate.toMillis() : undefined,
+    accessibilityFeatures: Array.isArray(x.accessibilityFeatures)
+      ? x.accessibilityFeatures.filter((v: unknown): v is string => typeof v === "string").slice(0, 10) : [],
   };
 }
 
@@ -453,11 +463,22 @@ export async function loadContext(uid: string, lat?: number, lng?: number, nowMs
   }
 
   const feedback = typeof u.eventFeedback === "object" && u.eventFeedback !== null ? u.eventFeedback : {};
+  const childAges: number[] = Array.isArray(u.householdChildAges)
+    ? u.householdChildAges.filter((v: unknown): v is number => typeof v === "number" &&
+      Number.isInteger(v) && v >= 0 && v <= 17) : [];
   return { interests, studentStatus: u.studentStatus === true, school: safeText(u.school, 100),
-    householdYoungestAge: Number.isInteger(u.householdYoungestAge) && u.householdYoungestAge >= 0 &&
-      u.householdYoungestAge <= 17 ? u.householdYoungestAge : undefined,
+    householdYoungestAge: childAges.length > 0
+      ? Math.min(...childAges)
+      : Number.isInteger(u.householdYoungestAge) && u.householdYoungestAge >= 0 &&
+        u.householdYoungestAge <= 17 ? u.householdYoungestAge : undefined,
+    accessibilityNeeds: Array.isArray(u.householdAccessibilityNeeds)
+      ? u.householdAccessibilityNeeds.filter((v: unknown): v is string =>
+        typeof v === "string" && ["stepFree", "accessibleRestroom", "seating", "quietSpace", "asl", "captions"].includes(v)) : [],
+    transportMode: ["walk", "transit", "drive"].includes(u.householdTransportMode) ? u.householdTransportMode : undefined,
     preferredCategories: active?.categories ?? [], excludedCategories: active?.exclusions ?? [],
-    radiusMiles: active?.radiusMiles, distancePreset: active?.distancePreset,
+    radiusMiles: active?.radiusMiles ?? (Number.isInteger(u.householdRadiusMiles) &&
+      u.householdRadiusMiles >= 1 && u.householdRadiusMiles <= 50 ? u.householdRadiusMiles : undefined),
+    distancePreset: active?.distancePreset,
     attendedCategories, attendedOrganizers, weekendAttendanceRatio: totalAttended ? weekendAttended / totalAttended : undefined,
     savedEventIDs: Array.isArray(u.savedEventIDs) ? u.savedEventIDs.slice(-500) : [], eventFeedback: feedback,
     friendsGoing, recentOrganizers: {}, lat, lng, nowMs };

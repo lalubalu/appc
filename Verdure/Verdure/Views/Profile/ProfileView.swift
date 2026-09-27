@@ -35,7 +35,10 @@ struct ProfileView: View {
     @State private var showSafety = false
     @State private var showLegal = false
     @State private var showHousehold = false
-    @State private var youngestChildAge = -1
+    @State private var householdChildAges: [Int] = []
+    @State private var householdTransportMode = "unspecified"
+    @State private var householdRadiusMiles = 0
+    @State private var householdAccessibilityNeeds: Set<String> = []
     @State private var householdError: String?
     @State private var selectedBadge: Badge?
     @State private var selectedChallenge: Challenge?
@@ -464,12 +467,54 @@ struct ProfileView: View {
         NavigationStack {
             Form {
                 Section {
-                    Picker("Youngest child's age", selection: $youngestChildAge) {
-                        Text("No children in my household").tag(-1)
-                        ForEach(0..<18, id: \.self) { age in Text("\(age)").tag(age) }
+                    if householdChildAges.isEmpty {
+                        Text("No children added").foregroundStyle(Palette.inkSoft)
+                    }
+                    ForEach(householdChildAges.indices, id: \.self) { index in
+                        HStack {
+                            Picker("Child \(index + 1)'s age", selection: $householdChildAges[index]) {
+                                ForEach(0..<18, id: \.self) { age in Text("\(age)").tag(age) }
+                            }
+                            Button(role: .destructive) { householdChildAges.remove(at: index) } label: {
+                                Image(systemName: "minus.circle.fill")
+                            }
+                            .accessibilityLabel("Remove child \(index + 1)")
+                        }
+                    }
+                    if householdChildAges.count < 10 {
+                        Button("Add a child") { householdChildAges.append(0) }
                     }
                 } footer: {
-                    Text("Used privately to prioritize suitable events and show age warnings. Change it any time.")
+                    Text("Optional ages are used privately to prioritize suitable events and show age warnings. Change or clear them any time.")
+                }
+                Section("Getting around") {
+                    Picker("Usual transport", selection: $householdTransportMode) {
+                        Text("No preference").tag("unspecified")
+                        Text("Walk or roll").tag("walk")
+                        Text("Public transit").tag("transit")
+                        Text("Drive").tag("drive")
+                    }
+                    Picker("Typical distance", selection: $householdRadiusMiles) {
+                        Text("No preference").tag(0)
+                        ForEach([2, 5, 10, 15, 25, 50], id: \.self) { miles in
+                            Text("\(miles) miles").tag(miles)
+                        }
+                    }
+                }
+                Section {
+                    ForEach(Self.householdAccessOptions, id: \.code) { option in
+                        Toggle(option.label, isOn: Binding(
+                            get: { householdAccessibilityNeeds.contains(option.code) },
+                            set: { enabled in
+                                if enabled { householdAccessibilityNeeds.insert(option.code) }
+                                else { householdAccessibilityNeeds.remove(option.code) }
+                            }
+                        ))
+                    }
+                } header: {
+                    Text("Accessibility preferences")
+                } footer: {
+                    Text("Optional. Listings only receive a preference boost when the organizer confirms a matching feature. Missing details are shown as unconfirmed, not inaccessible.")
                 }
                 if let householdError { Text(householdError).foregroundStyle(Palette.danger) }
             }
@@ -483,20 +528,51 @@ struct ProfileView: View {
         }
     }
 
+    private static let householdAccessOptions: [(code: String, label: String)] = [
+        ("stepFree", "Step-free access"),
+        ("accessibleRestroom", "Accessible restroom"),
+        ("seating", "Seating"),
+        ("quietSpace", "Quiet space"),
+        ("asl", "ASL interpretation"),
+        ("captions", "Captions"),
+    ]
+
     private func loadHousehold() async {
         guard let uid = Auth.auth().currentUser?.uid else { return }
         do {
             let snapshot = try await Firestore.firestore().collection("users").document(uid).getDocument()
-            youngestChildAge = snapshot.data()?["householdYoungestAge"] as? Int ?? -1
+            if let ages = snapshot.data()?["householdChildAges"] as? [Int] {
+                householdChildAges = ages
+            } else if let youngest = snapshot.data()?["householdYoungestAge"] as? Int {
+                householdChildAges = [youngest]
+            } else {
+                householdChildAges = []
+            }
+            householdTransportMode = snapshot.data()?["householdTransportMode"] as? String ?? "unspecified"
+            householdRadiusMiles = snapshot.data()?["householdRadiusMiles"] as? Int ?? 0
+            householdAccessibilityNeeds = Set(snapshot.data()?["householdAccessibilityNeeds"] as? [String] ?? [])
         } catch { householdError = error.localizedDescription }
     }
 
     private func saveHousehold() async {
         guard let uid = Auth.auth().currentUser?.uid else { return }
         do {
-            let value: Any = youngestChildAge < 0 ? FieldValue.delete() : youngestChildAge
-            try await Firestore.firestore().collection("users").document(uid)
-                .updateData(["householdYoungestAge": value])
+            let youngest: Any = householdChildAges.min().map { $0 as Any } ?? FieldValue.delete()
+            let ages: Any = householdChildAges.isEmpty ? FieldValue.delete() : householdChildAges
+            let transport: Any = householdTransportMode == "unspecified" ? FieldValue.delete() : householdTransportMode
+            let radius: Any = householdRadiusMiles == 0 ? FieldValue.delete() : householdRadiusMiles
+            let needs: Any = householdAccessibilityNeeds.isEmpty ? FieldValue.delete() : Array(householdAccessibilityNeeds).sorted()
+            let ref = Firestore.firestore().collection("users").document(uid)
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                ref.updateData(["householdYoungestAge": youngest,
+                                "householdChildAges": ages,
+                                "householdTransportMode": transport,
+                                "householdRadiusMiles": radius,
+                                "householdAccessibilityNeeds": needs]) { error in
+                    if let error { continuation.resume(throwing: error) }
+                    else { continuation.resume() }
+                }
+            }
             showHousehold = false
             householdError = nil
         } catch { householdError = error.localizedDescription }

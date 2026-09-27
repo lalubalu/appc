@@ -512,9 +512,6 @@ service cloud.firestore {
       let validStudent = !('studentStatus' in data) || data.studentStatus is bool;
       let validSchool = !('school' in data) ||
         (data.school is string && data.school.size() <= 100);
-      let validHousehold = !('householdYoungestAge' in data) ||
-        (data.householdYoungestAge is int && data.householdYoungestAge >= 0 && data.householdYoungestAge <= 17);
-
       let validLastUpdated = !('lastUpdated' in data) ||
         (data.lastUpdated is timestamp);
 
@@ -540,6 +537,7 @@ service cloud.firestore {
       // were added without updating this list.
       let allowedFields = [
         'displayName', 'email', 'interests', 'studentStatus', 'school', 'householdYoungestAge',
+        'householdChildAges', 'householdTransportMode', 'householdRadiusMiles', 'householdAccessibilityNeeds',
         'collectedPlaceIDs', 'checkedInEventIDs', 'redeemedRewardIDs',
         'pointsBalance', 'lifetimePoints',
         'lastUpdated', 'createdAt',
@@ -577,9 +575,26 @@ service cloud.firestore {
       ];
       let noExtraFields = data.keys().hasOnly(allowedFields);
 
-      return validDisplayName && validEmail && validInterests && validStudent && validSchool && validHousehold
+      return validDisplayName && validEmail && validInterests && validStudent && validSchool
+          && validHouseholdFields(data)
           && validLastUpdated && validCreatedAt && validFcmTokens && noExtraFields
           && validSocialFields(data) && validNotificationPrefs(data);
+    }
+
+    function validHouseholdFields(data) {
+      return (!('householdYoungestAge' in data) ||
+          (data.householdYoungestAge is int && data.householdYoungestAge >= 0 && data.householdYoungestAge <= 17))
+        && (!('householdChildAges' in data) ||
+          (data.householdChildAges is list && data.householdChildAges.size() <= 10 &&
+            data.householdChildAges.hasOnly([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17])))
+        && (!('householdTransportMode' in data) ||
+          (data.householdTransportMode is string && data.householdTransportMode in ['walk', 'transit', 'drive']))
+        && (!('householdRadiusMiles' in data) ||
+          (data.householdRadiusMiles is int && data.householdRadiusMiles >= 1 && data.householdRadiusMiles <= 50))
+        && (!('householdAccessibilityNeeds' in data) ||
+          (data.householdAccessibilityNeeds is list && data.householdAccessibilityNeeds.size() <= 6 &&
+            data.householdAccessibilityNeeds.hasOnly(
+              ['stepFree', 'accessibleRestroom', 'seating', 'quietSpace', 'asl', 'captions'])));
     }
 
     // Notification settings are the user's own choice, so the client may write

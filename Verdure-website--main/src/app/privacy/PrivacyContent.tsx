@@ -50,7 +50,7 @@ let PERSONAL_DATA = [
   "Email address",
   "Birth year, used to apply age safeguards in the mobile app",
   "Optional student status and school, used for activity recommendations",
-  "Optional youngest child's age in your household, used for family recommendations and warnings",
+  "Optional children's ages, accessibility preferences, usual transport and typical distance, used for private event recommendations and warnings",
   "Interests, saved and viewed events, recommendation feedback, ranked-feed impressions and actions",
   "Private group plans, invitations and shortlist votes shared with accepted friends in each plan",
   "Phone number",

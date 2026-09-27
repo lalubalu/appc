@@ -38,6 +38,21 @@ ok("a household with a four-year-old ranks a child-suitable event higher",
     { ...baseCtx, householdYoungestAge: 4 }) >
   interestScore(ev("adult", { ageSuitability: "adults", minimumAge: 18 }),
     { ...baseCtx, householdYoungestAge: 4 }));
+ok("confirmed accessibility needs boost a listing without hiding unconfirmed listings",
+  interestScore(ev("confirmed", { accessibilityFeatures: ["stepFree", "seating"] }),
+    { ...baseCtx, accessibilityNeeds: ["stepFree", "seating"] }) >
+  interestScore(ev("unconfirmed", { accessibilityFeatures: ["stepFree"] }),
+    { ...baseCtx, accessibilityNeeds: ["stepFree", "seating"] }));
+{
+  const distant = ev("distant", { latitude: SJ.lat + 0.1 });
+  ok("usual walking makes the same trip rank farther away than driving",
+    distanceScore(distant, { ...baseCtx, transportMode: "walk" }) <
+    distanceScore(distant, { ...baseCtx, transportMode: "drive" }));
+  ok("typical distance changes the distance decay without filtering the event",
+    distanceScore(distant, { ...baseCtx, radiusMiles: 2 }) <
+    distanceScore(distant, { ...baseCtx, radiusMiles: 25 }) &&
+    rankEvents([distant], { ...baseCtx, radiusMiles: 2 }).length === 1);
+}
 
 console.log("\n── rank, never filter (the load-bearing property) ──");
 {

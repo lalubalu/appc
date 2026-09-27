@@ -44,6 +44,12 @@ export default function PrivacyContent() {
         Firebase Authentication; we never see or store your password. You can
         also browse as a guest without creating an account.
       </p>
+      <p>
+        You can optionally save children&apos;s ages in your household,
+        accessibility preferences, usual transport, and typical distance. We
+        use these private account settings for event recommendations and
+        warnings. You can change or clear them in the app at any time.
+      </p>
 
       <h3>Location</h3>
       <p>
