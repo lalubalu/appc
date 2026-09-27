@@ -78,7 +78,7 @@ export function mapNps(e: NpsEvent, area: LaunchArea): NormalizedEvent[] {
       latitude: cleanCoord(e.latitude, 90),
       longitude: cleanCoord(e.longitude, 180),
       category: /volunteer|stewardship|service/i.test(text) ? "Volunteer" : classify(text),
-      isFree: String(e.isfree) !== "false",
+      isFree: String(e.isfree) === "true" ? true : String(e.isfree) === "false" ? false : undefined,
       website: cleanUrl(e.infourl || e.regresurl),
       imageURL: cleanUrl(e.images?.[0]?.url),
       tags: [e.category, ...(e.tags ?? [])].filter((t): t is string => !!t).map((t) => cleanText(t, 40)).slice(0, 8),

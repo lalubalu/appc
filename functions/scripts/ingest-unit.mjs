@@ -22,6 +22,7 @@ import { parseLibCalRss, mapLibCalItem } from "../lib/ingest/sources/libcal.js";
 import { mapLocalist } from "../lib/ingest/sources/localist.js";
 import { fetchLiveWhale, mapLiveWhale } from "../lib/ingest/sources/livewhale.js";
 import { mapLegistar } from "../lib/ingest/sources/legistar.js";
+import { enrichEvent } from "../lib/ingest/classify.js";
 import { mapNps } from "../lib/ingest/sources/nps.js";
 import { mapSerp, parseSerpDate, serpApiBudgetAllows, SERPAPI_MONTHLY_CAP } from "../lib/ingest/sources/serpapi.js";
 import { isSameEvent, isWithinHorizon, auditSuspectedDuplicates } from "../lib/ingest/store.js";
@@ -159,7 +160,8 @@ const lo = JSON.parse(fixture("localist-tri-c-sample.json"));
 const loMapped = lo.events.flatMap((w) => mapLocalist(w.event, SAN_JOSE, "events.tri-c.edu", "Tri-C") ?? []);
 ok("localist: one record per instance with coordinates", loMapped.length >= 3 && loMapped.every((e) => typeof e.latitude === "number"), `n=${loMapped.length}`);
 ok("localist: ISO start with offset parses to UTC", loMapped[0].start.toISOString() === "2026-09-07T14:00:00.000Z", loMapped[0].start.toISOString());
-ok("localist: free flag honoured", loMapped.every((e) => typeof e.isFree === "boolean"));
+ok("localist: explicit free survives while absent cost stays unknown",
+   loMapped.some((e) => e.isFree === true) && loMapped.some((e) => e.isFree === undefined));
 
 console.log("\n── livewhale ──");
 const lwBase = { id: 506162, title: "Parallel Visions", date_iso: "2026-09-27T10:00:00-07:00",
@@ -172,7 +174,7 @@ ok("livewhale: numeric cost and coordinates survive normalization",
 const lwMixed = mapLiveWhale({ ...lwBase, cost: "$20 adults, $10 children, free under 6" }, SAN_JOSE, "events.scu.edu", "SCU");
 ok("livewhale: mixed prices use minimum paid price", lwMixed?.priceMin === 10 && lwMixed.isFree === false);
 ok("livewhale: missing cost stays unknown, not advertised free",
-   mapLiveWhale({ ...lwBase, cost: null }, SAN_JOSE, "events.scu.edu", "SCU")?.isFree === false);
+   mapLiveWhale({ ...lwBase, cost: null }, SAN_JOSE, "events.scu.edu", "SCU")?.isFree === undefined);
 ok("livewhale: private and canceled entries excluded",
    mapLiveWhale({ ...lwBase, tags: ["private"] }, SAN_JOSE, "events.scu.edu", "SCU") === null &&
    mapLiveWhale({ ...lwBase, is_canceled: 1 }, SAN_JOSE, "events.scu.edu", "SCU") === null);
@@ -234,6 +236,9 @@ const SJPL_FEED = { name: "San José Public Library", library: "sjpl",
   host: "sjpl.bibliocommons.com", tags: ["library"] };
 const bcMapped = bcItems.map((i) => mapBiblioItem(i, SAN_JOSE, SJPL_FEED)).filter(Boolean);
 ok("bibliocommons: every item maps to a normalized event", bcMapped.length === bcItems.length);
+ok("bibliocommons: cancellations and library closures are not attendable events",
+   mapBiblioItem({ ...bcItems[0], title: "CANCELED: Storytime" }, SAN_JOSE, SJPL_FEED) === null &&
+   mapBiblioItem({ ...bcItems[0], title: "CLOSED: Holiday", types: ["Library Closures"] }, SAN_JOSE, SJPL_FEED) === null);
 const WIDE_FEED = { ...SJPL_FEED, requireInAreaCoordinates: true };
 ok("bibliocommons: a wide-area feed requires a real in-area venue coordinate",
    mapBiblioItem({ ...bcItems[0], lat: 37.35, lng: -121.94 }, SAN_JOSE, WIDE_FEED) !== null &&
@@ -246,6 +251,14 @@ const bcTwoPages = await fetchBiblioCommons(SAN_JOSE, SJPL_FEED, async (url) => 
 });
 ok("bibliocommons: reads every reported page at the supported size",
    bcCalls.length === 2 && bcCalls.every((u) => u.includes("limit=150")) && bcTwoPages.length === bcItems.length * 2);
+let bcRetryCalls = 0;
+const bcAfterTransientError = await fetchBiblioCommons(SAN_JOSE, SJPL_FEED, async () => {
+  bcRetryCalls++;
+  return bcRetryCalls === 1 ? new Response("error", { status: 500 })
+    : new Response(JSON.stringify({ ...bcPayload, events: { ...bcPayload.events, pagination: { pages: 1 } } }), { status: 200 });
+});
+ok("bibliocommons: retries a transient server error without returning a partial source",
+   bcRetryCalls === 2 && bcAfterTransientError.length === bcItems.length);
 let bcPartialError = false;
 try {
   await fetchBiblioCommons(SAN_JOSE, SJPL_FEED, async (url) =>
@@ -400,6 +413,30 @@ ok("legistar: local meeting clock converts to UTC",
    mappedMeeting?.start.toISOString() === "2026-09-29T01:15:00.000Z");
 ok("legistar: closed sessions are excluded",
    mapLegistar({ ...civicMeeting, EventBodyName: "City Council Closed Session" }, SAN_JOSE, "sanjose", "City of San José") === null);
+const enrichedWorkshop = enrichEvent({
+  source: "bibliocommons", sourceEventId: "one", areaId: SAN_JOSE.id,
+  title: "Teen Coding Workshop", description: "Hands-on Python basics for high school students.",
+  organizer: "San José Public Library", start: new Date("2026-10-01T18:00:00Z"),
+  time: "11:00 AM", locationName: "Main Library", category: "Social", isFree: true,
+  tags: ["Technology", "Teens"],
+});
+ok("classifier: structured library metadata yields workshop, youth and opportunity",
+   enrichedWorkshop.category === "Workshop" && ["Workshop", "Youth", "Opportunity", "Free"].every((label) => enrichedWorkshop.categories.includes(label)));
+ok("classifier: uncertain venue stays ungeocoded and lowers quality",
+   enrichedWorkshop.latitude === undefined && enrichedWorkshop.qualityScore < 0.8 && enrichedWorkshop.endInferred);
+const enrichedHike = enrichEvent({ ...enrichedWorkshop, source: "midpen", title: "Guided Nature Walk",
+  description: "Enjoy a trail hike through the preserve.", category: "Sports", tags: ["outdoors"] });
+ok("classifier: hiking remains Sports with an Outdoors label",
+   enrichedHike.category === "Sports" && enrichedHike.categories.includes("Outdoors"));
+ok("classifier: volunteer trail work stays Volunteer",
+   enrichEvent({ ...enrichedHike, title: "Volunteer Trail Maintenance and Hike",
+     category: "Volunteer" }).category === "Volunteer");
+ok("classifier: library console gaming is not a sport",
+   enrichEvent({ ...enrichedWorkshop, title: "Game On!", description: "Play Nintendo Switch games.",
+     tags: ["Games & Family Entertainment", "Teens"], category: "Workshop" }).category !== "Sports");
+ok("classifier: volunteer-led sewing class stays Workshop",
+   enrichEvent({ ...enrichedWorkshop, title: "Sewing with FabMo", description: "A class led by a volunteer.",
+     tags: ["library", "Adults"], category: "Volunteer" }).category === "Workshop");
 
 console.log("\n── payload coercion (runIngest payload mode) ──");
 const good = coercePayloadRecord({ source: "libcal", sourceEventId: "x1", title: "<b>Book Club</b>", start: "2026-10-01T18:00:00Z", locationName: "Main Library", tags: ["library", 42] }, SAN_JOSE);

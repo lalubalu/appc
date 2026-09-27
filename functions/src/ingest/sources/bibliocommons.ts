@@ -160,6 +160,11 @@ export function trustedCoordinateIds(locations: Record<string, any>): Set<string
 export function mapBiblioItem(i: BiblioItem, area: LaunchArea, feed: BiblioFeed): NormalizedEvent | null {
   const title = cleanText(i.title, 120);
   if (!title) return null;
+  // Closures and canceled sessions are calendar administration, not things a
+  // person can attend. Keep this at the adapter boundary so backfill and feed
+  // ranking never see them as candidate events.
+  if (/^(?:cancell?ed|closed|closure)\s*:/i.test(title) ||
+      i.types.some((type) => /\blibrary closures?\b/i.test(type))) return null;
 
   const start = new Date(i.startISO);
   if (Number.isNaN(start.getTime())) return null;
@@ -201,7 +206,7 @@ export function mapBiblioItem(i: BiblioItem, area: LaunchArea, feed: BiblioFeed)
 // configured systems (Palo Alto returns HTTP 500 at 200); 50 pages covers
 // SJPL's current 6,020 rows.
 const MAX_PAGES = 50;
-const PAGE_SIZE = 150;
+const DEFAULT_PAGE_SIZE = 150;
 
 export async function fetchBiblioCommons(
   area: LaunchArea,
@@ -209,17 +214,27 @@ export async function fetchBiblioCommons(
   fetchImpl: typeof fetch = fetch,
 ): Promise<NormalizedEvent[]> {
   const host = feed.host ?? `${feed.library}.bibliocommons.com`;
+  const pageSize = feed.pageSize ?? DEFAULT_PAGE_SIZE;
+  if (!Number.isInteger(pageSize) || pageSize < 50 || pageSize > 150) {
+    throw new Error(`${feed.name} has an invalid BiblioCommons page size`);
+  }
   const out: NormalizedEvent[] = [];
   let expectedPages = 1;
 
   for (let page = 1; page <= expectedPages; page++) {
     if (page > MAX_PAGES) throw new Error(`${feed.name} exceeds ${MAX_PAGES} BiblioCommons pages`);
     const url = `https://gateway.bibliocommons.com/v2/libraries/${encodeURIComponent(feed.library)}` +
-                `/events?limit=${PAGE_SIZE}&page=${page}`;
-    const res = await fetchImpl(url, {
-      headers: { accept: "application/json", "user-agent": "Verdure/1.0 (events ingest)" },
-      signal: AbortSignal.timeout(20_000),
-    });
+                `/events?limit=${pageSize}&page=${page}`;
+    let res: Response | undefined;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      res = await fetchImpl(url, {
+        headers: { accept: "application/json", "user-agent": "Verdure/1.0 (events ingest)" },
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (res.ok || (res.status < 500 && res.status !== 429)) break;
+      if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 350 * (attempt + 1)));
+    }
+    if (!res) throw new Error(`${feed.name} page ${page} returned no response`);
     if (!res.ok) throw new Error(`${feed.name} page ${page} returned ${res.status}`);
     const payload = await res.json() as GatewayPayload;
     if (!Array.isArray(payload.events?.items) || !payload.entities?.events ||

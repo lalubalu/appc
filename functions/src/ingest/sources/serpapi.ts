@@ -124,7 +124,7 @@ export function mapSerp(e: SerpEvent, area: LaunchArea): NormalizedEvent | null 
     time: cleanText(e.date?.when, 60) || formatLocalTime(start, area.timeZone),
     locationName: venue || "Location TBA",
     category: classify(`${title} ${e.description ?? ""}`),
-    isFree: !sellsTickets,
+    isFree: sellsTickets ? false : /\bfree\b/i.test(`${title} ${e.description ?? ""}`) ? true : undefined,
     website: link,
     imageURL: cleanUrl(e.thumbnail),
     tags: ["google-events"],

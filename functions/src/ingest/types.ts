@@ -48,8 +48,8 @@ export interface NormalizedEvent {
   latitude?: number;
   longitude?: number;
   category: EventCategory;
-  /** True when the feed or mapper has positive evidence the event is free. */
-  isFree: boolean;
+  /** Tri-state: true/free, false/paid, absent/unknown. */
+  isFree?: boolean;
   /** Lowest listed price in USD, when known. */
   priceMin?: number;
   website?: string;

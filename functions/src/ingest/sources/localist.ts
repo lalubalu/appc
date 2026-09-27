@@ -60,8 +60,9 @@ export function mapLocalist(e: LocalistEvent, area: LaunchArea, host: string, na
   const types = Object.values(e.filters ?? {}).flat().map((f) => f.name);
   const text = `${title} ${types.join(" ")} ${desc.slice(0, 300)}`;
   const cost = cleanText(e.ticket_cost, 40);
-  const isFree = e.free === true || cost === "" || /^free$/i.test(cost);
   const priceMatch = /\$\s?(\d+(\.\d{2})?)/.exec(cost);
+  const isFree = e.free === true || /^free$/i.test(cost) ? true
+    : priceMatch ? false : undefined;
 
   const out: NormalizedEvent[] = [];
   for (const { event_instance: inst } of instances) {

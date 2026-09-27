@@ -50,6 +50,16 @@ events written to Firestore; the live collection was empty at the coverage
 baseline. The store and report's former 8,000-document query caps have been
 replaced with cursor pagination so the larger corpus can be indexed fully.
 
+On the September 27 stratified-audit pull, Santa Clara County Library's gateway
+returned HTTP 500 at page 13 with 150 rows/page. The equivalent later range
+returned 200 at 100 rows/page, so `sccl` now uses a source-specific page size
+of 100. The adapter still throws on a failed page; it never converts that
+failure into a short calendar.
+The next pull saw a transient HTTP 500 on page 19 at 100 rows/page; a direct
+retry returned 200. The adapter now retries 429/5xx twice with a short backoff
+and still fails the entire source after repeated errors. The subsequent full
+pull completed with 1,914 available SCCL records.
+
 Two neighboring BiblioCommons systems also have real South Bay venues:
 **Alameda County Library** (Fremont/Newark/Union City area) and **San Mateo
 County Libraries** (eastern branches). Read-only full-feed probes returned

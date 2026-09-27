@@ -88,7 +88,7 @@ export function mapTicketmaster(e: TmEvent, area: LaunchArea): NormalizedEvent |
 
   const prices = (e.priceRanges ?? []).map((p) => p.min).filter((n): n is number => typeof n === "number");
   const priceMin = prices.length ? Math.min(...prices) : undefined;
-  const isFree = priceMin === 0;
+  const isFree = priceMin === undefined ? undefined : priceMin === 0;
   const image = e.images?.slice().sort((a, b) => (b.width ?? 0) - (a.width ?? 0))[0]?.url;
   const locationParts = [venue?.name, venue?.city?.name].filter(Boolean).join(", ");
 

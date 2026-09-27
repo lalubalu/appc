@@ -94,6 +94,8 @@ export interface BiblioFeed {
   host?: string;
   /** For systems extending beyond the launch radius, only keep geolocated in-area events. */
   requireInAreaCoordinates?: boolean;
+  /** Lower when a system's gateway fails on large late pages. */
+  pageSize?: number;
   tags?: string[];
 }
 
@@ -163,6 +165,8 @@ export const SAN_JOSE: LaunchArea = {
       name: "Santa Clara County Library District",
       library: "sccl",
       host: "sccl.bibliocommons.com",
+      // Page 13 at 150 returns HTTP 500; pages of 100 work through the same range.
+      pageSize: 100,
       tags: ["library"],
     },
     {

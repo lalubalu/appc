@@ -29,6 +29,7 @@ import { isInsideArea } from "./areas.js";
 import type { NormalizedEvent, SourceId } from "./types.js";
 import { CATEGORY_ICON, CATEGORY_POINTS } from "./types.js";
 import { eventDocId, sourceKey, startBucket, titleKey, venueKey } from "./normalize.js";
+import { enrichEvent, type EnrichedEvent } from "./classify.js";
 import { distanceMeters } from "../common.js";
 
 export const STALE_CYCLES = 3;
@@ -157,7 +158,18 @@ function richness(d: { description?: string; latitude?: unknown; imageURL?: unkn
     + (d.imageURL ? 1 : 0) + (d.website ? 1 : 0);
 }
 
-function fullDocument(rec: NormalizedEvent, now: Timestamp): FirebaseFirestore.DocumentData {
+function enrichmentFields(rec: EnrichedEvent): FirebaseFirestore.DocumentData {
+  return {
+    categories: rec.categories,
+    classificationConfidence: rec.classificationConfidence,
+    qualityScore: rec.qualityScore,
+    inferredCost: rec.inferredCost,
+    ageSuitability: rec.ageSuitability,
+    endInferred: rec.endInferred,
+  };
+}
+
+function fullDocument(rec: EnrichedEvent, now: Timestamp): FirebaseFirestore.DocumentData {
   const doc: FirebaseFirestore.DocumentData = {
     title: rec.title,
     description: rec.description,
@@ -185,8 +197,9 @@ function fullDocument(rec: NormalizedEvent, now: Timestamp): FirebaseFirestore.D
     titleKey: titleKey(rec.title),
     venueKey: venueKey(rec.locationName),
     startBucket: startBucket(rec.start),
-    isFree: rec.isFree,
+    isFree: rec.isFree ?? null,
     tags: rec.tags.slice(0, 8),
+    ...enrichmentFields(rec),
     ingestedAt: now,
     lastSeenAt: now,
     missedCycles: 0,
@@ -201,13 +214,14 @@ function fullDocument(rec: NormalizedEvent, now: Timestamp): FirebaseFirestore.D
 }
 
 /** Fields refreshed on every sighting from the PRIMARY source. */
-function refreshFromPrimary(rec: NormalizedEvent): FirebaseFirestore.DocumentData {
+function refreshFromPrimary(rec: EnrichedEvent): FirebaseFirestore.DocumentData {
   const upd: FirebaseFirestore.DocumentData = {
     title: rec.title, description: rec.description, organizer: rec.organizer,
     date: Timestamp.fromDate(rec.start), time: rec.time, locationName: rec.locationName,
     category: rec.category, imagePlaceholder: CATEGORY_ICON[rec.category], pointValue: CATEGORY_POINTS[rec.category],
     titleKey: titleKey(rec.title), venueKey: venueKey(rec.locationName), startBucket: startBucket(rec.start),
-    isFree: rec.isFree, tags: rec.tags.slice(0, 8),
+    isFree: rec.isFree ?? null, tags: rec.tags.slice(0, 8),
+    ...enrichmentFields(rec),
   };
   if (rec.end) upd.endDate = Timestamp.fromDate(rec.end);
   if (rec.latitude !== undefined) upd.latitude = rec.latitude;
@@ -219,8 +233,14 @@ function refreshFromPrimary(rec: NormalizedEvent): FirebaseFirestore.DocumentDat
 }
 
 /** Fill blanks from a secondary source without overwriting the primary's facts. */
-function fillFromSecondary(existing: FirebaseFirestore.DocumentData, rec: NormalizedEvent): FirebaseFirestore.DocumentData {
+function fillFromSecondary(existing: FirebaseFirestore.DocumentData, rec: EnrichedEvent): FirebaseFirestore.DocumentData {
   const upd: FirebaseFirestore.DocumentData = {};
+  upd.categories = [...new Set([...(Array.isArray(existing.categories) ? existing.categories : [existing.category]), ...rec.categories])];
+  upd.classificationConfidence = Math.max(Number(existing.classificationConfidence) || 0, rec.classificationConfidence);
+  upd.qualityScore = Math.max(Number(existing.qualityScore) || 0, rec.qualityScore);
+  if (!existing.inferredCost || existing.inferredCost === "unknown") upd.inferredCost = rec.inferredCost;
+  if (!existing.ageSuitability || existing.ageSuitability === "unknown") upd.ageSuitability = rec.ageSuitability;
+  if (!existing.endDate && rec.end) { upd.endDate = Timestamp.fromDate(rec.end); upd.endInferred = rec.endInferred; }
   if ((existing.latitude === undefined || existing.latitude === null) && rec.latitude !== undefined) {
     upd.latitude = rec.latitude; upd.longitude = rec.longitude;
   }
@@ -255,7 +275,29 @@ export async function upsertBatch(
     if (pending >= BATCH) await flush();
   };
 
+  // Reuse coordinates already supplied by trusted feeds for the same named
+  // venue and organizer. Never guess a generic "Main Library" across systems.
+  const venueCoordinates = new Map<string, { lat: number; lng: number }>();
+  const venueIdentity = (organizer: string, location: string) =>
+    `${organizer.toLowerCase().trim()}|${venueKey(location)}`;
+  for (const item of index.all) {
+    const d = item.data;
+    if (d.latitude != null && d.longitude != null && venueKey(String(d.locationName || ""))) {
+      venueCoordinates.set(venueIdentity(String(d.organizer || ""), String(d.locationName || "")),
+        { lat: Number(d.latitude), lng: Number(d.longitude) });
+    }
+  }
   for (const rec of records) {
+    if (rec.latitude != null && rec.longitude != null && venueKey(rec.locationName)) {
+      venueCoordinates.set(venueIdentity(rec.organizer, rec.locationName), { lat: rec.latitude, lng: rec.longitude });
+    }
+  }
+
+  for (const raw of records) {
+    const cached = venueCoordinates.get(venueIdentity(raw.organizer, raw.locationName));
+    const withCoords = raw.latitude == null && raw.longitude == null && cached
+      ? { ...raw, latitude: cached.lat, longitude: cached.lng } : raw;
+    const rec = enrichEvent(withCoords);
     if (!rec.title || !isWithinHorizon(rec, runStart.getTime())) { stats.skipped++; continue; }
     if (rec.latitude !== undefined && rec.longitude !== undefined && !isInsideArea(area, rec.latitude, rec.longitude)) {
       stats.skipped++; continue;   // geographic scoping: never ingest outside the launch area

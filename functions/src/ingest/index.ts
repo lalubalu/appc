@@ -216,7 +216,7 @@ export function coercePayloadRecord(raw: unknown, area: LaunchArea): NormalizedE
     latitude: cleanCoord(r.latitude, 90),
     longitude: cleanCoord(r.longitude, 180),
     category,
-    isFree: r.isFree !== false,
+    isFree: typeof r.isFree === "boolean" ? r.isFree : undefined,
     priceMin: typeof r.priceMin === "number" && Number.isFinite(r.priceMin) ? r.priceMin : undefined,
     website: cleanUrl(r.website),
     imageURL: cleanUrl(r.imageURL),
