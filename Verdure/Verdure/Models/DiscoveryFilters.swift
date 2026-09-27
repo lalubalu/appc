@@ -196,6 +196,7 @@ final class DiscoveryFilters {
         e.organizer.localizedCaseInsensitiveContains(q) ||
         e.locationName.localizedCaseInsensitiveContains(q) ||
         e.category.rawValue.localizedCaseInsensitiveContains(q) ||
+        e.category.displayName.localizedCaseInsensitiveContains(q) ||
         e.tags.contains { $0.localizedCaseInsensitiveContains(q) } ||
         (e.description?.localizedCaseInsensitiveContains(q) ?? false)
     }

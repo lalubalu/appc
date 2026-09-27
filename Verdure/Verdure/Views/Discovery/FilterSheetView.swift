@@ -74,9 +74,11 @@ struct FilterSheetView: View {
 
     private var eventCategorySection: some View {
         return section("Category") {
-            FlowChips(items: EventCategory.allCases.map { ($0.rawValue, $0.icon) },
-                      isSelected: { filters.state.eventCategories.contains(EventCategory(rawValue: $0)!) }) { raw in
-                let cat = EventCategory(rawValue: raw)!
+            FlowChips(items: EventCategory.allCases.map { ($0.displayName, $0.icon) },
+                      isSelected: { label in
+                          EventCategory.allCases.contains { $0.displayName == label && filters.state.eventCategories.contains($0) }
+                      }) { label in
+                guard let cat = EventCategory.allCases.first(where: { $0.displayName == label }) else { return }
                 if filters.state.eventCategories.contains(cat) { filters.state.eventCategories.remove(cat) }
                 else { filters.state.eventCategories.insert(cat) }
             }

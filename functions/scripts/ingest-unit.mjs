@@ -16,13 +16,15 @@ import { parseIcs, unfold, unescapeText, expandRRule, parseIcsDate } from "../li
 import { titleKey, venueKey, classify, zonedToUtc, cleanText, cleanUrl, eventDocId } from "../lib/ingest/normalize.js";
 import { mapTicketmaster } from "../lib/ingest/sources/ticketmaster.js";
 import { mapIcsEvent } from "../lib/ingest/sources/icsfeed.js";
-import { parseBiblioPayload, mapBiblioItem, trustedCoordinateIds } from "../lib/ingest/sources/bibliocommons.js";
+import { parseBiblioPayload, mapBiblioItem, trustedCoordinateIds, fetchBiblioCommons } from "../lib/ingest/sources/bibliocommons.js";
 import { parseMidpenListing, mapMidpenItem, parseMidpenDate, MIDPEN_PRESERVES } from "../lib/ingest/sources/midpen.js";
 import { parseLibCalRss, mapLibCalItem } from "../lib/ingest/sources/libcal.js";
 import { mapLocalist } from "../lib/ingest/sources/localist.js";
+import { fetchLiveWhale, mapLiveWhale } from "../lib/ingest/sources/livewhale.js";
+import { mapLegistar } from "../lib/ingest/sources/legistar.js";
 import { mapNps } from "../lib/ingest/sources/nps.js";
 import { mapSerp, parseSerpDate, serpApiBudgetAllows, SERPAPI_MONTHLY_CAP } from "../lib/ingest/sources/serpapi.js";
-import { isSameEvent, isWithinHorizon } from "../lib/ingest/store.js";
+import { isSameEvent, isWithinHorizon, auditSuspectedDuplicates } from "../lib/ingest/store.js";
 import { SAN_JOSE, isInsideArea } from "../lib/ingest/areas.js";
 import { coercePayloadRecord } from "../lib/ingest/index.js";
 
@@ -40,8 +42,11 @@ ok("titleKey ignores case, punctuation and stopwords",
    titleKey("The San Jose Orchestra: Beethoven at Blossom!") === titleKey("san jose orchestra — beethoven AT blossom"),
    `${titleKey("The San Jose Orchestra: Beethoven at Blossom!")} vs ${titleKey("san jose orchestra — beethoven AT blossom")}`);
 ok("titleKey keeps distinct titles distinct", titleKey("Storytime: Dinosaurs") !== titleKey("Storytime: Trucks"));
+ok("titleKey removes a presenter prefix", titleKey("City of San Jose presents: Creek Walk") === titleKey("Creek Walk"));
 ok("venueKey uses the first comma segment, alphanumerics only",
    venueKey("Main Library - Downtown, 325 Superior Ave") === "mainlibrarydowntown");
+ok("venueKey ignores a room suffix and generic locations",
+   venueKey("Main Library · Meeting Room") === "mainlibrary" && venueKey("Location TBA") === "");
 ok("classify: volunteer beats social", classify("Park cleanup volunteer day") === "Cleanup");
 ok("classify: library storytime is a Workshop", classify("Toddler Storytime") === "Workshop");
 ok("classify: farmers market", classify("Cuyahoga Valley Farmers Market") === "Market");
@@ -156,6 +161,40 @@ ok("localist: one record per instance with coordinates", loMapped.length >= 3 &&
 ok("localist: ISO start with offset parses to UTC", loMapped[0].start.toISOString() === "2026-09-07T14:00:00.000Z", loMapped[0].start.toISOString());
 ok("localist: free flag honoured", loMapped.every((e) => typeof e.isFree === "boolean"));
 
+console.log("\n── livewhale ──");
+const lwBase = { id: 506162, title: "Parallel Visions", date_iso: "2026-09-27T10:00:00-07:00",
+  location: "SCU Gallery", location_latitude: 37.35, location_longitude: -121.94,
+  event_types: ["Exhibits"], tags: ["Arts at SCU"], url: "https://events.scu.edu/event/506162",
+  group_title: "Arts &amp; Sciences" };
+const lw = mapLiveWhale({ ...lwBase, cost: 135 }, SAN_JOSE, "events.scu.edu", "SCU");
+ok("livewhale: numeric cost and coordinates survive normalization",
+   lw?.priceMin === 135 && lw.isFree === false && lw.latitude === 37.35 && lw.organizer === "Arts & Sciences");
+const lwMixed = mapLiveWhale({ ...lwBase, cost: "$20 adults, $10 children, free under 6" }, SAN_JOSE, "events.scu.edu", "SCU");
+ok("livewhale: mixed prices use minimum paid price", lwMixed?.priceMin === 10 && lwMixed.isFree === false);
+ok("livewhale: missing cost stays unknown, not advertised free",
+   mapLiveWhale({ ...lwBase, cost: null }, SAN_JOSE, "events.scu.edu", "SCU")?.isFree === false);
+ok("livewhale: private and canceled entries excluded",
+   mapLiveWhale({ ...lwBase, tags: ["private"] }, SAN_JOSE, "events.scu.edu", "SCU") === null &&
+   mapLiveWhale({ ...lwBase, is_canceled: 1 }, SAN_JOSE, "events.scu.edu", "SCU") === null);
+const lwCalls = [];
+const lwFetch = async (url) => {
+  lwCalls.push(url);
+  const page = Number(new URL(url).searchParams.get("page"));
+  return new Response(JSON.stringify({ meta: { type: "events", page, total_pages: 2 },
+    data: [{ ...lwBase, id: page, title: `Gallery ${page}` }] }), { status: 200 });
+};
+const lwPages = await fetchLiveWhale(SAN_JOSE, "events.scu.edu", "SCU", lwFetch, new Date("2026-09-26T12:00:00Z"));
+ok("livewhale: pages through v2 feed without truncating at five",
+   lwPages.length === 2 && lwCalls.length === 2 && lwCalls.every((u) => u.includes("/paginate/100/")));
+const lwAllDay = await fetchLiveWhale(SAN_JOSE, "events.scu.edu", "SCU", async () =>
+  new Response(JSON.stringify({ meta: { type: "events", page: 1, total_pages: 1 },
+    data: [{ ...lwBase, is_all_day: 1 }] }), { status: 200 }), new Date("2026-09-27T18:00:00Z"));
+ok("livewhale: today's all-day event remains visible after local midnight", lwAllDay.length === 1);
+let lwShapeError = false;
+try { await fetchLiveWhale(SAN_JOSE, "events.scu.edu", "SCU", async () => new Response("{\"events\":[]}"), new Date("2026-09-26T12:00:00Z")); }
+catch { lwShapeError = true; }
+ok("livewhale: changed response shape fails loudly", lwShapeError);
+
 const nps = JSON.parse(fixture("nps-sample.json"));
 const npsMapped = nps.data.flatMap((e) => mapNps(e, SAN_JOSE));
 ok("nps: recurring dates expand (only in-horizon occurrences kept)", npsMapped.length >= 0 && npsMapped.every((e) => e.source === "nps"));
@@ -195,6 +234,25 @@ const SJPL_FEED = { name: "San José Public Library", library: "sjpl",
   host: "sjpl.bibliocommons.com", tags: ["library"] };
 const bcMapped = bcItems.map((i) => mapBiblioItem(i, SAN_JOSE, SJPL_FEED)).filter(Boolean);
 ok("bibliocommons: every item maps to a normalized event", bcMapped.length === bcItems.length);
+const WIDE_FEED = { ...SJPL_FEED, requireInAreaCoordinates: true };
+ok("bibliocommons: a wide-area feed requires a real in-area venue coordinate",
+   mapBiblioItem({ ...bcItems[0], lat: 37.35, lng: -121.94 }, SAN_JOSE, WIDE_FEED) !== null &&
+   mapBiblioItem({ ...bcItems[0], lat: undefined, lng: undefined }, SAN_JOSE, WIDE_FEED) === null &&
+   mapBiblioItem({ ...bcItems[0], lat: 37.77, lng: -122.42 }, SAN_JOSE, WIDE_FEED) === null);
+const bcCalls = [];
+const bcTwoPages = await fetchBiblioCommons(SAN_JOSE, SJPL_FEED, async (url) => {
+  bcCalls.push(url);
+  return new Response(JSON.stringify({ ...bcPayload, events: { ...bcPayload.events, pagination: { pages: 2 } } }), { status: 200 });
+});
+ok("bibliocommons: reads every reported page at the supported size",
+   bcCalls.length === 2 && bcCalls.every((u) => u.includes("limit=150")) && bcTwoPages.length === bcItems.length * 2);
+let bcPartialError = false;
+try {
+  await fetchBiblioCommons(SAN_JOSE, SJPL_FEED, async (url) =>
+    new Response(JSON.stringify({ ...bcPayload, events: { ...bcPayload.events, pagination: { pages: 2 } } }),
+      { status: new URL(url).searchParams.get("page") === "2" ? 503 : 200 }));
+} catch { bcPartialError = true; }
+ok("bibliocommons: a failed later page fails the entire source", bcPartialError);
 
 const king = bcMapped.find((e) => e.locationName.startsWith("King Library"));
 ok("bibliocommons: branch coordinates come from the feed, no venue table needed",
@@ -319,11 +377,29 @@ ok("isSameEvent: same title, 30 min apart, same venue key → match", isSameEven
 ok("isSameEvent: 3 hours apart → no match", !isSameEvent(existing, { ...same, start: new Date("2026-09-21T02:30:00Z") }));
 ok("isSameEvent: different venue with far coordinates → no match",
    !isSameEvent(existing, { ...same, locationName: "Plaza de Cesar Chavez", latitude: 37.3325, longitude: -121.8890 }));
+ok("isSameEvent: identical venue names far apart do not merge",
+   !isSameEvent(existing, { ...same, locationName: "AsiaTown", latitude: 37.3325, longitude: -121.8890 }));
 ok("isSameEvent: no venue info on the new record → title+time match",
    isSameEvent(existing, { ...same, locationName: "", latitude: undefined, longitude: undefined }));
+const duplicateAudit = auditSuspectedDuplicates({ all: [
+  { id: "a", data: { active: true, date: ts("2026-09-20T23:00:00Z"), title: "Museum presents: Creek Walk", locationName: "River Park" } },
+  { id: "b", data: { active: true, date: ts("2026-09-20T23:30:00Z"), title: "Creek Walk", locationName: "River Park" } },
+  { id: "c", data: { active: true, date: ts("2026-09-20T23:30:00Z"), title: "Creek Walk", locationName: "Different Park" } },
+] });
+ok("dedupe audit flags one surviving cross-source lookalike", duplicateAudit.suspected === 1 && duplicateAudit.active === 3);
 ok("horizon: 200 days out is skipped", !isWithinHorizon({ start: new Date(Date.now() + 200 * 86_400_000) }));
 ok("scoping: Public Square is inside San Jose, Columbus is not",
    isInsideArea(SAN_JOSE, 37.3382, -121.8863) && !isInsideArea(SAN_JOSE, 39.9612, -82.9988));
+
+const civicMeeting = { EventId: 8246, EventBodyName: "Bicycle Pedestrian Advisory Committee",
+  EventDate: "2026-09-28T00:00:00", EventTime: "6:15 PM",
+  EventLocation: "City Hall Wing, Rooms W118-W120",
+  EventInSiteURL: "https://sanjose.legistar.com/MeetingDetail.aspx?LEGID=8246" };
+const mappedMeeting = mapLegistar(civicMeeting, SAN_JOSE, "sanjose", "City of San José");
+ok("legistar: local meeting clock converts to UTC",
+   mappedMeeting?.start.toISOString() === "2026-09-29T01:15:00.000Z");
+ok("legistar: closed sessions are excluded",
+   mapLegistar({ ...civicMeeting, EventBodyName: "City Council Closed Session" }, SAN_JOSE, "sanjose", "City of San José") === null);
 
 console.log("\n── payload coercion (runIngest payload mode) ──");
 const good = coercePayloadRecord({ source: "libcal", sourceEventId: "x1", title: "<b>Book Club</b>", start: "2026-10-01T18:00:00Z", locationName: "Main Library", tags: ["library", 42] }, SAN_JOSE);

@@ -48,8 +48,9 @@
  *   San José State University    Localist          100+/30d     ✅ with coordinates
  *   Stanford University          Localist          100+/30d     ✅ (~17 mi, inside radius)
  *   Ticketmaster Discovery       API                  —         ✅ SAP Center et al.
- *   Santa Clara University       Localist         403 blocked   ❌ recruit directly
- *   City of San José             no ICS (403)        —          ❌ recruit directly
+ *   Santa Clara University       LiveWhale        JSON v2 200   ✅ sources/livewhale.ts
+ *   City of San José             Legistar API       14 public meetings (2026-09-26 read)
+ *   Mountain View Library        LibCal RSS         64 events (2026-09-26 read)
  *
  * NEITHER library system runs LibCal, and neither publishes iCal — SJPL's
  * /events/calendar.ics is a hard 404. The existing .ics and LibCal adapters
@@ -91,6 +92,8 @@ export interface BiblioFeed {
   library: string;
   /** Public site host, used to build event links. Defaults to `<library>.bibliocommons.com`. */
   host?: string;
+  /** For systems extending beyond the launch radius, only keep geolocated in-area events. */
+  requireInAreaCoordinates?: boolean;
   tags?: string[];
 }
 
@@ -119,6 +122,10 @@ export interface LaunchArea {
   midpen: MidpenFeed[];
   /** Localist calendar hosts (city / university / community college). */
   localist: { host: string; name: string }[];
+  /** LiveWhale Calendar hosts (public JSON v2 feeds). */
+  livewhale: { host: string; name: string }[];
+  /** Public legislative meeting calendars through the Legistar Web API. */
+  legistar: { client: string; name: string }[];
   /** National Park Service park codes with events near the area. */
   nps: { parkCodes: string[] };
   /** Plain .ics / iCal feeds — city, parks, community centres. */
@@ -136,10 +143,13 @@ export const SAN_JOSE: LaunchArea = {
   radiusMiles: 25,
   timeZone: "America/Los_Angeles",
   ticketmaster: { enabled: true },
-  // No LibCal in this area — both library systems are BiblioCommons. The
-  // adapter stays in the tree because it is verified and the next launch area
-  // may well need it.
-  libcal: [],
+  // Mountain View Library's public RSS calendar, distinct from its bookmobile.
+  libcal: [{
+    name: "Mountain View Public Library",
+    calendarId: "8800",
+    rssUrl: "https://mountainview.libcal.com/rss.php?m=month&cid=8800",
+    tags: ["library"],
+  }],
   bibliocommons: [
     {
       // Verified 2026-09-13: gateway reports 6,477 events. calendar.ics → 404.
@@ -155,15 +165,43 @@ export const SAN_JOSE: LaunchArea = {
       host: "sccl.bibliocommons.com",
       tags: ["library"],
     },
+    {
+      // Verified 2026-09-26: public gateway reports 457 upcoming records.
+      name: "Palo Alto City Library",
+      library: "paloalto",
+      host: "paloalto.bibliocommons.com",
+      tags: ["library"],
+    },
+    {
+      // Fremont, Newark, Centerville and Union City are inside the radius;
+      // other Alameda County branches are not. Missing coordinates are excluded.
+      name: "Alameda County Library",
+      library: "aclibrary",
+      host: "aclibrary.bibliocommons.com",
+      requireInAreaCoordinates: true,
+      tags: ["library"],
+    },
+    {
+      // Eastern San Mateo County branches reach the area, western ones do not.
+      name: "San Mateo County Libraries",
+      library: "smcl",
+      host: "smcl.bibliocommons.com",
+      requireInAreaCoordinates: true,
+      tags: ["library"],
+    },
   ],
   localist: [
     // Verified 2026-09-13: /api/2/events returns a full page with geo.
     { host: "events.sjsu.edu", name: "San José State University" },
     // Verified 2026-09-13. Palo Alto is ~17 mi from centre, inside the radius.
     { host: "events.stanford.edu", name: "Stanford University" },
-    // Santa Clara University (events.scu.edu) returns 403 to server-side
-    // requests — deliberately absent rather than silently failing every run.
   ],
+  livewhale: [
+    // Verified 2026-09-26: public JSON v2 returns ~520 events/60 days.
+    // The old Localist probe was a platform mismatch, not proof of no feed.
+    { host: "events.scu.edu", name: "Santa Clara University" },
+  ],
+  legistar: [{ client: "sanjose", name: "City of San José" }],
   midpen: [
     // Verified 2026-09-13: 64 events across 22 preserves, 19 of which geocode
     // INSIDE the radius. This is what replaces NPS for this area — see below.

@@ -21,20 +21,22 @@ import { NPS_API_KEY, SERPAPI_KEY, TICKETMASTER_KEY } from "../secrets.js";
 import { LAUNCH_AREAS, areaById, type LaunchArea } from "./areas.js";
 import type { IngestResult, NormalizedEvent, SourceId, EventCategory } from "./types.js";
 import { CATEGORY_POINTS } from "./types.js";
-import { loadAreaIndex, upsertBatch, markStale } from "./store.js";
+import { loadAreaIndex, upsertBatch, markStale, auditSuspectedDuplicates } from "./store.js";
 import { fetchTicketmaster } from "./sources/ticketmaster.js";
 import { fetchIcsFeed } from "./sources/icsfeed.js";
 import { fetchLibCal } from "./sources/libcal.js";
 import { fetchBiblioCommons } from "./sources/bibliocommons.js";
 import { fetchMidpen } from "./sources/midpen.js";
 import { fetchLocalist } from "./sources/localist.js";
+import { fetchLiveWhale } from "./sources/livewhale.js";
+import { fetchLegistar } from "./sources/legistar.js";
 import { fetchNps } from "./sources/nps.js";
 import { fetchSerpApi, serpApiBudgetAllows, SERPAPI_MONTHLY_CAP } from "./sources/serpapi.js";
 import { cleanText, cleanUrl, cleanCoord, classify, formatLocalTime } from "./normalize.js";
 
-const SOURCES: SourceId[] = ["ticketmaster", "libcal", "bibliocommons", "localist", "nps", "midpen", "ics", "serpapi"];
+const SOURCES: SourceId[] = ["ticketmaster", "libcal", "bibliocommons", "localist", "livewhale", "legistar", "nps", "midpen", "ics", "serpapi"];
 const TICKETED: SourceId[] = ["ticketmaster"];
-const CIVIC: SourceId[] = ["libcal", "bibliocommons", "localist", "nps", "midpen", "ics", "serpapi"];
+const CIVIC: SourceId[] = ["libcal", "bibliocommons", "localist", "livewhale", "legistar", "nps", "midpen", "ics", "serpapi"];
 
 interface Keys { ticketmaster?: string; nps?: string; serpapi?: string; }
 
@@ -67,6 +69,16 @@ async function fetchSource(source: SourceId, area: LaunchArea, keys: Keys): Prom
     case "localist": {
       const all: NormalizedEvent[] = [];
       for (const cal of area.localist) all.push(...await fetchLocalist(area, cal.host, cal.name));
+      return all;
+    }
+    case "livewhale": {
+      const all: NormalizedEvent[] = [];
+      for (const cal of area.livewhale) all.push(...await fetchLiveWhale(area, cal.host, cal.name));
+      return all;
+    }
+    case "legistar": {
+      const all: NormalizedEvent[] = [];
+      for (const cal of area.legistar) all.push(...await fetchLegistar(area, cal.client, cal.name));
       return all;
     }
     case "nps":
@@ -107,6 +119,7 @@ export async function runSource(source: SourceId, area: LaunchArea, keys: Keys, 
   const runStart = new Date(started);
   const result: IngestResult = {
     source, areaId: area.id, fetched: 0, created: 0, updated: 0, merged: 0,
+    mergeRate: 0, suspectedDuplicates: 0, suspectedDuplicateRate: 0,
     markedStale: 0, deactivated: 0, skipped: 0, errors: [], durationMs: 0,
   };
   try {
@@ -115,12 +128,20 @@ export async function runSource(source: SourceId, area: LaunchArea, keys: Keys, 
     const index = await loadAreaIndex(area);
     const stats = await upsertBatch(records, area, index, runStart);
     Object.assign(result, stats);
+    const candidates = result.created + result.merged;
+    result.mergeRate = candidates ? result.merged / candidates : 0;
     // A source that returned nothing at all is far more likely a feed outage
     // than 100% cancellations. Only age the corpus when we actually saw records.
     if (records.length > 0) {
       const stale = await markStale(source, area, index, runStart);
       result.markedStale = stale.markedStale;
       result.deactivated = stale.deactivated;
+    }
+    const audit = auditSuspectedDuplicates(index);
+    result.suspectedDuplicates = audit.suspected;
+    result.suspectedDuplicateRate = audit.rate;
+    if (audit.active > 0 && audit.rate > 0.05) {
+      console.warn(`[ingest] ${source}/${area.id} suspected duplicate rate ${(audit.rate * 100).toFixed(1)}% exceeds 5% target`);
     }
   } catch (e) {
     result.errors.push(e instanceof Error ? e.message : String(e));
@@ -133,6 +154,11 @@ export async function runSource(source: SourceId, area: LaunchArea, keys: Keys, 
   // Supply telemetry per month: records seen per source.
   await db.collection("treasury").doc(utcMonthKey()).set({
     supply: { [`${source}.fetched`]: FieldValue.increment(result.fetched), [`${source}.runs`]: FieldValue.increment(1) },
+    dedupe: {
+      [`${source}.merged`]: FieldValue.increment(result.merged),
+      [`${source}.candidates`]: FieldValue.increment(result.created + result.merged),
+      [`${source}.suspectedRate`]: result.suspectedDuplicateRate,
+    },
     updatedAt: FieldValue.serverTimestamp(),
   }, { merge: true });
   return result;
@@ -243,12 +269,20 @@ export interface SupplyReport {
 }
 
 export async function computeSupplyReport(area: LaunchArea, now = new Date()): Promise<SupplyReport> {
-  const snap = await db.collection("events")
+  const query = db.collection("events")
     .where("areaId", "==", area.id)
-    .where("active", "==", true)
-    .limit(8000)
-    .get();
-  const upcoming = snap.docs.map((d) => d.data()).filter((d) => (d.date as Timestamp)?.toMillis?.() >= now.getTime());
+    .where("active", "==", true);
+  const upcoming: FirebaseFirestore.DocumentData[] = [];
+  let cursor: FirebaseFirestore.QueryDocumentSnapshot | undefined;
+  for (;;) {
+    const snap = await (cursor ? query.startAfter(cursor) : query).limit(500).get();
+    for (const d of snap.docs) {
+      const data = d.data();
+      if ((data.date as Timestamp)?.toMillis?.() >= now.getTime()) upcoming.push(data);
+    }
+    if (snap.size < 500) break;
+    cursor = snap.docs[snap.docs.length - 1];
+  }
   const total = upcoming.length;
   const bySource: Record<string, number> = {};
   const byAnySource: Record<string, number> = {};

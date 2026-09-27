@@ -50,7 +50,7 @@ export function cleanCoord(v: unknown, max: number): number | undefined {
 
 const STOPWORDS = new Set([
   "the", "a", "an", "and", "at", "of", "in", "on", "with", "for", "to", "by", "from",
-  "presents", "featuring", "feat", "live", "event", "&",
+  "presents", "presented", "featuring", "feat", "live", "event", "&",
 ]);
 
 /**
@@ -60,6 +60,8 @@ const STOPWORDS = new Set([
  */
 export function titleKey(title: string): string {
   return title
+    .replace(/^.{2,70}?\s+presents\s*[:\-–]\s*/i, "")
+    .replace(/^presented\s+by\s+.{2,70}?\s*[:\-–]\s*/i, "")
     .toLowerCase()
     .normalize("NFKD")
     .replace(/[̀-ͯ]/g, "")
@@ -72,13 +74,14 @@ export function titleKey(title: string): string {
 
 /** Dedupe key for a venue: alphanumerics of the first line, 40 chars. */
 export function venueKey(venue: string): string {
-  return venue
+  const key = venue
     .toLowerCase()
-    .split(/[,\n|]/)[0]
+    .split(/[,\n|·]/)[0]
     .normalize("NFKD")
     .replace(/[̀-ͯ]/g, "")
     .replace(/[^a-z0-9]/g, "")
     .slice(0, 40);
+  return ["", "locationtba", "tba", "online", "virtual", "seewebsite"].includes(key) ? "" : key;
 }
 
 /** Hour bucket of a start time (UTC millis floored to the hour). */

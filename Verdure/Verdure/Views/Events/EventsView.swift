@@ -327,7 +327,7 @@ struct EventsView: View {
                         withAnimation(.spring(response: 0.35)) { filters.state.eventCategories = [] }
                     }
                     ForEach(EventCategory.allCases) { cat in
-                        CategoryPill(label: cat.rawValue, icon: cat.icon, tint: cat.accent.base,
+                        CategoryPill(label: cat.displayName, icon: cat.icon, tint: cat.accent.base,
                                      isSelected: selectedCategory == cat) {
                             withAnimation(.spring(response: 0.35)) { filters.state.eventCategories = [cat] }
                         }
@@ -377,7 +377,7 @@ struct EventsView: View {
                                 }
                                 .onTapGesture { Haptics.soft(); selectedEvent = event }
                                 .accessibilityElement(children: .combine)
-                                .accessibilityLabel("\(event.title), \(event.category.rawValue), \(dateFormatter.string(from: event.date))")
+                                .accessibilityLabel("\(event.title), \(event.category.displayName), \(dateFormatter.string(from: event.date))")
                                 .accessibilityHint("Opens event details.")
                                 .accessibilityAddTraits(.isButton)
                                 .accessibilityIdentifier("event-poster")
@@ -481,7 +481,7 @@ private struct EventPoster: View {
                     .buttonStyle(.plain)
                     HStack(spacing: 5) {
                         Image(systemName: event.category.icon).font(.system(size: 11, weight: .bold))
-                        Text(event.category.rawValue.uppercased()).font(VType.body(10, .bold)).tracking(0.6)
+                        Text(event.category.displayName.uppercased()).font(VType.body(10, .bold)).tracking(0.6)
                     }
                     .foregroundStyle(on)
                     .padding(.horizontal, 11).padding(.vertical, 6)
@@ -706,7 +706,7 @@ private struct CreateEventSheet: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 9) {
                     ForEach(EventCategory.allCases) { cat in
-                        CategoryPill(label: cat.rawValue, icon: cat.icon, tint: cat.accent.base,
+                        CategoryPill(label: cat.displayName, icon: cat.icon, tint: cat.accent.base,
                                      isSelected: category == cat) { category = cat }
                     }
                 }
@@ -910,7 +910,7 @@ struct EventDetailSheet: View {
                 }
                 .clipped()
             HStack {
-                Text(event.category.rawValue).font(VType.body(11, .bold))
+                Text(event.category.displayName).font(VType.body(11, .bold))
                     .foregroundStyle(kind.accent.onColor)
                     .padding(.horizontal, 10).padding(.vertical, 5)
                     .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Radius.chip))
@@ -1151,7 +1151,7 @@ private struct ForYouEventCard: View {
             .font(VType.num(11, .semibold)).foregroundStyle(Palette.inkSoft)
             HStack(spacing: 5) {
                 Circle().fill(kind.accent.base).frame(width: 6, height: 6)
-                Text(event.category.rawValue).font(VType.body(10, .bold))
+                Text(event.category.displayName).font(VType.body(10, .bold))
                     .foregroundStyle(kind.accent.base)
             }
         }
@@ -1163,7 +1163,7 @@ private struct ForYouEventCard: View {
                 .padding(.horizontal, 22).offset(y: 2)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(event.title), \(event.category.rawValue), \(dateFormatter.string(from: event.date)) at \(event.locationName), earns \(event.pointValue) points")
+        .accessibilityLabel("\(event.title), \(event.category.displayName), \(dateFormatter.string(from: event.date)) at \(event.locationName), earns \(event.pointValue) points")
         .accessibilityHint("Opens event details.")
         .accessibilityAddTraits(.isButton)
     }

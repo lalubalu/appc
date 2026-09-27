@@ -146,6 +146,9 @@ enum EventCategory: String, CaseIterable, Identifiable, Codable {
 
     var id: String { rawValue }
 
+    /// User-facing name. Keep the raw value stable for existing events and saved filters.
+    var displayName: String { self == .sports ? "Sports & Outdoors" : rawValue }
+
     var icon: String {
         switch self {
         case .cleanup: return "sparkles"

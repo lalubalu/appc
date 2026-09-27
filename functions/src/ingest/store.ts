@@ -7,7 +7,7 @@
  *   2. finds the same event by its own source key (`sourceKeys` array) and
  *      refreshes it;
  *   3. otherwise looks for a CROSS-SOURCE duplicate — same normalised title,
- *      start within 90 minutes, same venue key or within 300 m — and merges
+ *      start within 120 minutes, same venue key or within 300 m — and merges
  *      into it, recording the extra feed in `sources[]`;
  *   4. otherwise creates a new document with a stable id.
  *
@@ -33,7 +33,7 @@ import { distanceMeters } from "../common.js";
 
 export const STALE_CYCLES = 3;
 const HORIZON_DAYS = 120;
-const MATCH_WINDOW_MS = 90 * 60 * 1000;
+const MATCH_WINDOW_MS = 120 * 60 * 1000;
 const MATCH_DISTANCE_M = 300;
 const BATCH = 400;
 
@@ -60,13 +60,18 @@ export interface UpsertStats {
  * provenance other feeds already merged into it), not be recreated from scratch.
  */
 export async function loadAreaIndex(area: LaunchArea, now = new Date()): Promise<AreaIndex> {
-  const snap = await db.collection("events")
+  const query = db.collection("events")
     .where("areaId", "==", area.id)
     .where("date", ">=", Timestamp.fromMillis(now.getTime() - 2 * 86_400_000))
-    .limit(8000)
-    .get();
+    .orderBy("date");
   const index: AreaIndex = { bySourceKey: new Map(), byTitleKey: new Map(), all: [] };
-  snap.forEach((d) => addToIndex(index, { id: d.id, data: d.data() }));
+  let cursor: FirebaseFirestore.QueryDocumentSnapshot | undefined;
+  for (;;) {
+    const snap = await (cursor ? query.startAfter(cursor) : query).limit(500).get();
+    snap.forEach((d) => addToIndex(index, { id: d.id, data: d.data() }));
+    if (snap.size < 500) break;
+    cursor = snap.docs[snap.docs.length - 1];
+  }
   return index;
 }
 
@@ -81,6 +86,52 @@ function addToIndex(index: AreaIndex, ev: IndexedEvent) {
   }
 }
 
+/**
+ * Cheap post-write audit of duplicates that survived the exact-key matcher.
+ * It is intentionally a heuristic: a warning for review, not a deletion rule.
+ * Grouping by hour keeps the scan bounded even for a large launch-area corpus.
+ */
+export function auditSuspectedDuplicates(index: AreaIndex): { active: number; suspected: number; rate: number } {
+  const byHour = new Map<number, IndexedEvent[]>();
+  let active = 0;
+  let suspected = 0;
+  for (const ev of [...index.all].sort((a, b) =>
+    (a.data.date?.toMillis?.() ?? 0) - (b.data.date?.toMillis?.() ?? 0))) {
+    const data = ev.data;
+    if (data.active === false || data.hidden === true) continue;
+    const millis = data.date?.toMillis?.();
+    if (!Number.isFinite(millis)) continue;
+    active++;
+    const hour = Math.floor(millis / 3_600_000);
+    const key = String(data.titleKey || titleKey(String(data.title || "")));
+    const words = new Set(key.split(" ").filter(Boolean));
+    let found = false;
+    for (let h = hour - 2; h <= hour && !found; h++) {
+      for (const prior of byHour.get(h) ?? []) {
+        const other = prior.data;
+        if (Math.abs(other.date.toMillis() - millis) > MATCH_WINDOW_MS) continue;
+        const priorWords = new Set(String(other.titleKey || titleKey(String(other.title || ""))).split(" ").filter(Boolean));
+        if (!words.size || !priorWords.size) continue;
+        const common = [...words].filter((word) => priorWords.has(word)).length;
+        if (common / Math.max(words.size, priorWords.size) < 0.8) continue;
+        const lat = Number(data.latitude), lng = Number(data.longitude);
+        const otherLat = Number(other.latitude), otherLng = Number(other.longitude);
+        const near = data.latitude != null && data.longitude != null && other.latitude != null && other.longitude != null
+          && Number.isFinite(lat) && Number.isFinite(lng) && Number.isFinite(otherLat) && Number.isFinite(otherLng)
+          && distanceMeters(lat, lng, otherLat, otherLng) <= MATCH_DISTANCE_M;
+        const venue = String(data.venueKey || venueKey(String(data.locationName || "")));
+        const otherVenue = String(other.venueKey || venueKey(String(other.locationName || "")));
+        if (near || (venue && venue === otherVenue)) { found = true; break; }
+      }
+    }
+    if (found) suspected++;
+    const bucket = byHour.get(hour) ?? [];
+    bucket.push(ev);
+    byHour.set(hour, bucket);
+  }
+  return { active, suspected, rate: active ? suspected / active : 0 };
+}
+
 /** Does an existing indexed event describe the same real-world event as `rec`? */
 export function isSameEvent(existing: FirebaseFirestore.DocumentData, rec: NormalizedEvent): boolean {
   const start: Timestamp | undefined = existing.date;
@@ -88,14 +139,15 @@ export function isSameEvent(existing: FirebaseFirestore.DocumentData, rec: Norma
   if (Math.abs(start.toMillis() - rec.start.getTime()) > MATCH_WINDOW_MS) return false;
   const vk1 = String(existing.venueKey ?? "");
   const vk2 = venueKey(rec.locationName);
-  if (vk1 && vk2 && vk1 === vk2) return true;
   const lat1 = Number(existing.latitude), lng1 = Number(existing.longitude);
-  if (Number.isFinite(lat1) && Number.isFinite(lng1) && rec.latitude !== undefined && rec.longitude !== undefined) {
+  if (existing.latitude != null && existing.longitude != null && Number.isFinite(lat1) && Number.isFinite(lng1)
+      && rec.latitude !== undefined && rec.longitude !== undefined) {
     if (distanceMeters(lat1, lng1, rec.latitude, rec.longitude) <= MATCH_DISTANCE_M) return true;
-    // Both have venues + coordinates and they disagree: different event.
+    // Coordinates disagree: even identically named venues can be miles apart.
     return false;
   }
-  // One side has no venue information: same title within 90 minutes is a match.
+  if (vk1 && vk2 && vk1 === vk2) return true;
+  // One side has no venue information: distinctive title + time is our last resort.
   return !vk1 || !vk2;
 }
 

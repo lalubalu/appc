@@ -14,6 +14,8 @@ export type SourceId =
   | "bibliocommons"
   | "midpen"
   | "localist"
+  | "livewhale"
+  | "legistar"
   | "nps"
   | "ics"
   | "serpapi"
@@ -46,7 +48,7 @@ export interface NormalizedEvent {
   latitude?: number;
   longitude?: number;
   category: EventCategory;
-  /** True when the feed marks the event free, or has no price at all. */
+  /** True when the feed or mapper has positive evidence the event is free. */
   isFree: boolean;
   /** Lowest listed price in USD, when known. */
   priceMin?: number;
@@ -64,6 +66,11 @@ export interface IngestResult {
   created: number;
   updated: number;
   merged: number;
+  /** Cross-source merges divided by new unique candidates in this cycle. */
+  mergeRate: number;
+  /** Heuristic audit of active documents that still look duplicated. */
+  suspectedDuplicates: number;
+  suspectedDuplicateRate: number;
   markedStale: number;
   deactivated: number;
   skipped: number;

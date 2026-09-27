@@ -17,6 +17,8 @@ import { fetchLibCal } from "../lib/ingest/sources/libcal.js";
 import { fetchBiblioCommons } from "../lib/ingest/sources/bibliocommons.js";
 import { fetchMidpen } from "../lib/ingest/sources/midpen.js";
 import { fetchLocalist } from "../lib/ingest/sources/localist.js";
+import { fetchLiveWhale } from "../lib/ingest/sources/livewhale.js";
+import { fetchLegistar } from "../lib/ingest/sources/legistar.js";
 import { fetchNps } from "../lib/ingest/sources/nps.js";
 
 const area = SAN_JOSE;
@@ -45,6 +47,8 @@ if (process.env.TICKETMASTER_KEY) {
 for (const feed of area.libcal) await run(`libcal · ${feed.name}`, () => fetchLibCal(area, feed));
 for (const feed of area.bibliocommons ?? []) await run(`bibliocommons · ${feed.name}`, () => fetchBiblioCommons(area, feed));
 for (const cal of area.localist) await run(`localist · ${cal.name}`, () => fetchLocalist(area, cal.host, cal.name));
+for (const cal of area.livewhale) await run(`livewhale · ${cal.name}`, () => fetchLiveWhale(area, cal.host, cal.name));
+for (const cal of area.legistar) await run(`legistar · ${cal.name}`, () => fetchLegistar(area, cal.client, cal.name));
 if (process.env.NPS_API_KEY) {
   await run("nps", () => fetchNps(area, process.env.NPS_API_KEY));
 } else console.log("⏭  nps: NPS_API_KEY not set");

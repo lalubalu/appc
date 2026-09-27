@@ -42,7 +42,7 @@
  * occurrence) — so no timezone maths is needed, unlike the LibCal path.
  */
 
-import type { LaunchArea, BiblioFeed } from "../areas.js";
+import { isInsideArea, type LaunchArea, type BiblioFeed } from "../areas.js";
 import type { NormalizedEvent } from "../types.js";
 import { cleanText, cleanUrl, cleanCoord, classify, formatLocalTime } from "../normalize.js";
 
@@ -163,6 +163,8 @@ export function mapBiblioItem(i: BiblioItem, area: LaunchArea, feed: BiblioFeed)
 
   const start = new Date(i.startISO);
   if (Number.isNaN(start.getTime())) return null;
+  if (feed.requireInAreaCoordinates &&
+      (i.lat === undefined || i.lng === undefined || !isInsideArea(area, i.lat, i.lng))) return null;
   const end = i.endISO ? new Date(i.endISO) : undefined;
 
   const description = cleanText(i.descriptionHtml, 600);
@@ -194,9 +196,12 @@ export function mapBiblioItem(i: BiblioItem, area: LaunchArea, feed: BiblioFeed)
   };
 }
 
-/** Max pages to walk. SJPL alone reports 6,485 events; we want the near future. */
-const MAX_PAGES = 4;
-const PAGE_SIZE = 100;
+// The gateway is not sorted by start time: near-term events appear even on its
+// last page. A four-page cap silently drops them. 150 is accepted by the
+// configured systems (Palo Alto returns HTTP 500 at 200); 50 pages covers
+// SJPL's current 6,020 rows.
+const MAX_PAGES = 50;
+const PAGE_SIZE = 150;
 
 export async function fetchBiblioCommons(
   area: LaunchArea,
@@ -205,28 +210,36 @@ export async function fetchBiblioCommons(
 ): Promise<NormalizedEvent[]> {
   const host = feed.host ?? `${feed.library}.bibliocommons.com`;
   const out: NormalizedEvent[] = [];
+  let expectedPages = 1;
 
-  for (let page = 1; page <= MAX_PAGES; page++) {
+  for (let page = 1; page <= expectedPages; page++) {
+    if (page > MAX_PAGES) throw new Error(`${feed.name} exceeds ${MAX_PAGES} BiblioCommons pages`);
     const url = `https://gateway.bibliocommons.com/v2/libraries/${encodeURIComponent(feed.library)}` +
                 `/events?limit=${PAGE_SIZE}&page=${page}`;
     const res = await fetchImpl(url, {
       headers: { accept: "application/json", "user-agent": "Verdure/1.0 (events ingest)" },
+      signal: AbortSignal.timeout(20_000),
     });
-    if (!res.ok) {
-      if (page === 1) throw new Error(`${feed.name} returned ${res.status}`);
-      break;   // a partial read still beats dropping the system entirely
+    if (!res.ok) throw new Error(`${feed.name} page ${page} returned ${res.status}`);
+    const payload = await res.json() as GatewayPayload;
+    if (!Array.isArray(payload.events?.items) || !payload.entities?.events ||
+        !Number.isInteger(payload.events?.pagination?.pages)) {
+      throw new Error(`${feed.name} BiblioCommons response shape changed on page ${page}`);
     }
-    const payload = await res.json();
+    if (page === 1) expectedPages = payload.events.pagination!.pages!;
+    if (expectedPages > MAX_PAGES) throw new Error(`${feed.name} exceeds ${MAX_PAGES} BiblioCommons pages`);
+    if (payload.events.items.length === 0 && expectedPages > 0) {
+      throw new Error(`${feed.name} BiblioCommons returned an empty page ${page}`);
+    }
     const items = parseBiblioPayload(payload, host);
-    if (items.length === 0) break;
+    if (items.length === 0 && payload.events.items.length > 0) {
+      throw new Error(`${feed.name} BiblioCommons yielded no parseable rows on page ${page}`);
+    }
 
     for (const i of items) {
       const mapped = mapBiblioItem(i, area, feed);
       if (mapped) out.push(mapped);
     }
-
-    const pages = Number((payload as GatewayPayload)?.events?.pagination?.pages ?? 1);
-    if (page >= pages) break;
   }
   return out;
 }

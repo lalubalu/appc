@@ -30,15 +30,21 @@ const db = getFirestore();
 const areaId = process.argv[2] || "san-jose-ca";
 const now = Date.now();
 
-const snap = await db.collection("events")
+const query = db.collection("events")
   .where("areaId", "==", areaId)
-  .where("active", "==", true)
-  .limit(8000)
-  .get();
+  .where("active", "==", true);
 
-const upcoming = snap.docs
-  .map((d) => d.data())
-  .filter((d) => (d.date?.toMillis?.() ?? 0) >= now);
+const upcoming = [];
+let cursor;
+for (;;) {
+  const snap = await (cursor ? query.startAfter(cursor) : query).limit(500).get();
+  for (const d of snap.docs) {
+    const data = d.data();
+    if ((data.date?.toMillis?.() ?? 0) >= now) upcoming.push(data);
+  }
+  if (snap.size < 500) break;
+  cursor = snap.docs[snap.docs.length - 1];
+}
 
 if (upcoming.length === 0) {
   console.log(`\nNo upcoming active events for "${areaId}".`);

@@ -102,6 +102,10 @@ two numbers.
 | 4.4 | Dynamic Type at accessibility XL, outdoors in sun | Check-in CTA still reachable and readable | ☐ |
 | 4.5 | VoiceOver through check-in start → finish | Every control labeled; proof step announced | ☐ |
 | 4.6 | Rotate / return from background repeatedly | No layout break, no duplicate fetches | ☐ |
+| 4.7 | Browse Explore after the expanded civic/library corpus is loaded | Scroll and search remain responsive; no blank cards, repeated event cards, or memory termination | ☐ |
+| 4.8 | Open an SCU or library event whose feed has no coordinates | Check-in never presents a false venue pin or awards proximity points from a guessed location | ☐ |
+| 4.9 | Open a Mountain View Library programme and a San José public meeting | Both display the right local time and official source link; a closed session never appears | ☐ |
+| 4.10 | Browse after two feeds publish the same event | One card appears, rich image/description survive, and source attribution includes both feeds | ☐ |
 
 ## Reporting
 
