@@ -90,7 +90,9 @@ final class LocationManager: NSObject {
     /// Live GPS when available; otherwise browse the configured launch area.
     /// A fallback coordinate never authorizes proximity check-ins.
     var userCoordinate: CLLocationCoordinate2D {
-        userLocation?.coordinate ?? LaunchArea.builtIn[0].center
+        if let userLocation { return userLocation.coordinate }
+        if QAData.offline { return SampleData.defaultCenter }
+        return LaunchArea.builtIn[0].center
     }
 
     /// Search and map filters use the launch-area center until GPS is available.

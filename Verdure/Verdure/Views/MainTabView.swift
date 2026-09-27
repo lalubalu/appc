@@ -44,6 +44,7 @@ struct MainTabView: View {
     @State private var friendInvite: FriendInviteLink?
     @State private var primerTrigger: NotificationPrimer.Trigger?
     @Environment(GameStateManager.self) private var gameState
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     /// `sheet(item:)` needs an Identifiable; a bare String isn't one.
     struct BoxedID: Identifiable, Equatable { let id: String }
@@ -110,7 +111,9 @@ struct MainTabView: View {
             // entrance choreography on appear).
             .id(selected)
             .transition(.scale(scale: 0.96).combined(with: .opacity))
-            .safeAreaInset(edge: .bottom) { Color.clear.frame(height: 118) }
+            .safeAreaInset(edge: .bottom) {
+                Color.clear.frame(height: dynamicTypeSize.isAccessibilitySize ? 190 : 118)
+            }
 
             ClayTabBar(selected: $selected)
         }
@@ -159,12 +162,17 @@ struct MainTabView: View {
                         withAnimation(.easeInOut(duration: 0.2)) { discoverMode = mode }
                     } label: {
                         HStack(spacing: 6) {
-                            Image(systemName: mode == .events ? "calendar" : mode == .places ? "leaf" : "map")
+                            if !dynamicTypeSize.isAccessibilitySize {
+                                Image(systemName: mode == .events ? "calendar" : mode == .places ? "leaf" : "map")
+                            }
                             Text(mode.rawValue)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
                         }
-                        .font(VType.body(13, .semibold))
+                        .font(VType.body(dynamicTypeSize.isAccessibilitySize ? 11 : 13, .semibold))
                         .foregroundStyle(discoverMode == mode ? Palette.spruce.onColor : Palette.inkSoft)
-                        .frame(maxWidth: .infinity, minHeight: 42)
+                        .frame(maxWidth: .infinity, minHeight: 48)
+                        .contentShape(Rectangle())
                         .background {
                             if discoverMode == mode {
                                 RoundedRectangle(cornerRadius: Radius.sm).fill(Palette.spruce.base)
@@ -172,6 +180,7 @@ struct MainTabView: View {
                         }
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(mode.rawValue)
                     .accessibilityAddTraits(discoverMode == mode ? .isSelected : [])
                 }
             }
@@ -229,6 +238,18 @@ private struct TabItemButton: View {
     let action: () -> Void
 
     @State private var bounce = false
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private var visibleTitle: String {
+        guard dynamicTypeSize.isAccessibilitySize else { return tab.title }
+        switch tab {
+        case .discover: return "Find"
+        case .plan: return "Plan"
+        case .friends: return "Friends"
+        case .rewards: return "Perks"
+        case .profile: return "Profile"
+        }
+    }
 
     var body: some View {
         Button {
@@ -250,7 +271,7 @@ private struct TabItemButton: View {
                 }
                 .frame(height: 34)
 
-                Text(tab.title)
+                Text(visibleTitle)
                     .font(VType.body(11, isSelected ? .semibold : .medium))
                     .foregroundStyle(isSelected ? Palette.spruce.base : Palette.inkSoft)
                     .lineLimit(1).minimumScaleFactor(0.8)
@@ -259,6 +280,7 @@ private struct TabItemButton: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(tab.title)
     }
 }
 
@@ -271,6 +293,7 @@ private struct PlanTabView: View {
     @Environment(LocationManager.self) private var locationManager
     @Environment(SocialService.self) private var social
     @Environment(StoreService.self) private var store
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var when = "This weekend"
     @State private var pickedDate = Date()
     @State private var company = "Just me"
@@ -289,6 +312,11 @@ private struct PlanTabView: View {
     @State private var selectedEvent: Event?
     @State private var attempted = false
     @State private var showProfiles = false
+    private var statusBarHeight: CGFloat {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first?.windows.first?.safeAreaInsets.top ?? 0
+    }
     private let eventDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "EEE, MMM d"
@@ -304,32 +332,31 @@ private struct PlanTabView: View {
     private var candidates: [Event] {
         let calendar = Calendar.current
         let now = Date()
+        let weekend = DateRangeOption.thisWeekend.window(now: now, calendar: calendar)!
         return eventsService.events.filter { event in
             guard event.date >= now else { return false }
-            let day = calendar.component(.weekday, from: event.date)
             let fitsWhen: Bool
             switch when {
             case "Tonight": fitsWhen = calendar.isDateInToday(event.date)
             case "Tomorrow": fitsWhen = calendar.isDateInTomorrow(event.date)
-            case "This weekend": fitsWhen = day == 1 || day == 7
+            case "This weekend": fitsWhen = event.date >= weekend.start && event.date < weekend.end
             case "Pick a date": fitsWhen = calendar.isDate(event.date, inSameDayAs: pickedDate)
             default: fitsWhen = true
             }
             let fitsBudget = budget != "Free" || event.isFree == true
             let underTwenty = budget != "Under $20" || event.isFree == true ||
                 event.priceMin.map { $0 <= 20 } == true
-            let familyText = "\(event.title) \(event.description ?? "") \(event.tags.joined(separator: " "))"
             let fitsCompany = company != "With kids" ||
-                ["family", "kids", "children", "all ages"].contains(where: familyText.localizedCaseInsensitiveContains)
+                event.ageSuitability == "children" || event.ageSuitability == "all"
             let fitsDistance: Bool
             if distance == "Anywhere nearby" {
                 fitsDistance = true
-            } else if let venue = event.coordinate, let origin = locationManager.userLocation {
+            } else if let venue = event.coordinate {
                 let meters = CLLocation(latitude: venue.latitude, longitude: venue.longitude)
-                    .distance(from: origin)
-                fitsDistance = meters <= (distance == "Walking" ? 2_000 : 20_000)
+                    .distance(from: locationManager.browsingLocation)
+                fitsDistance = meters <= (distance == "Walking" ? 1.5 : 12) * 1_609.344
             } else {
-                fitsDistance = distance != "Walking"
+                fitsDistance = false
             }
             let fitsNote = note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
                 "\(event.title) \(event.description ?? "") \(event.locationName)".localizedCaseInsensitiveContains(note)
@@ -438,6 +465,15 @@ private struct PlanTabView: View {
                 .padding(.bottom, 110)
             }
             .background(VerdureBackground())
+            // The free-scrolling form has no navigation bar. Keep content from
+            // showing through the status-bar glyphs after a long swipe.
+            .overlay(alignment: .top) {
+                LinearGradient(colors: [Palette.canvas, Palette.canvas, Palette.canvas.opacity(0)],
+                               startPoint: .top, endPoint: .bottom)
+                    .frame(height: statusBarHeight + 24)
+                    .offset(y: -statusBarHeight)
+                    .allowsHitTesting(false)
+            }
             .task {
                 await eventsService.fetchNearbyEvents(around: locationManager.userCoordinate,
                                                       followedOrganizerIDs: social.followedOrganizerIDs)
@@ -469,11 +505,13 @@ private struct PlanTabView: View {
             Button { showGroupPlans = true } label: {
                 Label("Your group plans", systemImage: "person.2.circle")
                     .font(VType.body(13, .semibold)).foregroundStyle(Palette.spruce.base)
+                    .frame(minHeight: 44).contentShape(Rectangle())
             }.buttonStyle(.plain)
             if store.isPlus {
                 Button { showProfiles = true } label: {
                     Label("Switch interest profile", systemImage: "square.stack.3d.up")
                         .font(VType.body(13, .semibold)).foregroundStyle(Palette.spruce.base)
+                        .frame(minHeight: 44).contentShape(Rectangle())
                 }.buttonStyle(.plain)
             }
         }
@@ -483,23 +521,37 @@ private struct PlanTabView: View {
     private func optionsSection(_ title: String, choices: [String], selection: Binding<String>) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title).font(VType.body(14, .semibold)).foregroundStyle(Palette.ink)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: 8) {
                     ForEach(choices, id: \.self) { choice in
-                        Button { selection.wrappedValue = choice; Haptics.soft() } label: {
-                            Text(choice)
-                                .font(VType.body(13, .medium))
-                                .foregroundStyle(selection.wrappedValue == choice ? Palette.spruce.onColor : Palette.ink)
-                                .padding(.horizontal, 14).padding(.vertical, 11)
-                                .background(selection.wrappedValue == choice ? Palette.spruce.base : Palette.surface,
-                                            in: RoundedRectangle(cornerRadius: Radius.sm))
+                        optionButton(choice, selection: selection, expanded: true)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(choices, id: \.self) { choice in
+                            optionButton(choice, selection: selection, expanded: false)
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityAddTraits(selection.wrappedValue == choice ? .isSelected : [])
                     }
                 }
             }
         }
+    }
+
+    private func optionButton(_ choice: String, selection: Binding<String>, expanded: Bool) -> some View {
+        Button { selection.wrappedValue = choice; Haptics.soft() } label: {
+            Text(choice)
+                .font(VType.body(13, .medium))
+                .foregroundStyle(selection.wrappedValue == choice ? Palette.spruce.onColor : Palette.ink)
+                .frame(maxWidth: expanded ? .infinity : nil, alignment: .leading)
+                .padding(.horizontal, 14).padding(.vertical, 11)
+                .background(selection.wrappedValue == choice ? Palette.spruce.base : Palette.surface,
+                            in: RoundedRectangle(cornerRadius: Radius.sm))
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selection.wrappedValue == choice ? .isSelected : [])
     }
 
     private func makePlan() async {
@@ -953,6 +1005,7 @@ private struct FriendsTabView: View {
         VStack(alignment: .leading, spacing: 10) {
             Image(systemName: "person.2.wave.2.fill")
                 .font(.system(size: 30)).foregroundStyle(Palette.spruce.base)
+                .accessibilityHidden(true)
             Text(title).font(VType.display(24, .semibold)).foregroundStyle(Palette.ink)
             Text(message).font(VType.body(14)).foregroundStyle(Palette.inkSoft)
         }

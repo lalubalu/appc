@@ -24,13 +24,14 @@ final class AccessibilityAuditTests: XCTestCase {
 
     func testAuditEventsTab() throws     { try auditTab("events", anchor: "Events") }
     func testAuditExploreTab() throws    { try auditTab("explore", anchor: "Explore") }
-    func testAuditCollectTab() throws    { try auditTab("collect", anchor: "Collect") }
+    func testAuditCollectTab() throws    { try auditTab("collect", anchor: "Places collected") }
     func testAuditCommunityTab() throws  { try auditTab("community", anchor: "Community") }
-    func testAuditProfileTab() throws    { try auditTab("profile", anchor: "PLAYER CARD") }
+    func testAuditProfileTab() throws    { try auditTab("profile", anchor: "YOUR PROFILE") }
+    func testAuditPlanTab() throws       { try auditTab("plan", anchor: "Make a plan.") }
+    func testAuditFriendsTab() throws    { try auditTab("friends", anchor: "Together, nearby.") }
 
     func testAuditRewardsStore() throws {
-        let app = QA.launch(tab: "profile")
-        QA.waitFor(app.buttons["Rewards"].firstMatch, "rewards button").tap()
+        let app = QA.launch(tab: "rewards")
         QA.waitFor(app.staticTexts["AVAILABLE POINTS"], "rewards store")
         try QA.audit(app, screen: "rewards-store")
     }
@@ -71,9 +72,8 @@ final class AccessibilityAuditTests: XCTestCase {
     }
 
     func testAuditMyPerkCodes() throws {
-        let app = QA.launch(tab: "profile")
+        let app = QA.launch(tab: "rewards")
         addTeardownBlock { app.terminate() }
-        QA.waitFor(app.buttons["Rewards"].firstMatch, "rewards button").tap()
         QA.waitFor(app.staticTexts["AVAILABLE POINTS"], "rewards store")
         // My Codes is reachable whether or not any code has been claimed — the
         // empty state is itself a surface that has to pass.

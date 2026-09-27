@@ -36,25 +36,42 @@ function localISODate(ms: number): string {
   return `${value("year")}-${value("month")}-${value("day")}`;
 }
 
+function thisWeekendDates(nowMs: number): { saturday: string; monday: string } {
+  const weekday = datePart(nowMs, "weekday");
+  const daysToSaturday: Record<string, number> = {
+    Sun: -1, Mon: 5, Tue: 4, Wed: 3, Thu: 2, Fri: 1, Sat: 0,
+  };
+  const localDay = localISODate(nowMs);
+  // Calendar arithmetic on ISO dates avoids crossing a DST change by adding
+  // a fixed number of milliseconds to an actual Los Angeles timestamp.
+  const dateAtUTCNoon = Date.parse(`${localDay}T12:00:00Z`);
+  const saturday = new Date(dateAtUTCNoon + daysToSaturday[weekday] * 86_400_000);
+  const monday = new Date(saturday.getTime() + 2 * 86_400_000);
+  return { saturday: saturday.toISOString().slice(0, 10), monday: monday.toISOString().slice(0, 10) };
+}
+
 /** Pure eligibility and ordering. A sparse result is honest and prompts widening. */
 export function selectPlanCandidates(rows: EventPlanCandidate[], req: EventPlanRequest): EventPlanCandidate[] {
-  const nowDay = datePart(req.nowMs, "day");
-  const tomorrowDay = datePart(req.nowMs + 86_400_000, "day");
+  const nowDay = localISODate(req.nowMs);
+  const tomorrowDay = new Date(Date.parse(`${nowDay}T12:00:00Z`) + 86_400_000)
+    .toISOString().slice(0, 10);
+  const weekend = thisWeekendDates(req.nowMs);
   const note = req.note.toLowerCase();
   return rows.filter((e) => {
     if (e.startMs < req.nowMs) return false;
-    const day = datePart(e.startMs, "day");
-    const weekday = datePart(e.startMs, "weekday");
-    if (req.when === "Tonight" && day !== nowDay) return false;
-    if (req.when === "Tomorrow" && day !== tomorrowDay) return false;
-    if (req.when === "Pick a date" && localISODate(e.startMs) !== req.targetDate) return false;
-    if (req.when === "This weekend" &&
-        (!["Sat", "Sun"].includes(weekday) || e.startMs - req.nowMs > 7 * 86_400_000)) return false;
-    if (req.who === "With kids" && e.ageSuitability === "adults") return false;
+    const eventDay = localISODate(e.startMs);
+    if (req.when === "Tonight" && eventDay !== nowDay) return false;
+    if (req.when === "Tomorrow" && eventDay !== tomorrowDay) return false;
+    if (req.when === "Pick a date" && eventDay !== req.targetDate) return false;
+    if (req.when === "This weekend") {
+      if (eventDay < weekend.saturday || eventDay >= weekend.monday) return false;
+    }
+    if (req.who === "With kids" && !["children", "all"].includes(e.ageSuitability ?? "")) return false;
     if (req.budget === "Free" && !e.isFree) return false;
     if (req.budget === "Under $20" && !e.isFree && (e.priceMin === undefined || e.priceMin > 20)) return false;
     if (note && !`${e.title} ${e.description ?? ""} ${e.category} ${e.locationName}`.toLowerCase().includes(note)) return false;
-    if (req.lat !== undefined && req.lng !== undefined && e.latitude !== undefined && e.longitude !== undefined) {
+    if (req.distance !== "Anywhere nearby") {
+      if (req.lat === undefined || req.lng === undefined || e.latitude === undefined || e.longitude === undefined) return false;
       const miles = haversineMiles(req.lat, req.lng, e.latitude, e.longitude);
       if (req.distance === "Walking" && miles > 1.5) return false;
       if (req.distance === "Short drive" && miles > 12) return false;

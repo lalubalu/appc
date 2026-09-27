@@ -16,14 +16,48 @@ final class JourneyTests: XCTestCase {
 
     func testAllTabsRender() {
         let anchors: [(tab: String, text: String)] = [
-            ("events", "Events"), ("explore", "Explore"), ("map", "Map"),
-            ("collect", "Collect"), ("community", "Community"), ("profile", "PLAYER CARD"),
+            // The five primary tabs, followed by the rehomed browse surfaces.
+            ("events", "Events"), ("plan", "Make a plan."),
+            ("friends", "Together, nearby."), ("rewards", "AVAILABLE POINTS"),
+            ("profile", "YOUR PROFILE"), ("explore", "Explore"),
+            ("map", "Map"), ("collect", "Places collected"),
+            ("community", "Community"),
         ]
         for (tab, anchor) in anchors {
             let app = QA.launch(tab: tab)
             QA.waitFor(app.staticTexts[anchor].firstMatch, "\(tab) tab anchor")
             app.terminate()
         }
+    }
+
+    func testFiveTabNavigationAndDateChoice() {
+        let app = QA.launch(tab: "events")
+        QA.waitFor(app.buttons["Plan"].firstMatch, "Plan tab").tap()
+        QA.waitFor(app.staticTexts["Make a plan."], "Plan screen")
+        QA.waitFor(app.buttons["Pick a date"], "date choice").tap()
+        QA.waitFor(app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS[c] %@", "Choose a day")).firstMatch,
+            "calendar date picker")
+
+        QA.waitFor(app.buttons["Friends"].firstMatch, "Friends tab").tap()
+        QA.waitFor(app.staticTexts["Together, nearby."], "Friends screen")
+        QA.waitFor(app.buttons["Rewards"].firstMatch, "Rewards tab").tap()
+        QA.waitFor(app.staticTexts["AVAILABLE POINTS"], "Rewards screen")
+        QA.waitFor(app.buttons["Profile"].firstMatch, "Profile tab").tap()
+        QA.waitFor(app.staticTexts["YOUR PROFILE"], "Profile screen")
+    }
+
+    func testPlanRendersVerifiedOfflineFixtureAsCard() {
+        let app = QA.launch(tab: "plan")
+        QA.waitFor(app.buttons["Find real events"], "plan action").tap()
+        QA.waitFor(app.staticTexts["QA Weekend Garden Walk"], "verified sample plan stop")
+        app.swipeUp()
+        let details = QA.waitFor(app.buttons["Details"].firstMatch, "event details action")
+        XCTAssertTrue(details.isHittable, "the plan stop must clear the floating tab bar after scrolling")
+        let shot = XCTAttachment(screenshot: app.screenshot())
+        shot.name = "plan-populated-QA-fixture"
+        shot.lifetime = .keepAlways
+        add(shot)
     }
 
     // MARK: Event detail + check-in gate
@@ -63,8 +97,7 @@ final class JourneyTests: XCTestCase {
     /// the contract that replaced it: cash is members-only, and NOTHING the
     /// server has deactivated appears on this screen or on the paywall.
     func testRewardsGatesCashBehindPaywallAndSellsOnlyLiveFeatures() {
-        let app = QA.launch(tab: "profile")
-        QA.waitFor(app.buttons["Rewards"].firstMatch, "rewards button").tap()
+        let app = QA.launch(tab: "rewards")
         QA.waitFor(app.staticTexts["AVAILABLE POINTS"], "rewards store")
 
         app.swipeUp(); app.swipeUp()

@@ -13,7 +13,8 @@ place and builds, but several explicit acceptance gates cannot be passed with
 the live `/events` collection empty. A named human must review 200 classifier
 examples and label a 20-profile ranking golden set. Partner/API access, an
 Idealist business contact, Apple/Blaze setup, and physical-device QA remain
-external inputs. The simulator UI automation suite stalled before a result.
+external inputs. The simulator journey and structural accessibility suites
+pass; the remaining gates below still prevent a release-complete claim.
 
 This report does not turn an emulator pass into proof of live coverage, paid
 model quality, real-device behavior, or launch readiness.
@@ -25,7 +26,7 @@ model quality, real-device behavior, or launch readiness.
 | A / B supply | Coverage baseline recorded; “Sports & Outdoors” label; source fingerprinter; SCU LiveWhale adapter; City and County probes; six additional source configurations; frozen source list before C0 lexicon work. | [Coverage](COVERAGE-SAN-JOSE.md), [survey](FEED-SURVEY-SAN-JOSE.md), [freeze](SOURCE-FREEZE-SAN-JOSE.md). The live collection has **0** documents, so coverage delta and duplicate rate against real cycles are not measurable. |
 | C0 classification | Ingest-time multi-label enrichment, confidence/quality and eligibility fields, geocode cache, resumable dry-run-first backfill, low-confidence CLI and stratified reviewer sample. | [Audit packet](CLASSIFICATION-AUDIT.md). The 200-item human review and live backfill approval are outstanding. |
 | C discovery and P3 cost | Bounded multi-strategy candidate retrieval, shared short-window area cache, client feed limit, 40-event Everything pages, interest synonyms, For You/Everything, implicit/explicit feedback, exploration, friends-going exception, and read counters. | [Read budget](READ-BUDGET.md), [ranking evaluation](RANKING-EVAL.md). Full Firestore read pricing and ranking quality require a populated corpus. |
-| D design | Editorial serif display type, calmer radii/depth, disciplined accents, five-tab shell and refreshed screen hierarchy. | [Before/after Simulator captures](DESIGN-REFRESH.md). Empty-state visual pass exists; populated cards, larger Dynamic Type, VoiceOver, dark mode and device contrast remain open. |
+| D design | Editorial serif display type, calmer radii/depth, disciplined accents, five-tab shell and refreshed screen hierarchy. | [Before/after Simulator captures](DESIGN-REFRESH.md). A DEBUG-only populated Plan card and structural accessibility pass now exist; live event imagery, full visual XL/dark/VoiceOver review and device contrast remain open. |
 | E friends | Mutual request/accept/decline/remove, rules and server checks, minor protections, invite links/QR, accepted-only activity, Friends navigation and zero-friend state. | Emulator tests passed; a real two-device invite and public website link need device/deploy access. |
 | F planner | Options-first UI, verified-event-only plan sessions, deterministic fallback, in-place refinements, date picker, quota and model cost accounting, group-plan entry, real image/fallback, RSVP and friends-going card elements. | Automated acceptance tests cover profile difference, repeat avoidance and no invention. The actual model secret and populated-event card review remain open. |
 | G opportunities | Student/household fields and ranking signals; Opportunity labels; organizer metadata capture/display/filter; volunteer/program minimum-count gates; four volunteer organizations fingerprinted. | [Supply findings](VOLUNTEER-SUPPLY-2026-09-27.md). Volunteer sources were not added after the P1 freeze because the C0 audit has not passed; the live threshold is unmet. |
@@ -61,19 +62,55 @@ empty-state sentence was changed so it does not assert that local partners
 are already being signed up. The device QA checklist gained checks for these
 flows; no checkbox was marked passed by simulator inspection alone.
 
+The follow-up automation exposed five stale UI-test anchors from the old tab
+structure. Those tests now use the five current tabs and the nested Community,
+Collection, Places and Map routes. An offline, explicitly marked QA event lets
+the Plan test render a populated stop and assert that Details clears the
+floating tab bar; that event is excluded from rewards. The first structural
+accessibility run then found small tap targets in Collection, Discover and
+Plan, plus an announced decorative icon in Friends. The corrected run passed
+all 13 screen audits. The populated-card screenshot and its limitation are
+linked from [DESIGN-REFRESH.md](DESIGN-REFRESH.md).
+
+The XL screenshot review found visual truncation that a structural audit
+cannot detect. At accessibility sizes, the tab bar now uses shorter visible
+labels with full VoiceOver names; Discover modes show text without crowded
+icons; Plan choices stack as full-width controls; Profile statistics use two
+columns; and the Community heading stays on one line. The Plan scroll now
+reserves space above the enlarged tab bar, and a subtle top mask prevents
+scrolled text from colliding with status-bar glyphs.
+
+The Plan candidate rules were tightened on both sides. “This weekend” now
+means the current local weekend, even on Sunday, and the server uses calendar
+dates through daylight-saving changes. Walking and short-drive options require
+known venue coordinates. “With kids” requires confirmed child/family metadata
+instead of silently treating unknown suitability as a match.
+
 ## Verification record
 
-- Latest iOS Simulator build: **passed** after the final browse-location edit.
-- Latest iOS unit suite: **103 tests, 0 failures**; focused discovery-filter
-  suite: **12 tests, 0 failures**. Logs: `/tmp/verdure-final-units.log` and
-  `/tmp/verdure-final-filter-tests.log` on this machine.
-- Earlier in this sprint: Functions TypeScript build, 49 ranking units,
-  8 planner units, 328 backend emulator E2E checks, 49 blocked red-team
-  attacks, and active website tests/build were reported passing in
-  [SPRINT-STATUS-2026-09-27.md](SPRINT-STATUS-2026-09-27.md).
-- Simulator UI automation did **not** return a result before stalling. A
-  manual Computer screenshot pass covers the visible empty-state navigation,
-  not the full UI test matrix.
+- Latest iOS Simulator build: **passed** after Plan eligibility and XL layout
+  changes. The full iOS unit suite passed **103 tests, 0 failures**; the
+  focused discovery-filter suite passed **12/12**. The latest full unit log is
+  `/tmp/verdure-plan-final-20260927.log` on this machine.
+- UI journeys: **10 tests, 0 failures**. Structural accessibility audits:
+  **13 tests, 0 failures** after fixing the findings above. A ten-test
+  Dynamic Type screenshot matrix initially had one failing Adventure Planner
+  test: XCTest auto-scrolled its tile underneath the enlarged tab bar and
+  tapped Friends. The reserved scroll area and test were corrected; focused
+  Adventure Planner light/dark, Plan, Friends, Explore light/dark and Profile
+  XL checks passed afterward. The final captures are in
+  [DESIGN-REFRESH.md](DESIGN-REFRESH.md). This is simulator evidence, not a
+  physical-device VoiceOver pass.
+- Functions TypeScript build and all Functions unit suites passed. Ranking:
+  **49/49**; planner: **13/13**, including current-weekend, DST, known venue
+  and confirmed child-suitability cases.
+- Backend emulator E2E rerun after the planner changes: **328/328**. It used a
+  temporary port-5002 config because a pre-existing Python service owns 5001.
+  The temporary config was removed and the checked-in Firebase config was not
+  changed. Log: `/tmp/verdure-e2e-plan-5002-20260927.log`.
+- Red team: **49 attacks blocked, 0 vulnerable** in the earlier pass. Active
+  website tests and production build passed after the invite and pricing
+  changes, as recorded in [SPRINT-STATUS-2026-09-27.md](SPRINT-STATUS-2026-09-27.md).
 
 ## Exact remaining gates and inputs
 
@@ -91,8 +128,9 @@ flows; no checkbox was marked passed by simulator inspection alone.
    National API access is documented in [NATIONAL-API-EVALUATION.md](NATIONAL-API-EVALUATION.md).
 4. Configure the planner model secret in an authorized environment and test
    actual model sequencing, cost and sponsor trust against real candidates.
-5. Run populated-event, Dynamic Type, VoiceOver, dark-mode, cellular/GPS,
-   queue replay and two-device friend/group/RSVP QA; then resolve any defects.
+5. Run populated-event, full VoiceOver and dark-mode, cellular/GPS, queue
+   replay and two-device friend/group/RSVP QA; then resolve any defects. The
+   targeted Simulator Dynamic Type matrix passed after layout fixes.
    Apple Developer, Blaze, partner agreements and device access are launch
    inputs outside this local sprint. See [DEVICE-QA.md](../DEVICE-QA.md).
 6. Review the active website's legacy policy and settle the app/listing

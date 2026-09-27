@@ -66,7 +66,24 @@ enum SampleData {
 
     // MARK: Events (primary points source)
 
+    /// One clearly labeled, free fixture in the current weekend lets the
+    /// offline UI harness exercise a populated Plan card on any weekday.
+    private static var weekendFixtureDate: Date {
+        let now = Date()
+        let weekend = DateRangeOption.thisWeekend.window(now: now)!
+        let saturdayMorning = Calendar.current.date(byAdding: .hour, value: 11,
+                                                     to: Calendar.current.startOfDay(for: weekend.start))!
+        return max(saturdayMorning, now.addingTimeInterval(2 * 3600))
+    }
+
     static let events: [Event] = [
+        Event(id: "qa-weekend-garden-walk", title: "QA Weekend Garden Walk",
+              organizer: "QA Fixture — Not a real listing", date: weekendFixtureDate,
+              time: weekendFixtureDate.formatted(date: .omitted, time: .shortened),
+              locationName: "Sample Garden (QA only)", attendeeCount: 0, maxAttendees: 20,
+              category: .workshop, imagePlaceholder: "leaf.fill", pointValue: 0,
+              description: "Offline interface fixture. No public event or check-in exists.",
+              latitude: 44.9808, longitude: -93.261, isFree: true),
         Event(id: "spring-hackathon", title: "Spring Community Hackathon", organizer: "Local Dev Collective", date: Calendar.current.date(byAdding: .day, value: 2, to: .now)!, time: "9:00 AM – 9:00 PM", locationName: "Downtown Library", attendeeCount: 42, maxAttendees: 80, category: .hackathon, imagePlaceholder: "laptopcomputer", pointValue: 200, description: "Build something that helps our community in 12 hours. All skill levels welcome — designers, developers, and idea people.", latitude: 44.979, longitude: -93.268),
         Event(id: "river-cleanup-day", title: "River Cleanup Day", organizer: "Green Community Alliance", date: Calendar.current.date(byAdding: .day, value: 3, to: .now)!, time: "9:00 AM – 12:00 PM", locationName: "Riverside Park", attendeeCount: 34, maxAttendees: 50, category: .volunteer, imagePlaceholder: "heart.fill", pointValue: 200, description: "Help us clean up the riverbank! Gloves and bags provided.", latitude: 44.9808, longitude: -93.261),
         Event(id: "tech-meetup", title: "iOS Developers Meetup", organizer: "Swift User Group", date: Calendar.current.date(byAdding: .day, value: 4, to: .now)!, time: "6:30 PM – 8:30 PM", locationName: "The Commons", attendeeCount: 28, maxAttendees: 40, category: .meetup, imagePlaceholder: "person.3.fill", pointValue: 100, description: "Monthly meetup for iOS developers. This month: SwiftUI animations deep dive.", latitude: 44.9758, longitude: -93.268),
@@ -191,8 +208,9 @@ enum SampleData {
 
     // MARK: - Collectible Places
 
-    /// QA fixtures follow the configured launch area when GPS is unavailable.
-    static let defaultCenter = LaunchArea.builtIn[0].center
+    /// Fixture coordinates are deliberately separate from the real launch area.
+    /// DEBUG offline QA uses this center so radius filters exercise sample cards.
+    static let defaultCenter = CLLocationCoordinate2D(latitude: 44.98, longitude: -93.265)
 
     /// Generates collectible places around a center coordinate.
     static func collectiblePlaces(around center: CLLocationCoordinate2D) -> [CollectiblePlace] {

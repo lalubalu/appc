@@ -20,6 +20,32 @@ ok("search note narrows to real matching stops", selectPlanCandidates(rows, { ..
 ok("picked calendar date keeps only events on that local day",
   selectPlanCandidates(rows, { ...req, when: "Pick a date", targetDate: "2026-09-29" })
     .map((r) => r.id).join() === "a");
+const weekendRows = [
+  { ...rows[0], id: "this-saturday", startMs: Date.UTC(2026, 9, 3, 19) },
+  { ...rows[0], id: "this-sunday", startMs: Date.UTC(2026, 9, 4, 23) },
+  { ...rows[0], id: "next-saturday", startMs: Date.UTC(2026, 9, 10, 19) },
+];
+ok("this weekend excludes the following weekend",
+  selectPlanCandidates(weekendRows, { ...req, when: "This weekend" }).map((r) => r.id).join() ===
+    "this-saturday,this-sunday");
+ok("on Sunday this weekend means the remainder of the current weekend",
+  selectPlanCandidates(weekendRows, { ...req, when: "This weekend", nowMs: Date.UTC(2026, 9, 4, 18) })
+    .map((r) => r.id).join() === "this-sunday");
+ok("tomorrow uses the local date across the fall DST change",
+  selectPlanCandidates([
+    { ...rows[0], id: "same-day", startMs: Date.UTC(2026, 10, 1, 20) },
+    { ...rows[0], id: "tomorrow", startMs: Date.UTC(2026, 10, 2, 20) },
+  ], { ...req, when: "Tomorrow", nowMs: Date.UTC(2026, 10, 1, 7, 30) })
+    .map((r) => r.id).join() === "tomorrow");
+ok("walking excludes an event with no verified venue coordinate",
+  selectPlanCandidates([{ ...rows[0], id: "unknown", latitude: undefined, longitude: undefined }],
+    { ...req, distance: "Walking", lat: 37.3, lng: -121.9 }).length === 0);
+ok("with kids requires confirmed family or child suitability",
+  selectPlanCandidates([
+    { ...rows[0], id: "unknown", ageSuitability: undefined },
+    { ...rows[0], id: "adults", ageSuitability: "adults" },
+    { ...rows[0], id: "all", ageSuitability: "all" },
+  ], { ...req, who: "With kids" }).map((r) => r.id).join() === "all");
 ok("model IDs are verified and de-duplicated", validateModelStops([
   { eventId: "invented", why: "x" }, { eventId: "a", why: "real" }, { eventId: "a", why: "again" }, { eventId: "b", why: "real" },
 ], rows).map((r) => r.eventId).join() === "a,b");

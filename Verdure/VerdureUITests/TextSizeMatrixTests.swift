@@ -82,11 +82,23 @@ final class TextSizeMatrixTests: XCTestCase {
     }
 
     func testProfileAtAccessibilityXL() throws {
-        try matrix(tab: "profile", anchor: "PLAYER CARD", dark: false)
+        try matrix(tab: "profile", anchor: "YOUR PROFILE", dark: false)
     }
 
     func testCommunityAtAccessibilityXL() throws {
         try matrix(tab: "community", anchor: "Community", dark: false)
+    }
+
+    func testPlanAtAccessibilityXL() throws {
+        try matrix(tab: "plan", anchor: "Make a plan.", dark: false)
+    }
+
+    func testFriendsAtAccessibilityXL() throws {
+        try matrix(tab: "friends", anchor: "Together, nearby.", dark: false)
+    }
+
+    func testRewardsAtAccessibilityXL() throws {
+        try matrix(tab: "rewards", anchor: "AVAILABLE POINTS", dark: false)
     }
 
     /// The planner sheet at the largest text size, light and dark.
@@ -96,8 +108,23 @@ final class TextSizeMatrixTests: XCTestCase {
             var args = Self.accessibilityXL
             if dark { args += ["-prefersDarkMode", "YES"] }
             let app = QA.launch(tab: "explore", extraArguments: args)
-            QA.waitFor(app.buttons["Plan my adventure"].firstMatch, "planner entry").tap()
-            QA.waitFor(app.staticTexts["How long have you got?"], "planner sheet at XL")
+            let entry = QA.waitFor(app.buttons["Plan my adventure"].firstMatch, "planner entry")
+            // The floating tab bar is taller at accessibility sizes. Bring
+            // the tile well above it before tapping, rather than letting
+            // XCTest auto-scroll its center onto the bar's hit region.
+            for _ in 0..<8 {
+                let midpoint = entry.frame.midY
+                if entry.isHittable && midpoint > 120 && midpoint < app.frame.height - 190 { break }
+                app.swipeUp()
+            }
+            XCTAssertTrue(entry.isHittable, "planner tile must clear the floating tab bar at XL")
+            entry.tap()
+            let header = app.staticTexts["How long have you got?"]
+            guard header.waitForExistence(timeout: 12) else {
+                XCTFail("planner sheet did not open at accessibility XL")
+                app.terminate()
+                continue
+            }
             capture(app, "adventure-planner-XL-\(dark ? "dark" : "light")")
 
             // Every duration option must remain hittable at XL — a chip that

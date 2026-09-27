@@ -44,6 +44,10 @@ environment switch has been performed. `CLAUDE.md` deploy status is untouched.
   Emulator acceptance checks cover profile difference, no invention and
   repeat avoidance. The actual model path still needs a configured key and
   review on a populated index.
+  Client and server now constrain “This weekend” to the current local weekend,
+  including Sunday and daylight-saving transitions. Walking and short-drive
+  choices require known venue coordinates. A DEBUG-only offline QA event
+  exercises a populated card without entering the live index or earning points.
 - G1 stores private age band, optional student status and school, with a
   student ranking boost. G2's Opportunity labels and G3's organizer event
   attributes (age, size, setting, accessibility, venue, deadline) are local.
@@ -76,16 +80,28 @@ environment switch has been performed. `CLAUDE.md` deploy status is untouched.
 
 ## Verification
 
-- iOS Simulator Debug build: passed after the current iOS changes. The full
-  unit suite passed **103/103** after the organizer-detail, location-fallback
-  and radius-matching changes. The focused DiscoveryFilters suite passed
-  **12/12**.
-  The separate simulator UI suite stalled before any UI test result appeared;
-  it was interrupted after roughly three minutes, so UI automation is unverified.
+- iOS Simulator Debug build and the full unit suite passed **103/103** after
+  the final Plan fallback and accessibility changes. The focused
+  DiscoveryFilters suite passed **12/12**.
+- The previously stalled UI runner completed when parallel testing was
+  disabled. The five-tab journey suite passed **10/10** after updating stale
+  pre-redesign navigation anchors. The structural accessibility audit found
+  small tap targets and a decorative image label; those were corrected, then
+  all **13/13** audits passed. Ten accessibility XL/default screenshot tests
+  were exercised; one initially failed because XCTest tapped a tile under the
+  enlarged tab bar. After reserving more space and scrolling the tile into
+  view, its light/dark chip checks passed. Focused XL checks also passed on
+  Plan, Friends, Explore light/dark and Profile. Community's heading wrap was
+  corrected and its XL capture and audit passed. The XL captures are linked from
+  `DESIGN-REFRESH.md`.
 - Functions TypeScript build: passed.
-- Ranking units: **49 passed, 0 failed**; planner units: **8 passed, 0 failed**.
-- Backend emulator E2E: **328 passed, 0 failed**, including group invitations,
-  shortlist votes, telemetry opt-out and access revocation.
+- Ranking units: **49 passed, 0 failed**; planner units: **13 passed, 0 failed**
+  after weekend, DST, venue-coordinate and child-suitability cases.
+- Backend emulator E2E was rerun after the planner changes: **328 passed,
+  0 failed**, including group invitations, shortlist votes, telemetry opt-out
+  and access revocation. The Functions emulator used temporary port 5002
+  because an existing Python process occupies 5001; the temporary config was
+  removed afterward.
 - Red team: **49 attacks blocked, 0 vulnerable** after the feedback addition.
 - All Functions unit suites passed; active website tests and production build
   passed after the invite and pricing changes.
@@ -93,8 +109,9 @@ environment switch has been performed. `CLAUDE.md` deploy status is untouched.
   the Plan date picker on iPhone 16 Plus, and saved the visible states in
   `DESIGN-REFRESH.md`. It confirmed Map centered on San Jose without GPS and
   Places loading nearby results. It also found a radius-label mismatch, which
-  prompted the fallback filter fix. The live index is empty, so event cards,
-  populated ranking and populated Plan results are not visually verified.
+  prompted the fallback filter fix. A separate offline QA capture now shows
+  the populated Plan card; live event imagery, populated ranking and a real
+  Plan result remain unverified because the index is empty.
 
 ## Open completion gates
 
@@ -104,7 +121,7 @@ environment switch has been performed. `CLAUDE.md` deploy status is untouched.
 | C0/P2 | Named human reviewer for all 200 sampled classifications, category accuracy and fixes; review a populated-corpus backfill dry run before writing it live. |
 | P3/C1 | Measure full Firestore reads against a populated index, including user context, client reads and index entries, before enabling the feed at scale. |
 | C3/C10/C11 | Full radius and filter behavior against a dense corpus; named reviewer and 20-profile golden set; live measurement of impression/outcome coverage and cost. |
-| D/E | Populated-screen, Dynamic Type, VoiceOver, dark-mode and physical-device QA; real installed-app invite round trip. The empty-state Simulator screenshot matrix is captured. The website invite page needs deployment before public links work. |
+| D/E | Populated live-event screens, full VoiceOver reading order, broader dark-mode and physical-device QA; real installed-app invite round trip. Structural audits and targeted XL Simulator captures pass. The website invite page needs deployment before public links work. |
 | F | Configure and exercise the actual model secret; review sequencing, sponsor trust and session spend against a populated index. Emulator tests prove the verified-ID fallback and session mechanics. |
 | G | At least 30 live local volunteer listings before surfacing that subtype; the Volunteer chip is hidden below this threshold. Partner/API access and Idealist application remain; any post-freeze source addition requires a renewed classification audit. |
 | I/H | Profile and group-plan controls need device QA and a real two-phone invite test. Offline packs and AR stay deferred and are no longer advertised. |

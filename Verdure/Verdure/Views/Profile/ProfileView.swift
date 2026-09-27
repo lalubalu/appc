@@ -19,6 +19,7 @@ struct ProfileView: View {
     @Environment(StoreService.self) private var store
     @Environment(ModerationService.self) private var moderation
     @Environment(SocialService.self) private var social
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var showRewardsStore = false
     @State private var showCollection = false
     @State private var showDeleteConfirm = false
@@ -209,12 +210,22 @@ struct ProfileView: View {
     // MARK: - Stats orbit (broken-alignment count-up tiles)
 
     private var statsOrbit: some View {
-        HStack(spacing: 10) {
-            statTile(gameState.totalEventsAttended, "Events", "calendar.badge.checkmark", .spruce, dy: 0)
-            statTile(gameState.totalCollected, "Places", "leaf.fill", .spruce, dy: 0)
-            statTile(gameState.currentStreak, "Streak", "flame.fill", .spruce, dy: 0)
-            statTile(gameState.lifetimePoints, "Lifetime", "sparkles", .spruce, dy: 0)
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                LazyVGrid(columns: [.init(.flexible()), .init(.flexible())], spacing: 10) {
+                    statTiles
+                }
+            } else {
+                HStack(spacing: 10) { statTiles }
+            }
         }
+    }
+
+    @ViewBuilder private var statTiles: some View {
+        statTile(gameState.totalEventsAttended, "Events", "calendar.badge.checkmark", .spruce, dy: 0)
+        statTile(gameState.totalCollected, "Places", "leaf.fill", .spruce, dy: 0)
+        statTile(gameState.currentStreak, "Streak", "flame.fill", .spruce, dy: 0)
+        statTile(gameState.lifetimePoints, "Lifetime", "sparkles", .spruce, dy: 0)
     }
 
     private func statTile(_ value: Int, _ label: String, _ icon: String,

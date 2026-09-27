@@ -13,13 +13,13 @@ Plus simulator before D1-D4.
 | Surface | Before | After |
 | --- | --- | --- |
 | Events / Discover | [before](design-refresh/before/events.png) | [current](design-refresh/after/discover.jpg) · [filters](design-refresh/after/filters.jpg) |
-| Explore / Places | [before](design-refresh/before/explore.png) | [current](design-refresh/after/places.jpg) |
+| Explore / Places | [before](design-refresh/before/explore.png) | [current](design-refresh/after/places.jpg) · [accessibility XL](design-refresh/after/places-xl.jpg) |
 | Map | [before](design-refresh/before/map.png) | [current](design-refresh/after/map.jpg) |
 | Collect | [before](design-refresh/before/collect.png) | [current](design-refresh/after/collection.jpg) |
-| Community | [before](design-refresh/before/community.png) | [current](design-refresh/after/community.jpg) |
-| Profile | [before](design-refresh/before/profile.png) | [current](design-refresh/after/profile.jpg) |
-| Plan (new) | — | [current](design-refresh/after/plan-current.jpg) · [date picker](design-refresh/after/plan-date.jpg) |
-| Friends (new) | — | [current](design-refresh/after/friends.jpg) |
+| Community | [before](design-refresh/before/community.png) | [current](design-refresh/after/community.jpg) · [accessibility XL](design-refresh/after/community-xl.jpg) |
+| Profile | [before](design-refresh/before/profile.png) | [current](design-refresh/after/profile.jpg) · [accessibility XL](design-refresh/after/profile-xl.jpg) |
+| Plan (new) | — | [current](design-refresh/after/plan-current.jpg) · [date picker](design-refresh/after/plan-date.jpg) · [populated QA card](design-refresh/after/plan-populated-qa.jpg) · [accessibility XL](design-refresh/after/plan-xl.jpg) |
+| Friends (new) | — | [current](design-refresh/after/friends.jpg) · [accessibility XL](design-refresh/after/friends-xl.jpg) |
 | Rewards (new) | — | [current](design-refresh/after/rewards.jpg) |
 
 ## Token contract
@@ -47,22 +47,32 @@ this capture. Friends and Rewards likewise show signed-out or empty states.
 Places loaded nearby results from the launch-area center without GPS. Map now
 opens over San Jose instead of a continent-wide view. The corrected Places
 capture shows one place within 10 miles and a 6.3-mile card; previously it
-showed a 35-mile card under the same label. These are visual checks of the
-displayed states, not a populated-corpus or physical-device accessibility pass.
+showed a 35-mile card under the same label. A separate DEBUG offline QA fixture
+renders the populated Plan card and its Details, Going? and Refine actions in
+the linked screenshot. That fixture is explicitly labeled QA, is excluded from
+rewards, and is not evidence of a live indexed event. These are visual checks
+of displayed states, not a populated-corpus or physical-device accessibility
+pass.
 
 The Profile and Collection summaries were compressed in code. Explore starts
 with nearby places; level, points and challenges stay in Profile. Arbitrary
 accent rotation in badges, challenges and community posts was removed in favor
-of a consistent spruce accent. A larger Dynamic Type, VoiceOver, dark-mode
-and physical-device matrix remains open.
+of a consistent spruce accent. Simulator structural audits pass 13/13. The
+accessibility XL screenshot matrix was inspected across Explore (light and
+dark), Community, Profile, Friends, Rewards, Plan, paywall and the legacy
+Adventure Planner. XL exposed truncated tab and Discover mode labels, clipped
+Plan option rails, and crowded Profile stats; the final Friends, Places, Plan
+and Profile captures show the corrected layouts. Full
+VoiceOver reading order, contrast in varied outdoor light and physical-device
+review remain open.
 
 ## Five-tab follow-up
 
 The new navigation has Discover, Plan, Friends, Rewards, and Profile. Events,
 Places, and Map are modes inside Discover; Community is under Friends;
 Collection opens from Profile. The old `QATab` surface names remain routable.
-Plan uses options first and displays only real indexed events. The current
-capture shows the date picker, group-plan entry and honest empty state. Its
-event-card image, RSVP and friend-going layout need visual review with a
-populated index. The model path also needs its configured secret and a
-populated-index review.
+Plan uses options first and displays only indexed events in normal operation.
+The current capture shows the date picker, group-plan entry and honest empty
+state. The DEBUG offline capture exercises a populated card. Live event-card
+imagery, RSVP and friend-going states still need a populated-index review.
+The model path also needs its configured secret and a populated-index review.

@@ -92,6 +92,7 @@ struct CommunityView: View {
         VStack(alignment: .leading, spacing: 8) {
             KickerLabel(text: "What's blooming nearby", dot: Palette.gold.base)
             Text("Community").font(VType.display(44, .bold)).foregroundStyle(Palette.ink)
+                .lineLimit(1).minimumScaleFactor(0.7)
             HStack(spacing: 6) {
                 Circle().fill(Palette.teal.base).frame(width: 8, height: 8).breathing(scale: 1.4, duration: 1.4)
                 if isShowingSamples {

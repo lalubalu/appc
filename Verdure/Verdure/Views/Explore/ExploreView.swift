@@ -336,8 +336,10 @@ struct ExploreView: View {
 
     private var nearbySection: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
-            ClaySectionHeader(index: "02", kicker: "Around you", title: "Nearby Places",
-                              accent: Palette.teal.base)
+            Text("Nearby Places")
+                .font(VType.display(30, .semibold))
+                .foregroundStyle(Palette.ink)
+                .accessibilityAddTraits(.isHeader)
 
             // Search lives in the navigation bar (.searchable); recents + filters here.
             HStack(spacing: 10) {

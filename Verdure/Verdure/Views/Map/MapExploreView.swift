@@ -139,7 +139,8 @@ struct MapExploreView: View {
                 ProgressView().scaleEffect(0.6).tint(Palette.teal.base)
             }
         } else if !locationManager.isAuthorized {
-            pill(icon: "location.slash.fill", text: "Showing San Jose · no GPS", tint: Palette.terracotta.base) { EmptyView() }
+            pill(icon: "location.slash.fill", text: QAData.offline ? "QA sample area · no GPS" : "Showing San Jose · no GPS",
+                 tint: Palette.terracotta.base) { EmptyView() }
         }
     }
 

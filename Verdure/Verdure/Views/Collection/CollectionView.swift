@@ -67,6 +67,8 @@ struct CollectionView: View {
                 Label("See rewards", systemImage: "gift")
                     .font(VType.body(14, .semibold))
                     .foregroundStyle(Palette.spruce.base)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
         }
