@@ -99,6 +99,17 @@ struct Event: Identifiable, Hashable {
     var areaId: String? = nil          // launch area the event was ingested for
     var organizerId: String? = nil     // organizer profile that published it (organizer accounts)
     var isBroadcast: Bool = true       // false = visible only to the organizer's followers (unverified)
+    var expectedSize: Int? = nil
+    var indoorOutdoor: String? = nil
+    var ageSuitability: String? = nil
+    var minimumAge: Int? = nil
+    var maximumAge: Int? = nil
+    var accessibilityFeatures: [String] = []
+    var publicVenue: Bool? = nil
+    var recurring: Bool? = nil
+    var virtual: Bool? = nil
+    var applicationDeadline: Date? = nil
+    var opportunitySubtype: String? = nil
 
     /// Venue coordinate when both components are known.
     var coordinate: CLLocationCoordinate2D? {

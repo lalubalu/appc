@@ -121,7 +121,7 @@ export default function PricingContent()
             </h2>
             <p className="t-body1 measure mt-6 text-cream/75">
               Verdure Free costs nothing and keeps the streak honest. When you
-              want the AI planner, offline maps, and higher-value rewards,
+              want unlimited planning, early partner perks, and advanced stats,
               Verdure+ is waiting on the same map.
             </p>
             <div className="mt-10 flex flex-wrap items-center gap-x-8 gap-y-4">

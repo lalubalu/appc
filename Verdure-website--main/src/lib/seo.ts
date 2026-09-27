@@ -259,7 +259,7 @@ export function appLd(): Record<string, unknown>
     description: SITE_DESCRIPTION,
     applicationCategory: "LifestyleApplication",
     applicationSubCategory: "Outdoor recreation",
-    operatingSystem: "iOS, Android",
+    operatingSystem: "iOS",
     image: absoluteUrl("/og.png"),
     publisher: { "@id": ORGANIZATION_ID },
     isPartOf: { "@id": WEBSITE_ID },
@@ -343,9 +343,9 @@ export function pricingLd(): Record<string, unknown>
     url: SITE_URL,
     mainEntityOfPage: absoluteUrl("/pricing"),
     description:
-      "Verdure Free costs nothing forever. Verdure+ adds the AI Adventure Planner, AR exploration, offline maps, and higher-value rewards.",
+      "Verdure Free costs nothing forever. Verdure+ adds unlimited Adventure Planner use, early partner perks, cash gift cards, and advanced stats.",
     applicationCategory: "LifestyleApplication",
-    operatingSystem: "iOS, Android",
+    operatingSystem: "iOS",
     publisher: { "@id": ORGANIZATION_ID },
     offers: offers,
   };

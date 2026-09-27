@@ -454,7 +454,7 @@ export { planAdventure } from "./adventure.js";
 // field was collected at onboarding and used by no query on either side.
 // Notifications (sendEventReminders) and partner surfacing call recommendFor()
 // directly rather than re-implementing the ordering.
-export { recommendedEvents } from "./ranking.js";
+export { recommendedEvents, recordEventFeedback } from "./ranking.js";
 
 // Partner surfacing. Separate from ranking.ts on purpose: that module has no
 // partner input and this one cannot reach into it, so a paid placement is
@@ -485,7 +485,9 @@ export {
 // ── Social: follows, Going/RSVP, invites, friends-going ─────────────────────
 // Every write is a callable so blocks are enforced server-side and counts stay
 // honest; rules deny clients all writes to these subcollections. See social.ts.
-export { followUser, rsvpToEvent, inviteToEvent, respondToInvite, friendsGoing, friendsLeaderboard } from "./social.js";
+export { followUser, rsvpToEvent, inviteToEvent, respondToInvite, friendsGoing, friendsUpcoming, friendsLeaderboard } from "./social.js";
+export { sendFriendRequest, respondToFriendRequest, removeFriend, myFriendInvite,
+         claimUsername, findFriendByUsername, registerAgeBand } from "./friendships.js";
 
 // ── Organizer accounts (Part 2 §5) ──────────────────────────────────────────
 // Unverified organizers may create, not broadcast; approval is a staff action

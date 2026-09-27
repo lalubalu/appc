@@ -28,6 +28,7 @@ final class DeepLinkRouter {
 
     enum Destination: Equatable {
         case event(id: String)
+        case friendInvite(uid: String, token: String)
         case perk(id: String)
         case rewards
         case notifications
@@ -59,7 +60,18 @@ final class DeepLinkRouter {
     // is strictly better than crashing or navigating somewhere arbitrary.
 
     nonisolated static func parse(_ raw: String?) -> Destination? {
-        guard let raw, let url = URL(string: raw), url.scheme == "verdure" else { return nil }
+        guard let raw, let url = URL(string: raw) else { return nil }
+        let isCustom = url.scheme == "verdure"
+        let isInviteWeb = url.scheme == "https" && url.host == "verdure-app.com" && url.path == "/invite"
+        guard isCustom || isInviteWeb else { return nil }
+        if isInviteWeb {
+            guard let fragment = url.fragment,
+                  let parts = URLComponents(string: "https://verdure-app.com/?\(fragment)")?.queryItems,
+                  let uid = parts.first(where: { $0.name == "uid" })?.value,
+                  let token = parts.first(where: { $0.name == "token" })?.value,
+                  !uid.isEmpty, !token.isEmpty else { return nil }
+            return .friendInvite(uid: uid, token: token)
+        }
         // verdure://events/<id>  → host "events", path "/<id>"
         let segments = ([url.host] + url.pathComponents.filter { $0 != "/" })
             .compactMap { $0 }
@@ -69,6 +81,11 @@ final class DeepLinkRouter {
         case "events":
             guard let id = segments.dropFirst().first, !id.isEmpty else { return nil }
             return .event(id: id)
+        case "friends":
+            guard let uid = segments.dropFirst().first,
+                  let token = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "token" })?.value,
+                  !uid.isEmpty, !token.isEmpty else { return nil }
+            return .friendInvite(uid: uid, token: token)
         case "perks":
             guard let id = segments.dropFirst().first, !id.isEmpty else { return nil }
             return .perk(id: id)

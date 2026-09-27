@@ -12,7 +12,7 @@ import Link from "next/link";
  * survive being linked to, and a measure that stays readable at length.
  */
 
-let UPDATED = "July 26, 2026";
+let UPDATED = "September 27, 2026";
 
 let SECTIONS = [
   { id: "interpretation", label: "Interpretation and Definitions" },
@@ -48,6 +48,9 @@ let DEFINITIONS = [
 let PERSONAL_DATA = [
   "First name and last name",
   "Email address",
+  "Birth year, used to apply age safeguards in the mobile app",
+  "Optional student status and school, used for activity recommendations",
+  "Interests, saved and viewed events, and explicit recommendation feedback",
   "Phone number",
   "Shipping and billing address",
   "Financial and Payment Data (e.g., transaction history, billing details, payment processor tokens)",
@@ -362,8 +365,8 @@ export default function PrivacyContent()
 
           <Section id="children" title="Children's Privacy">
             <p>
-              Our Service is not directed to individuals under the age of 16. We do
-              not knowingly collect Personal Data from anyone under 16. If You are a
+              Our Service is not directed to individuals under the age of 13. We do
+              not knowingly collect Personal Data from anyone under 13. If You are a
               parent or guardian and become aware that Your child has provided Us
               with Personal Data without parental consent, please contact Us
               immediately at{" "}

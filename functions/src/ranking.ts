@@ -31,20 +31,25 @@
  */
 
 import { onCall, HttpsError } from "firebase-functions/v2/https";
-import type { Timestamp } from "firebase-admin/firestore";
-import { db, requireUid, enforceRateLimit, safeText } from "./common.js";
+import { Timestamp, FieldValue } from "firebase-admin/firestore";
+import { db, requireUid, enforceRateLimit, safeText, blockedSetFor, utcMonthKey } from "./common.js";
+import { friendIds } from "./friendships.js";
 
 export const WEIGHTS = {
   /** Does it match what they said they liked, or what they've actually attended? */
-  interest: 0.26,
+  interest: 0.16,
   /** Can they get there? The single best predictor of whether someone goes. */
-  distance: 0.30,
+  distance: 0.24,
   /** A friend is going. The one signal no search engine can produce. */
-  social: 0.18,
+  social: 0.16,
   /** Soon enough to act on, far enough away to plan. */
-  timing: 0.14,
+  timing: 0.13,
   /** Haven't seen this organizer/category lately — keeps the feed from ossifying. */
-  novelty: 0.12,
+  novelty: 0.07,
+  /** Complete, well-sourced listings matter most for a cold account. */
+  quality: 0.14,
+  /** Saved, viewed and explicit feedback, with negative feedback decaying. */
+  feedback: 0.10,
 } as const;
 
 /** Sanity: the weights must sum to 1. A typo here silently reweights the feed. */
@@ -64,24 +69,49 @@ export const INTEREST_TO_CATEGORY: Record<string, string[]> = {
   family: ["Festival", "Market", "Workshop"],
 };
 
+/** Deterministic semantic aliases for common interest language. Kept small
+ * enough to audit against real listings before considering embeddings. */
+export const INTEREST_SYNONYMS: Record<string, string[]> = {
+  outdoors: ["trail", "nature walk", "birding", "wildflower", "hike", "hiking", "park", "garden"],
+  hiking: ["trail", "nature walk", "birding", "wildflower", "ramble", "guided walk", "hike"],
+  fitness: ["run", "running", "yoga", "bike", "cycling", "dance fitness", "walk"],
+  volunteering: ["volunteer", "service day", "stewardship", "restore", "restoration", "cleanup", "tree planting"],
+  arts: ["art", "painting", "drawing", "gallery", "exhibition", "craft", "ceramics"],
+  music: ["music", "concert", "jazz", "choir", "orchestra", "live band"],
+  food: ["food", "cooking", "farmers market", "tasting", "baking"],
+  tech: ["coding", "robotics", "computer", "maker", "hackathon", "technology"],
+  learning: ["workshop", "class", "lecture", "lesson", "clinic", "lab", "learn"],
+  community: ["community", "neighborhood", "meetup", "social", "volunteer"],
+  family: ["family", "kids", "children", "storytime", "all ages"],
+};
+
 export interface RankableEvent {
   id: string;
+  title?: string;
+  description?: string;
   category?: string;
   organizer?: string;
   latitude?: number;
   longitude?: number;
   startMs: number;
   tags?: string[];
+  qualityScore?: number;
 }
 
 export interface RankingContext {
   interests: string[];
+  studentStatus?: boolean;
+  school?: string;
   /** Categories the user has actually attended — behaviour beats stated preference. */
   attendedCategories: Record<string, number>;
   /** eventId -> number of followed accounts going. */
   friendsGoing: Record<string, number>;
   /** Organizers seen recently in this user's feed, for the novelty term. */
   recentOrganizers: Record<string, number>;
+  savedEventIDs?: string[];
+  eventFeedback?: Record<string, { category?: string; organizer?: string; kind: string; atMs: number }>;
+  attendedOrganizers?: Record<string, number>;
+  weekendAttendanceRatio?: number;
   lat?: number;
   lng?: number;
   nowMs: number;
@@ -110,14 +140,20 @@ export function haversineMiles(aLat: number, aLng: number, bLat: number, bLng: n
  */
 export function interestScore(ev: RankableEvent, ctx: RankingContext): number {
   const cat = ev.category ?? "";
+  const opportunity = cat === "Workshop" || cat === "Volunteer" || (ev.tags ?? []).includes("Opportunity");
+  const sameSchool = !!ctx.school && (ev.organizer ?? "").toLowerCase().includes(ctx.school.toLowerCase());
+  const studentFloor = ctx.studentStatus && opportunity ? (sameSchool ? 0.9 : 0.75) : 0;
   const hasStated = ctx.interests.length > 0;
   const attendedTotal = Object.values(ctx.attendedCategories).reduce((a, b) => a + b, 0);
-  if (!hasStated && attendedTotal === 0) return 0.5;
+  if (!hasStated && attendedTotal === 0) return Math.max(0.5, studentFloor);
 
   let stated = 0;
   if (hasStated) {
     const wanted = new Set(ctx.interests.flatMap((i) => INTEREST_TO_CATEGORY[i.toLowerCase()] ?? []));
-    stated = wanted.has(cat) ? 1 : 0;
+    const text = ` ${[ev.title, ev.description, ...(ev.tags ?? [])].filter(Boolean).join(" ").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()} `;
+    const semantic = ctx.interests.some((interest) =>
+      (INTEREST_SYNONYMS[interest.toLowerCase()] ?? []).some((term) => text.includes(` ${term} `)));
+    stated = wanted.has(cat) ? 1 : semantic ? 0.9 : 0;
   }
 
   let behavioural = 0;
@@ -125,9 +161,9 @@ export function interestScore(ev: RankableEvent, ctx: RankingContext): number {
     behavioural = Math.min(1, (ctx.attendedCategories[cat] ?? 0) / Math.max(1, attendedTotal / 2));
   }
 
-  if (!hasStated) return behavioural;
-  if (attendedTotal === 0) return stated;
-  return 0.4 * stated + 0.6 * behavioural;
+  if (!hasStated) return Math.max(behavioural, studentFloor);
+  if (attendedTotal === 0) return Math.max(stated, studentFloor);
+  return Math.max(0.4 * stated + 0.6 * behavioural, studentFloor);
 }
 
 /**
@@ -159,9 +195,17 @@ export function socialScore(ev: RankableEvent, ctx: RankingContext): number {
 export function timingScore(ev: RankableEvent, ctx: RankingContext): number {
   const days = (ev.startMs - ctx.nowMs) / 86_400_000;
   if (days < 0) return 0;              // past; ranking cannot resurrect it
+  if (days < 1 / 24 && ctx.lat !== undefined && ctx.lng !== undefined &&
+      ev.latitude !== undefined && ev.longitude !== undefined &&
+      haversineMiles(ctx.lat, ctx.lng, ev.latitude, ev.longitude) > 10) return 0.05;
   if (days < 0.5) return 0.55;         // today — good, but hard to act on
   if (days <= 1) return 0.8;
-  if (days <= 7) return 1;
+  if (days <= 7) {
+    const ratio = ctx.weekendAttendanceRatio;
+    const day = new Date(ev.startMs).getUTCDay();
+    if (ratio !== undefined && ratio >= 0.75 && day !== 0 && day !== 6) return 0.8;
+    return 1;
+  }
   if (days <= 14) return 0.7;
   if (days <= 30) return 0.4;
   return 0.15;
@@ -178,6 +222,31 @@ export function noveltyScore(ev: RankableEvent, ctx: RankingContext): number {
   return 1 / (1 + seen * 0.6);
 }
 
+export function qualityScore(ev: RankableEvent): number {
+  return typeof ev.qualityScore === "number" && Number.isFinite(ev.qualityScore)
+    ? Math.max(0, Math.min(1, ev.qualityScore)) : 0.35;
+}
+
+/** Behaviour is bounded to 0..1 and never excludes a listing. A dismissal
+ * returns to neutral over 90 days; permanent exclusions are a separate Plus
+ * control. A venue/organizer that earned two check-ins gets a strong lift. */
+export function feedbackScore(ev: RankableEvent, ctx: RankingContext): number {
+  const rows = Object.entries(ctx.eventFeedback ?? {});
+  let score = 0.5;
+  if (ctx.savedEventIDs?.includes(ev.id)) score += 0.2;
+  if ((ctx.attendedOrganizers?.[ev.organizer ?? ""] ?? 0) >= 2) score += 0.25;
+  for (const [id, row] of rows) {
+    const sameCategory = !!row.category && row.category === ev.category;
+    const sameOrganizer = !!row.organizer && row.organizer === ev.organizer;
+    if (!sameCategory && !sameOrganizer && id !== ev.id) continue;
+    const age = Math.max(0, ctx.nowMs - row.atMs);
+    if (row.kind === "less") score -= 0.4 * Math.max(0, 1 - age / (90 * 86_400_000));
+    if (row.kind === "more") score += 0.2;
+    if (row.kind === "view") score += 0.03;
+  }
+  return Math.max(0, Math.min(1, score));
+}
+
 export interface ScoredEvent { id: string; score: number; parts: Record<string, number> }
 
 /** Score one event. Exported so tests can assert a single term in isolation. */
@@ -188,13 +257,17 @@ export function scoreEvent(ev: RankableEvent, ctx: RankingContext): ScoredEvent 
     social: socialScore(ev, ctx),
     timing: timingScore(ev, ctx),
     novelty: noveltyScore(ev, ctx),
+    quality: qualityScore(ev),
+    feedback: feedbackScore(ev, ctx),
   };
   const score =
     parts.interest * WEIGHTS.interest +
     parts.distance * WEIGHTS.distance +
     parts.social * WEIGHTS.social +
     parts.timing * WEIGHTS.timing +
-    parts.novelty * WEIGHTS.novelty;
+    parts.novelty * WEIGHTS.novelty +
+    parts.quality * WEIGHTS.quality +
+    parts.feedback * WEIGHTS.feedback;
   return { id: ev.id, score, parts };
 }
 
@@ -214,7 +287,7 @@ export function rankEvents(events: RankableEvent[], ctx: RankingContext): Scored
 
   const byId = new Map(events.map((e) => [e.id, e]));
   const usedCategory: Record<string, number> = {};
-  const diversified = scored.map((s) => {
+  const diversified: ScoredEvent[] = scored.map((s) => {
     const cat = byId.get(s.id)?.category ?? "";
     const seen = usedCategory[cat] ?? 0;
     usedCategory[cat] = seen + 1;
@@ -223,6 +296,20 @@ export function rankEvents(events: RankableEvent[], ctx: RankingContext): Scored
     return { ...s, score: s.score * damp, parts: { ...s.parts, diversity: damp } };
   });
   diversified.sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
+  // One quality-led exploration pick in a full ten-card page. The pick must
+  // be outside declared categories; the slot is labelled for instrumentation.
+  if (diversified.length >= 10 && ctx.interests.length > 0) {
+    const wanted = new Set(ctx.interests.flatMap((i) => INTEREST_TO_CATEGORY[i.toLowerCase()] ?? []));
+    const pick = diversified.slice(9).filter((s) => {
+      const ev = byId.get(s.id);
+      return !!ev && !wanted.has(ev.category ?? "") && qualityScore(ev) >= 0.7;
+    }).sort((a, b) => (qualityScore(byId.get(b.id)!) - qualityScore(byId.get(a.id)!)) || a.id.localeCompare(b.id))[0];
+    if (pick) {
+      const from = diversified.findIndex((s) => s.id === pick.id);
+      diversified.splice(from, 1);
+      diversified.splice(9, 0, { ...pick, parts: { ...pick.parts, exploration: 1 } });
+    }
+  }
   return diversified;
 }
 
@@ -231,12 +318,68 @@ export function rankEvents(events: RankableEvent[], ctx: RankingContext): Scored
 // ---------------------------------------------------------------------------
 
 const MAX_CANDIDATES = 400;
+const CACHE_MS = 5 * 60_000;
+const DIVERSITY_CATEGORIES = ["Cleanup", "Sports", "Social", "Workshop", "Market", "Festival", "Hackathon", "Meetup", "Volunteer", "Program"];
+
+function rankableFromDoc(d: FirebaseFirestore.DocumentSnapshot): RankableEvent | null {
+  const x = d.data();
+  if (!x || x.hidden === true || x.broadcast !== true || x.active !== true) return null;
+  return {
+    id: d.id, title: x.title, description: x.description,
+    category: x.category, organizer: x.organizer,
+    latitude: typeof x.latitude === "number" ? x.latitude : undefined,
+    longitude: typeof x.longitude === "number" ? x.longitude : undefined,
+    startMs: x.date instanceof Timestamp ? x.date.toMillis() : 0,
+    tags: Array.isArray(x.tags) ? x.tags : [],
+    qualityScore: typeof x.qualityScore === "number" ? x.qualityScore : undefined,
+  };
+}
+
+/** One five-minute area snapshot serves many users. It merges soon, quality
+ * and category sweeps, rather than taking an arbitrary first 400 records. */
+async function areaCandidates(areaId: string, nowMs: number): Promise<RankableEvent[]> {
+  const cacheRef = db.collection("feedCaches").doc(areaId);
+  const cached = await cacheRef.get();
+  const saved = cached.data();
+  if (Number(saved?.cachedAtMs) > nowMs - CACHE_MS && Array.isArray(saved?.events)) {
+    return saved.events as RankableEvent[];
+  }
+  const base = db.collection("events").where("areaId", "==", areaId).where("active", "==", true);
+  const cutoff = Timestamp.fromMillis(nowMs - 3_600_000);
+  const [soon, quality, ...categories] = await Promise.all([
+    base.where("date", ">=", cutoff).orderBy("date").limit(180).get(),
+    base.orderBy("qualityScore", "desc").limit(70).get(),
+    ...DIVERSITY_CATEGORIES.map((category) =>
+      base.where("category", "==", category).where("date", ">=", cutoff).orderBy("date").limit(15).get()),
+  ]);
+  const snapshots = [soon, quality, ...categories];
+  const byId = new Map<string, RankableEvent>();
+  for (const snap of snapshots) {
+    for (const doc of snap.docs) {
+      const ev = rankableFromDoc(doc);
+      if (ev && ev.startMs >= nowMs) byId.set(ev.id, ev);
+    }
+  }
+  const events = Array.from(byId.values()).slice(0, MAX_CANDIDATES);
+  await cacheRef.set({ cachedAtMs: nowMs, events });
+  // Counts document reads returned by the candidate queries. Index-entry
+  // charges and minimum query reads are reported separately in READ-BUDGET.
+  const queryDocuments = snapshots.reduce((sum, snap) => sum + snap.size, 0);
+  await db.collection("treasury").doc(utcMonthKey()).set({
+    readTelemetry: {
+      candidateDocuments: FieldValue.increment(queryDocuments),
+      candidateRefreshes: FieldValue.increment(1),
+    },
+  }, { merge: true });
+  return events;
+}
 
 /** Build a user's ranking context from Firestore. Shared by the callable and C/E. */
 export async function loadContext(uid: string, lat?: number, lng?: number, nowMs = Date.now()): Promise<RankingContext> {
-  const [userSnap, followingSnap] = await Promise.all([
+  const [userSnap, accepted, blocked] = await Promise.all([
     db.collection("users").doc(uid).get(),
-    db.collection(`users/${uid}/following`).where("kind", "==", "user").get(),
+    friendIds(uid, 100),
+    blockedSetFor(uid),
   ]);
   const u = userSnap.data() ?? {};
 
@@ -245,12 +388,23 @@ export async function loadContext(uid: string, lat?: number, lng?: number, nowMs
 
   // Behaviour: categories of events already attended.
   const attendedCategories: Record<string, number> = {};
+  const attendedOrganizers: Record<string, number> = {};
+  let weekendAttended = 0;
+  let totalAttended = 0;
   const attended: string[] = Array.isArray(u.checkedInEventIDs) ? u.checkedInEventIDs.slice(-40) : [];
   if (attended.length) {
     const docs = await Promise.all(attended.slice(0, 30).map((id: string) => db.collection("events").doc(String(id)).get()));
     for (const d of docs) {
       const c = String(d.data()?.category ?? "");
       if (c) attendedCategories[c] = (attendedCategories[c] ?? 0) + 1;
+      const org = String(d.data()?.organizer ?? "");
+      if (org) attendedOrganizers[org] = (attendedOrganizers[org] ?? 0) + 1;
+      const date = d.data()?.date;
+      if (date instanceof Timestamp) {
+        totalAttended++;
+        const day = date.toDate().getUTCDay();
+        if (day === 0 || day === 6) weekendAttended++;
+      }
     }
   }
 
@@ -258,16 +412,14 @@ export async function loadContext(uid: string, lat?: number, lng?: number, nowMs
   // attendee subcollections of followed users' RSVPs is expensive; instead we
   // read each followed user's rsvpEventIDs, which is one doc each.
   const friendsGoing: Record<string, number> = {};
-  const friendIds = followingSnap.docs.map((d) => d.id).slice(0, 100);
-  if (friendIds.length) {
-    const friendDocs = await Promise.all(friendIds.map((id) => db.collection("users").doc(id).get()));
+  if (accepted.length) {
+    const visible = accepted.filter((id) => !blocked.has(id));
+    const friendDocs = await Promise.all(visible.map((id) => db.collection("users").doc(id).get()));
     for (const f of friendDocs) {
       const fd = f.data();
       if (!fd) continue;
-      // Respect the privacy model: a "friends"-visibility user's RSVPs are only
-      // visible to accounts they follow back. Default is friends.
-      const visibility = fd.activityPrivacy === "public" ? "public" : "friends";
-      if (visibility === "friends" && !(await db.doc(`users/${f.id}/following/${uid}`).get()).exists) continue;
+      // Only accepted friends enter the social ranking signal. Legacy follows
+      // and a profile's old public flag confer no location access.
       for (const eid of (Array.isArray(fd.rsvpEventIDs) ? fd.rsvpEventIDs : [])) {
         const k = String(eid);
         friendsGoing[k] = (friendsGoing[k] ?? 0) + 1;
@@ -275,8 +427,44 @@ export async function loadContext(uid: string, lat?: number, lng?: number, nowMs
     }
   }
 
-  return { interests, attendedCategories, friendsGoing, recentOrganizers: {}, lat, lng, nowMs };
+  const feedback = typeof u.eventFeedback === "object" && u.eventFeedback !== null ? u.eventFeedback : {};
+  return { interests, studentStatus: u.studentStatus === true, school: safeText(u.school, 100),
+    attendedCategories, attendedOrganizers, weekendAttendanceRatio: totalAttended ? weekendAttended / totalAttended : undefined,
+    savedEventIDs: Array.isArray(u.savedEventIDs) ? u.savedEventIDs.slice(-500) : [], eventFeedback: feedback,
+    friendsGoing, recentOrganizers: {}, lat, lng, nowMs };
 }
+
+/** Explicit and implicit event signals. The bounded map lives on the profile
+ * already read for ranking, so feedback does not add a per-feed query. */
+export const recordEventFeedback = onCall(async (req) => {
+  const uid = requireUid(req.auth);
+  await enforceRateLimit(uid, "recordEventFeedback");
+  const eventId = safeText(req.data?.eventId, 180);
+  const kind = safeText(req.data?.kind, 10);
+  if (!eventId || eventId.includes("/") || !["more", "less", "view"].includes(kind)) {
+    throw new HttpsError("invalid-argument", "Invalid event feedback.");
+  }
+  const event = await db.collection("events").doc(eventId).get();
+  if (!event.exists || event.data()?.hidden === true || event.data()?.broadcast !== true) {
+    throw new HttpsError("not-found", "Event unavailable.");
+  }
+  const ref = db.collection("users").doc(uid);
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const existing = snap.data()?.eventFeedback;
+    const rows: Record<string, { category?: string; organizer?: string; kind: string; atMs: number }> =
+      typeof existing === "object" && existing !== null ? { ...existing } : {};
+    if (kind === "view" && (rows[eventId]?.kind === "more" || rows[eventId]?.kind === "less")) return;
+    rows[eventId] = {
+      category: safeText(event.data()?.category, 50), organizer: safeText(event.data()?.organizer, 100),
+      kind, atMs: Date.now(),
+    };
+    const ids = Object.keys(rows).sort((a, b) => rows[b].atMs - rows[a].atMs);
+    for (const stale of ids.slice(100)) delete rows[stale];
+    tx.set(ref, { eventFeedback: rows }, { merge: true });
+  });
+  return { recorded: true };
+});
 
 /**
  * Rank the area's upcoming events for one user.
@@ -288,31 +476,19 @@ export async function loadContext(uid: string, lat?: number, lng?: number, nowMs
 export async function recommendFor(
   uid: string, areaId: string, lat?: number, lng?: number, limit = 50, nowMs = Date.now(),
 ): Promise<ScoredEvent[]> {
-  const snap = await db.collection("events")
-    .where("areaId", "==", areaId)
-    .where("active", "==", true)
-    .limit(MAX_CANDIDATES)
-    .get();
-
-  const ctx = await loadContext(uid, lat, lng, nowMs);
-  const candidates: RankableEvent[] = snap.docs
-    .filter((d) => d.data()?.hidden !== true)
-    .map((d) => {
-      const x = d.data();
-      const ms = (x.date as Timestamp)?.toMillis?.() ?? 0;
-      return {
-        id: d.id, category: x.category, organizer: x.organizer,
-        latitude: typeof x.latitude === "number" ? x.latitude : undefined,
-        longitude: typeof x.longitude === "number" ? x.longitude : undefined,
-        startMs: ms,
-        tags: Array.isArray(x.tags) ? x.tags : [],
-      };
-    })
-    // The ONLY exclusion in this file, and it is not personalization: an event
-    // that already happened cannot be attended. Everything else is ranked.
-    .filter((e) => e.startMs >= nowMs);
-
-  return rankEvents(candidates, ctx).slice(0, limit);
+  const [ctx, shared] = await Promise.all([
+    loadContext(uid, lat, lng, nowMs), areaCandidates(areaId, nowMs),
+  ]);
+  const candidates = new Map(shared.filter((ev) => ev.startMs >= nowMs).map((ev) => [ev.id, ev]));
+  // Social candidates bypass the area and category sweeps; a friend going is
+  // useful even when the event is far away or outside stated interests.
+  const socialIds = Object.keys(ctx.friendsGoing).slice(0, 60);
+  const socialDocs = await Promise.all(socialIds.map((id) => db.collection("events").doc(id).get()));
+  for (const doc of socialDocs) {
+    const ev = rankableFromDoc(doc);
+    if (ev && ev.startMs >= nowMs) candidates.set(ev.id, ev);
+  }
+  return rankEvents(Array.from(candidates.values()), ctx).slice(0, limit);
 }
 
 export const recommendedEvents = onCall(async (req) => {
@@ -320,6 +496,7 @@ export const recommendedEvents = onCall(async (req) => {
   await enforceRateLimit(uid, "recommendedEvents");
 
   const areaId = safeText(req.data?.areaId, 60) || "san-jose-ca";
+  if (areaId.includes("/")) throw new HttpsError("invalid-argument", "Invalid area.");
   const lat = Number(req.data?.lat);
   const lng = Number(req.data?.lng);
   const hasLoc = Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;

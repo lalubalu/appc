@@ -10,6 +10,9 @@ struct OnboardingView: View {
     @State private var userName = ""
     @State private var userEmail = ""
     @State private var userPassword = ""
+    @State private var birthDate = Calendar.current.date(byAdding: .year, value: -18, to: Date()) ?? Date()
+    @State private var isStudent = false
+    @State private var school = ""
     @State private var isSignUp = true
     @State private var showPasswordField = false
     @State private var animateIn = false
@@ -262,6 +265,12 @@ struct OnboardingView: View {
                 if isSignUp {
                     ClayField(placeholder: "Your name", text: $userName, contentType: .name)
                         .transition(.move(edge: .top).combined(with: .opacity))
+                    DatePicker("Date of birth", selection: $birthDate,
+                               in: ...Calendar.current.date(byAdding: .year, value: -13, to: Date())!,
+                               displayedComponents: .date)
+                        .font(VType.body(14))
+                    Toggle("I'm a student", isOn: $isStudent)
+                    if isStudent { ClayField(placeholder: "School (optional)", text: $school) }
                 }
                 ClayField(placeholder: "Email address", text: $userEmail,
                           contentType: .emailAddress, keyboard: .emailAddress, autocap: false)
@@ -320,7 +329,9 @@ struct OnboardingView: View {
                     try await authService.signUp(
                         email: userEmail.trimmingCharacters(in: .whitespaces),
                         password: userPassword,
-                        displayName: userName.trimmingCharacters(in: .whitespaces))
+                        displayName: userName.trimmingCharacters(in: .whitespaces),
+                        birthYear: Calendar.current.component(.year, from: birthDate),
+                        studentStatus: isStudent, school: school)
                 } else {
                     try await authService.signIn(
                         email: userEmail.trimmingCharacters(in: .whitespaces),

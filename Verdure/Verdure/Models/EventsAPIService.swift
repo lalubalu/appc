@@ -25,6 +25,11 @@ final class EventsAPIService {
     // MARK: - Published State
 
     var events: [Event] = []
+    private(set) var rankedEventIDs: [String] = []
+    private(set) var everythingEvents: [Event] = []
+    private(set) var everythingHasMore = true
+    private(set) var everythingLoading = false
+    private(set) var everythingError: String?
     var isLoading = false
     var lastError: String? = nil
     /// Set when the user is outside every launch area — the honest reason the
@@ -44,7 +49,10 @@ final class EventsAPIService {
     private let fetchCooldown: TimeInterval = 300
     /// The whole upcoming corpus for a launch area comfortably fits; filtering
     /// (radius, category, free/paid, search) happens locally with no network.
-    private let maxEvents = 600
+    private let maxEvents = 80
+    private var everythingCursor: DocumentSnapshot?
+    private var everythingAreaId: String?
+    private var everythingStartAt = Date()
 
     // Cache
     private let cacheKey = "cachedEventsJSON.v2"
@@ -72,6 +80,7 @@ final class EventsAPIService {
         if let cached = cachedCenter, let last = lastFetchDate,
            Date().timeIntervalSince(last) < fetchCooldown,
            distance(cached, center) < 5000 {
+            if rankedEventIDs.isEmpty { await fetchPersonalized(around: center) }
             return
         }
 
@@ -95,6 +104,84 @@ final class EventsAPIService {
             self.lastFetchDate = Date()
             self.isLoading = false
         }.value
+        await fetchPersonalized(around: center)
+    }
+
+    /// Rank against the server's bounded area snapshot. The first ten missing
+    /// records are fetched by ID so a social pick outside the initial time page
+    /// still has a real, tappable card on the phone.
+    private func fetchPersonalized(around center: CLLocationCoordinate2D) async {
+        guard !QAData.offline, Auth.auth().currentUser != nil else { return }
+        do {
+            let area = LaunchArea.nearest(to: center, in: launchAreas)?.id ?? "san-jose-ca"
+            let data = try await Functions.functions().httpsCallable("recommendedEvents").call([
+                "areaId": area, "lat": center.latitude, "lng": center.longitude, "limit": 50,
+            ]).data as? [String: Any] ?? [:]
+            let rows = data["events"] as? [[String: Any]] ?? []
+            let ids = rows.compactMap { $0["id"] as? String }
+            for id in ids.prefix(10) where !events.contains(where: { $0.id == id }) {
+                if let event = await event(withID: id) { events.append(event) }
+            }
+            rankedEventIDs = ids
+        } catch {
+            // A local event list still works while Functions are unavailable.
+            rankedEventIDs = []
+        }
+    }
+
+    /// Feedback is server-owned and affects the next ranked feed. The view
+    /// signal is weak; explicit more/less choices are stronger.
+    func recordFeedback(for eventID: String, kind: String) async {
+        guard !QAData.offline, Auth.auth().currentUser != nil else { return }
+        do {
+            _ = try await Functions.functions().httpsCallable("recordEventFeedback")
+                .call(["eventId": eventID, "kind": kind])
+            if kind != "view" { await fetchPersonalized(around: cachedCenter ?? LaunchArea.builtIn[0].center) }
+        } catch {
+            print("[EventsAPI] feedback failed: \(error.localizedDescription)")
+        }
+    }
+
+    /// Date-cursor paging over the entire broadcast corpus for the nearest
+    /// launch area. Filters are applied to accumulated pages in EventsView.
+    /// A page costs at most 40 document reads, even with 9,000 indexed events.
+    func loadEverythingPage(around center: CLLocationCoordinate2D, reset: Bool = false) async {
+        if QAData.offline {
+            everythingEvents = events.sorted { $0.date < $1.date }
+            everythingHasMore = false
+            return
+        }
+        let area = LaunchArea.nearest(to: center, in: launchAreas)?.id ?? "san-jose-ca"
+        if reset || everythingAreaId != area {
+            everythingEvents = []
+            everythingCursor = nil
+            everythingHasMore = true
+            everythingAreaId = area
+            everythingStartAt = Date()
+        }
+        guard everythingHasMore, !everythingLoading else { return }
+        everythingLoading = true
+        everythingError = nil
+        defer { everythingLoading = false }
+        do {
+            var query: Query = db.collection("events")
+                .whereField("hidden", isEqualTo: false)
+                .whereField("active", isEqualTo: true)
+                .whereField("broadcast", isEqualTo: true)
+                .whereField("areaId", isEqualTo: area)
+                .whereField("date", isGreaterThanOrEqualTo: Timestamp(date: everythingStartAt))
+                .order(by: "date")
+                .limit(to: 40)
+            if let everythingCursor { query = query.start(afterDocument: everythingCursor) }
+            let page = try await query.getDocuments()
+            everythingCursor = page.documents.last
+            everythingHasMore = page.documents.count == 40
+            let seen = Set(everythingEvents.map(\.id))
+            everythingEvents.append(contentsOf: page.documents.compactMap { Self.mapFirestoreDocument($0) }
+                .filter { !seen.contains($0.id) })
+        } catch {
+            everythingError = "Couldn't load more events. Try again."
+        }
     }
 
     /// Force refresh, ignoring cooldown.
@@ -316,7 +403,18 @@ final class EventsAPIService {
             tags: tags,
             areaId: data["areaId"] as? String,
             organizerId: data["organizerId"] as? String,
-            isBroadcast: (data["broadcast"] as? Bool) ?? true
+            isBroadcast: (data["broadcast"] as? Bool) ?? true,
+            expectedSize: data["expectedSize"] as? Int,
+            indoorOutdoor: data["indoorOutdoor"] as? String,
+            ageSuitability: data["ageSuitability"] as? String,
+            minimumAge: data["minimumAge"] as? Int,
+            maximumAge: data["maximumAge"] as? Int,
+            accessibilityFeatures: data["accessibilityFeatures"] as? [String] ?? [],
+            publicVenue: data["publicVenue"] as? Bool,
+            recurring: data["recurring"] as? Bool,
+            virtual: data["virtual"] as? Bool,
+            applicationDeadline: (data["applicationDeadline"] as? Timestamp)?.dateValue(),
+            opportunitySubtype: data["opportunitySubtype"] as? String
         )
     }
 
@@ -419,6 +517,17 @@ private struct CachedEvent: Codable {
     let areaId: String?
     let organizerId: String?
     let isBroadcast: Bool?
+    let expectedSize: Int?
+    let indoorOutdoor: String?
+    let ageSuitability: String?
+    let minimumAge: Int?
+    let maximumAge: Int?
+    let accessibilityFeatures: [String]?
+    let publicVenue: Bool?
+    let recurring: Bool?
+    let virtual: Bool?
+    let applicationDeadline: TimeInterval?
+    let opportunitySubtype: String?
 
     init(from event: Event) {
         id = event.id; title = event.title; organizer = event.organizer
@@ -431,6 +540,12 @@ private struct CachedEvent: Codable {
         source = event.source; sourceCount = event.sourceCount; isFree = event.isFree
         priceMin = event.priceMin; imageURL = event.imageURL; tags = event.tags
         areaId = event.areaId; organizerId = event.organizerId; isBroadcast = event.isBroadcast
+        expectedSize = event.expectedSize; indoorOutdoor = event.indoorOutdoor
+        ageSuitability = event.ageSuitability; minimumAge = event.minimumAge; maximumAge = event.maximumAge
+        accessibilityFeatures = event.accessibilityFeatures; publicVenue = event.publicVenue
+        recurring = event.recurring; virtual = event.virtual
+        applicationDeadline = event.applicationDeadline?.timeIntervalSince1970
+        opportunitySubtype = event.opportunitySubtype
     }
 
     func toEvent() -> Event {
@@ -444,7 +559,13 @@ private struct CachedEvent: Codable {
             latitude: latitude, longitude: longitude,
             source: source ?? "community", sourceCount: sourceCount ?? 1, isFree: isFree,
             priceMin: priceMin, imageURL: imageURL, tags: tags ?? [],
-            areaId: areaId, organizerId: organizerId, isBroadcast: isBroadcast ?? true)
+            areaId: areaId, organizerId: organizerId, isBroadcast: isBroadcast ?? true,
+            expectedSize: expectedSize, indoorOutdoor: indoorOutdoor, ageSuitability: ageSuitability,
+            minimumAge: minimumAge, maximumAge: maximumAge,
+            accessibilityFeatures: accessibilityFeatures ?? [], publicVenue: publicVenue,
+            recurring: recurring, virtual: virtual,
+            applicationDeadline: applicationDeadline.map { Date(timeIntervalSince1970: $0) },
+            opportunitySubtype: opportunitySubtype)
     }
 }
 

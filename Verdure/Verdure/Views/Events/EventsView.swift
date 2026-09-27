@@ -3,6 +3,8 @@ import PhotosUI
 import CoreLocation
 
 struct EventsView: View {
+    private enum FeedMode: String, CaseIterable { case forYou = "For You", everything = "Everything" }
+    @State private var feedMode: FeedMode = .forYou
     @Environment(GameStateManager.self) private var gameState
     @Environment(LocationManager.self) private var locationManager
     @Environment(EventsAPIService.self) private var eventsService
@@ -39,6 +41,10 @@ struct EventsView: View {
     }
     /// Upcoming events matching the user's interests — soonest first, not yet attended.
     private var forYouEvents: [Event] {
+        if !eventsService.rankedEventIDs.isEmpty {
+            let byID = Dictionary(uniqueKeysWithValues: sourceEvents.map { ($0.id, $0) })
+            return Array(eventsService.rankedEventIDs.compactMap { byID[$0] }.prefix(6))
+        }
         guard !preferredEventCategories.isEmpty else { return [] }
         let cutoff = Date().addingTimeInterval(-3600)
         return sourceEvents
@@ -56,7 +62,22 @@ struct EventsView: View {
     /// Events shown in the deck/timeline. A category filter never blanks the screen —
     /// it falls back to all events; only an explicit text search can yield a true "no match".
     private var displayEvents: [Event] {
-        (filteredEvents.isEmpty && !hasActiveSearch) ? sourceEvents : filteredEvents
+        let base = (filteredEvents.isEmpty && !hasActiveSearch) ? sourceEvents : filteredEvents
+        guard !eventsService.rankedEventIDs.isEmpty else { return base }
+        let order = Dictionary(uniqueKeysWithValues: eventsService.rankedEventIDs.enumerated().map { ($0.element, $0.offset) })
+        // Keep local cards outside the server's top 50 reachable. Ranking is
+        // an order, not a hidden filter; Everything remains chronological.
+        return base.sorted { left, right in
+            let a = order[left.id] ?? Int.max
+            let b = order[right.id] ?? Int.max
+            return a == b ? left.date < right.date : a < b
+        }
+    }
+    private var everythingFiltered: [Event] {
+        var state = filters.state
+        state.eventSort = .soonest
+        return DiscoveryFilters.filterEvents(eventsService.everythingEvents, state: state,
+                                             query: searchText, userLocation: locationManager.userLocation)
     }
     /// True when the selected category had no events and we fell back to showing all.
     private var categoryFellBack: Bool {
@@ -70,11 +91,16 @@ struct EventsView: View {
         NavigationStack {
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: Spacing.xl) {
-                    kineticHero.dramaticRise(index: 0)
+                    feedModePicker
                     if let notice = eventsService.coverageNotice { coverageBanner(notice) }
-                    if !sourceEvents.isEmpty { forYouSection.dramaticRise(index: 1) }
-                    posterDeck.dramaticRise(index: 2)
-                    upcomingTimeline.dramaticRise(index: 3)
+                    if feedMode == .forYou {
+                        kineticHero.dramaticRise(index: 0)
+                        if !sourceEvents.isEmpty { forYouSection.dramaticRise(index: 1) }
+                        posterDeck.dramaticRise(index: 2)
+                        upcomingTimeline.dramaticRise(index: 3)
+                    } else {
+                        everythingSection
+                    }
                 }
                 .padding(.top, Spacing.sm)
                 .padding(.bottom, 110)
@@ -88,13 +114,25 @@ struct EventsView: View {
                 AccessibilityNotification.Announcement("\(count) \(count == 1 ? "event" : "events")").post()
             }
             .refreshable {
-                await eventsService.refresh(around: locationManager.userCoordinate)
-                await social.loadFriendsGoing(for: displayEvents.prefix(50).map(\.id), force: true)
+                if feedMode == .everything {
+                    await eventsService.loadEverythingPage(around: locationManager.userCoordinate, reset: true)
+                } else {
+                    await eventsService.refresh(around: locationManager.userCoordinate)
+                    await social.loadFriendsGoing(for: displayEvents.prefix(50).map(\.id), force: true)
+                }
             }
             .task {
                 await eventsService.fetchNearbyEvents(around: locationManager.userCoordinate,
                                                       followedOrganizerIDs: social.followedOrganizerIDs)
                 await social.loadFriendsGoing(for: displayEvents.prefix(50).map(\.id))
+                if feedMode == .everything {
+                    await eventsService.loadEverythingPage(around: locationManager.userCoordinate)
+                }
+            }
+            .onChange(of: feedMode) { _, mode in
+                if mode == .everything {
+                    Task { await eventsService.loadEverythingPage(around: locationManager.userCoordinate) }
+                }
             }
             .sheet(item: $selectedEvent) { event in
                 EventDetailSheet(event: event, dateFormatter: dateFormatter)
@@ -120,6 +158,74 @@ struct EventsView: View {
         }
     }
 
+    private var feedModePicker: some View {
+        Picker("Discovery mode", selection: $feedMode) {
+            ForEach(FeedMode.allCases, id: \.self) { mode in Text(mode.rawValue).tag(mode) }
+        }
+        .pickerStyle(.segmented)
+        .padding(.horizontal, Spacing.md)
+        .padding(.top, Spacing.sm)
+        .accessibilityLabel("Choose ranked recommendations or all indexed events")
+    }
+
+    private var everythingSection: some View {
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            HStack(alignment: .bottom) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Everything nearby")
+                        .font(VType.display(28, .semibold)).foregroundStyle(Palette.ink)
+                    Text("All indexed public events, in time order. Load more to keep browsing.")
+                        .font(VType.body(12)).foregroundStyle(Palette.inkSoft)
+                }
+                Spacer()
+                FilterButton(mode: .events)
+            }
+            Text("\(everythingFiltered.count) shown from \(eventsService.everythingEvents.count) loaded")
+                .font(VType.body(12, .medium)).foregroundStyle(Palette.inkSoft)
+            if everythingFiltered.isEmpty && !eventsService.everythingLoading {
+                EmptyStateCard(icon: "calendar.badge.exclamationmark", title: "No events on this page",
+                               message: eventsService.everythingHasMore
+                               ? "Try loading more or widening your filters."
+                               : "There are no more matching public events in this launch area.")
+            }
+            LazyVStack(spacing: Spacing.sm) {
+                ForEach(everythingFiltered) { event in
+                    Button { selectedEvent = event } label: {
+                        HStack(alignment: .top, spacing: Spacing.md) {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(event.date.formatted(date: .abbreviated, time: .shortened))
+                                    .font(VType.body(11, .bold)).foregroundStyle(Palette.spruce.base)
+                                Text(event.title).font(VType.display(19, .semibold)).foregroundStyle(Palette.ink)
+                                Text("\(event.locationName) · \(event.sourceLabel)")
+                                    .font(VType.body(12)).foregroundStyle(Palette.inkSoft)
+                            }
+                            Spacer()
+                            Image(systemName: "arrow.up.right").foregroundStyle(Palette.spruce.base)
+                        }
+                        .padding(Spacing.md)
+                        .claySurface(.surface, radius: Radius.md, elevation: 0.4)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            if let error = eventsService.everythingError {
+                Text(error).font(VType.body(12)).foregroundStyle(Palette.danger)
+            }
+            if eventsService.everythingHasMore {
+                Button {
+                    Task { await eventsService.loadEverythingPage(around: locationManager.userCoordinate) }
+                } label: {
+                    Text(eventsService.everythingLoading ? "Loading…" : "Load more events")
+                        .font(VType.body(14, .semibold)).foregroundStyle(Palette.spruce.base)
+                        .frame(maxWidth: .infinity).padding(Spacing.md)
+                        .claySurface(.surface, radius: Radius.sm, elevation: 0.4)
+                }
+                .disabled(eventsService.everythingLoading)
+            }
+        }
+        .padding(.horizontal, Spacing.md)
+    }
+
     // MARK: - Coverage (launch areas)
 
     /// Events are ingested only for launch areas. Someone opening the app
@@ -143,7 +249,7 @@ struct EventsView: View {
 
     @ViewBuilder
     private var forYouSection: some View {
-        if interests.isEmpty {
+        if interests.isEmpty && eventsService.rankedEventIDs.isEmpty {
             // No interests picked yet → invite personalization.
             Button { Haptics.tap(); showInterestPicker = true } label: {
                 HStack(spacing: Spacing.md) {
@@ -187,7 +293,7 @@ struct EventsView: View {
                 }
                 .padding(.horizontal, Spacing.md)
 
-                Text("Picked from your interests")
+                Text("Picked for your plans")
                     .font(VType.body(12, .medium)).foregroundStyle(Palette.inkFaint)
                     .padding(.horizontal, Spacing.md)
 
@@ -584,6 +690,18 @@ private struct TimelineRow: View {
 // MARK: - Create event sheet
 
 private struct CreateEventSheet: View {
+    private struct AccessOption: Identifiable {
+        let id: String
+        let title: String
+    }
+    private let accessOptions = [
+        AccessOption(id: "stepFree", title: "Step-free access"),
+        AccessOption(id: "accessibleRestroom", title: "Accessible restroom"),
+        AccessOption(id: "seating", title: "Seating"),
+        AccessOption(id: "quietSpace", title: "Quiet space"),
+        AccessOption(id: "asl", title: "ASL"),
+        AccessOption(id: "captions", title: "Captions"),
+    ]
     @Environment(EventsAPIService.self) private var eventsService
     @Environment(\.dismiss) private var dismiss
     @State private var title = ""
@@ -598,6 +716,17 @@ private struct CreateEventSheet: View {
     @State private var endTime = Calendar.current.date(byAdding: .hour, value: 2, to: Date())!
     @State private var category: EventCategory = .meetup
     @State private var maxAttendees = ""
+    @State private var expectedSize = ""
+    @State private var indoorOutdoor = "unknown"
+    @State private var ageSuitability = "unknown"
+    @State private var minimumAge = ""
+    @State private var maximumAge = ""
+    @State private var accessibilityFeatures: Set<String> = []
+    @State private var publicVenue = false
+    @State private var recurring = false
+    @State private var virtual = false
+    @State private var hasDeadline = false
+    @State private var applicationDeadline = Date()
     @State private var isSubmitting = false
     @State private var errorMessage: String?
 
@@ -648,6 +777,7 @@ private struct CreateEventSheet: View {
                     labeled("MAX ATTENDEES (OPTIONAL)") {
                         ClayField(placeholder: "Leave empty for unlimited", text: $maxAttendees, keyboard: .numberPad)
                     }
+                    eventDetailsFields
                     pointsInfo
                     if let error = errorMessage {
                         Text(error).font(VType.body(12, .medium)).foregroundStyle(Palette.danger)
@@ -666,6 +796,55 @@ private struct CreateEventSheet: View {
                 }
             }
         }
+    }
+
+    private var eventDetailsFields: some View {
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            Text("Good to know before going")
+                .font(VType.display(21, .semibold)).foregroundStyle(Palette.ink)
+            labeled("EXPECTED GROUP SIZE (OPTIONAL)") {
+                ClayField(placeholder: "About how many people?", text: $expectedSize, keyboard: .numberPad)
+            }
+            Picker("Setting", selection: $indoorOutdoor) {
+                Text("Not sure").tag("unknown")
+                Text("Indoors").tag("indoor")
+                Text("Outdoors").tag("outdoor")
+                Text("Both").tag("mixed")
+            }.pickerStyle(.menu)
+            Picker("Age suitability", selection: $ageSuitability) {
+                Text("Not specified").tag("unknown")
+                Text("All ages").tag("all")
+                Text("Children").tag("children")
+                Text("Teens").tag("teens")
+                Text("Adults").tag("adults")
+            }.pickerStyle(.menu)
+            HStack(spacing: Spacing.sm) {
+                ClayField(placeholder: "Min age", text: $minimumAge, keyboard: .numberPad)
+                ClayField(placeholder: "Max age", text: $maximumAge, keyboard: .numberPad)
+            }
+            Toggle("At a public venue", isOn: $publicVenue)
+            Toggle("Virtual option", isOn: $virtual)
+            Toggle("Recurring event", isOn: $recurring)
+            Text("Accessibility available")
+                .font(VType.body(13, .semibold)).foregroundStyle(Palette.ink)
+            ForEach(accessOptions) { option in
+                Toggle(option.title, isOn: Binding(
+                    get: { accessibilityFeatures.contains(option.id) },
+                    set: { on in if on { accessibilityFeatures.insert(option.id) } else { accessibilityFeatures.remove(option.id) } }
+                ))
+            }
+            if category == .volunteer || category == .workshop {
+                Toggle("Applications close before the event", isOn: $hasDeadline)
+                if hasDeadline {
+                    DatePicker("Application deadline", selection: $applicationDeadline,
+                               in: ...startDate, displayedComponents: [.date, .hourAndMinute])
+                }
+            }
+        }
+        .font(VType.body(14))
+        .tint(Palette.spruce.base)
+        .padding(Spacing.md)
+        .claySurface(.surface, radius: Radius.md, elevation: 0.35)
     }
 
     private func labeled<Content: View>(_ label: String, @ViewBuilder content: () -> Content) -> some View {
@@ -736,7 +915,13 @@ private struct CreateEventSheet: View {
         let result = await social.createEvent(
             title: title, description: description, locationName: locationName, time: timeString,
             start: startDate, category: category, maxAttendees: Int(maxAttendees), isFree: isFree,
-            latitude: coord?.latitude, longitude: coord?.longitude, website: website)
+            latitude: coord?.latitude, longitude: coord?.longitude, website: website,
+            expectedSize: Int(expectedSize), indoorOutdoor: indoorOutdoor, ageSuitability: ageSuitability,
+            accessibilityFeatures: Array(accessibilityFeatures), publicVenue: publicVenue,
+            minimumAge: Int(minimumAge), maximumAge: Int(maximumAge),
+            applicationDeadline: hasDeadline ? applicationDeadline : nil,
+            recurring: recurring, virtual: virtual,
+            opportunitySubtype: category == .volunteer ? "volunteer" : category == .workshop ? "workshop" : nil)
         isSubmitting = false
         if let result {
             Haptics.success()
@@ -758,6 +943,7 @@ private struct CreateEventSheet: View {
 struct EventDetailSheet: View {
     let event: Event
     let dateFormatter: DateFormatter
+    @Environment(EventsAPIService.self) private var eventsService
     @Environment(GameStateManager.self) private var gameState
     @Environment(LocationManager.self) private var locationManager
     @Environment(\.openURL) private var openURL
@@ -770,6 +956,7 @@ struct EventDetailSheet: View {
     /// best-effort geocode of the location name (nil → proximity can't be verified).
     @State private var venueCoordinate: CLLocationCoordinate2D? = nil
     @State private var geocodeFinished = false
+    @State private var feedbackChoice: String? = nil
 
     private var isCheckedIn: Bool { gameState.isCheckedIn(event.id) }
     private var kind: ClayStyle.ClayAccentKind { event.category.clayKind }
@@ -824,6 +1011,8 @@ struct EventDetailSheet: View {
                                     .claySurface(.surface, radius: Radius.md)
                             }
                             detailGrid
+                            practicalDetails
+                            feedbackControls
                             goingSection
                             checkInSection
                             ClayButton("Get Directions", systemImage: "arrow.triangle.turn.up.right.diamond.fill",
@@ -869,6 +1058,7 @@ struct EventDetailSheet: View {
                 }
                 geocodeFinished = true
                 locationManager.startUpdating()
+                await eventsService.recordFeedback(for: event.id, kind: "view")
             }
         }
     }
@@ -898,6 +1088,58 @@ struct EventDetailSheet: View {
                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Radius.chip))
             }
             .padding(12)
+        }
+    }
+
+    private var feedbackControls: some View {
+        HStack(spacing: 10) {
+            ForEach(0..<2, id: \.self) { index in
+                let kind = index == 0 ? "more" : "less"
+                let title = index == 0 ? "More like this" : "Less like this"
+                let icon = index == 0 ? "hand.thumbsup" : "hand.thumbsdown"
+                Button {
+                    feedbackChoice = kind
+                    Task { await eventsService.recordFeedback(for: event.id, kind: kind) }
+                } label: {
+                    Label(title, systemImage: feedbackChoice == kind ? "\(icon).fill" : icon)
+                        .font(VType.body(12, .semibold))
+                        .foregroundStyle(feedbackChoice == kind ? Palette.spruce.base : Palette.inkSoft)
+                        .frame(maxWidth: .infinity).padding(.vertical, 12)
+                        .background(ClayBackground(style: .surface, radius: Radius.sm, elevation: 0.35))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var practicalDetails: some View {
+        let details: [String] = [
+            event.expectedSize.map { "Around \($0) people expected" },
+            event.indoorOutdoor.flatMap { $0 == "unknown" ? nil : $0.capitalized },
+            event.ageSuitability.flatMap { $0 == "unknown" ? nil : "Suitable for \($0 == "all" ? "all ages" : $0)" },
+            event.minimumAge.map { "Minimum age \($0)" },
+            event.maximumAge.map { "Maximum age \($0)" },
+            event.publicVenue == true ? "Public venue" : nil,
+            event.recurring == true ? "Recurring" : nil,
+            event.virtual == true ? "Virtual option" : nil,
+            event.applicationDeadline.map { "Apply by \($0.formatted(date: .abbreviated, time: .shortened))" },
+        ].compactMap { $0 }
+        if !details.isEmpty || !event.accessibilityFeatures.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Before you go").font(VType.display(18, .semibold)).foregroundStyle(Palette.ink)
+                ForEach(details, id: \.self) { detail in
+                    Label(detail, systemImage: "checkmark.circle")
+                        .font(VType.body(13)).foregroundStyle(Palette.inkSoft)
+                }
+                if !event.accessibilityFeatures.isEmpty {
+                    Text("Accessibility: \(event.accessibilityFeatures.map { $0 == "stepFree" ? "step-free" : $0 == "accessibleRestroom" ? "accessible restroom" : $0 == "quietSpace" ? "quiet space" : $0 }.joined(separator: ", "))")
+                        .font(VType.body(13)).foregroundStyle(Palette.inkSoft)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(Spacing.md)
+            .claySurface(.surface, radius: Radius.md, elevation: 0.35)
         }
     }
 

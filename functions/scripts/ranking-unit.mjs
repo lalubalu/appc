@@ -8,7 +8,7 @@
  */
 import {
   WEIGHTS, WEIGHT_SUM, rankEvents, scoreEvent, interestScore, distanceScore,
-  socialScore, timingScore, noveltyScore, haversineMiles, INTEREST_TO_CATEGORY,
+  socialScore, timingScore, noveltyScore, feedbackScore, haversineMiles, INTEREST_TO_CATEGORY,
 } from "../lib/ranking.js";
 
 let pass = 0, fail = 0;
@@ -67,6 +67,18 @@ console.log("\n── cold start ──");
   ok("cold start falls back to soon-and-nearby", out[0].id === "a", JSON.stringify(out.map((o) => o.id)));
   ok("unknown interests score neutral 0.5, not 0",
      interestScore(ev("a"), ctx) === 0.5);
+  const qualityChoice = rankEvents([
+    ev("thin", { qualityScore: 0.15 }),
+    ev("complete", { qualityScore: 0.95 }),
+  ], ctx);
+  ok("cold-start ranks a complete listing above an otherwise equal thin one",
+     qualityChoice[0].id === "complete", JSON.stringify(qualityChoice));
+  const workshop = ev("workshop", { category: "Workshop", organizer: "San Jose City College" });
+  ok("student mode raises a public workshop above a neutral event",
+     interestScore(workshop, { ...ctx, studentStatus: true }) > interestScore(ev("neutral"), { ...ctx, studentStatus: true }));
+  ok("a workshop at the student's school gets a stronger affinity",
+     interestScore(workshop, { ...ctx, studentStatus: true, school: "San Jose City College" }) >
+     interestScore(workshop, { ...ctx, studentStatus: true, school: "Other School" }));
 }
 
 console.log("\n── interest term ──");
@@ -77,6 +89,13 @@ console.log("\n── interest term ──");
      interestScore(ev("a", { category: "Sports" }), stated) === 0);
   ok("interest map covers every app interest with at least one category",
      Object.values(INTEREST_TO_CATEGORY).every((v) => Array.isArray(v) && v.length > 0));
+  const hiking = { ...baseCtx, interests: ["hiking"] };
+  ok("semantic interest matches a trail day without the word hiking",
+     interestScore(ev("trail", { category: "Volunteer", title: "Trail Day at Rancho San Antonio" }), hiking) > 0.8);
+  ok("semantic interest matches a nature walk without the word hiking",
+     interestScore(ev("walk", { category: "Meetup", title: "Guided Nature Walk" }), hiking) > 0.8);
+  ok("semantic match respects word boundaries",
+     interestScore(ev("noise", { category: "Meetup", title: "Parkitecture talk" }), hiking) === 0);
 
   // Behaviour overrides the onboarding tap.
   const contradicted = { ...baseCtx, interests: ["tech"], attendedCategories: { Cleanup: 4 } };
@@ -137,6 +156,30 @@ console.log("\n── timing term ──");
      timingScore(ev("a", { startMs: days(3) }), baseCtx) === 1 &&
      timingScore(ev("a", { startMs: days(3) }), baseCtx) > timingScore(ev("a", { startMs: days(0.2) }), baseCtx));
   ok("six weeks out is nearly weightless", timingScore(ev("a", { startMs: days(45) }), baseCtx) < 0.2);
+  ok("unreachable event starting in 30 minutes is strongly penalized",
+     timingScore(ev("far-soon", { startMs: NOW + 30 * 60_000, latitude: 38, longitude: -122 }), baseCtx) < 0.1);
+  ok("a weekend attendance pattern prefers weekend plans",
+     timingScore(ev("weekend", { startMs: days(6) }), { ...baseCtx, weekendAttendanceRatio: 1 }) >
+     timingScore(ev("weekday", { startMs: days(4) }), { ...baseCtx, weekendAttendanceRatio: 1 }));
+}
+
+console.log("\n── feedback term ──");
+{
+  const candidate = ev("feedback", { category: "Workshop", organizer: "Library" });
+  const neutral = feedbackScore(candidate, baseCtx);
+  ok("saved intent raises a score", feedbackScore(candidate, { ...baseCtx, savedEventIDs: ["feedback"] }) > neutral);
+  ok("two attended organizer events raise affinity",
+     feedbackScore(candidate, { ...baseCtx, attendedOrganizers: { Library: 2 } }) > neutral);
+  const less = { ...baseCtx, eventFeedback: { seenWorkshop: { category: "Workshop", kind: "less", atMs: NOW } } };
+  ok("less like this lowers matching category", feedbackScore(candidate, less) < neutral);
+  ok("dismissal fades to neutral after 90 days",
+     feedbackScore(candidate, { ...less, nowMs: NOW + 91 * 86_400_000 }) === neutral);
+  const more = { ...baseCtx, eventFeedback: { seenWorkshop: { category: "Workshop", kind: "more", atMs: NOW } } };
+  ok("more like this raises matching category", feedbackScore(candidate, more) > neutral);
+  ok("feedback changes the subsequent rank order", (() => {
+    const rows = [candidate, ev("other", { category: "Sports", organizer: "Parks" })];
+    return rankEvents(rows, less)[0].id === "other" && rankEvents(rows, more)[0].id === "feedback";
+  })());
 }
 
 console.log("\n── novelty + diversity ──");

@@ -23,10 +23,27 @@ struct FriendSummary: Identifiable, Hashable, Codable {
     }
 }
 
+struct FriendRequestSummary: Identifiable, Equatable {
+    let peerUid: String
+    let peerName: String
+    let fromUid: String
+    let toUid: String
+    let createdAt: Date?
+    var id: String { peerUid }
+}
+
 struct FriendsGoing: Equatable {
     let count: Int
     let friends: [FriendSummary]
     static let none = FriendsGoing(count: 0, friends: [])
+}
+
+struct FriendUpcomingEvent: Identifiable, Equatable {
+    let id: String
+    let title: String
+    let locationName: String
+    let startsAt: Date
+    let friendNames: [String]
 }
 
 struct EventInvite: Identifiable, Equatable {
@@ -82,10 +99,13 @@ final class SocialService {
     // MARK: - State
 
     private(set) var followingIDs: Set<String> = []
-    private(set) var friends: [FriendSummary] = []            // people I follow (kind == user)
+    private(set) var friends: [FriendSummary] = []            // accepted, two-sided friendships
+    private(set) var friendRequests: [FriendRequestSummary] = []
+    private(set) var friendInviteURL: URL?
     private(set) var followedOrganizerIDs: Set<String> = []
     private(set) var goingEventIDs: Set<String> = []
     private(set) var friendsGoingByEvent: [String: FriendsGoing] = [:]
+    private(set) var friendsUpcoming: [FriendUpcomingEvent] = []
     private(set) var invites: [EventInvite] = []
     private(set) var notifications: [ServerNotification] = []
     private(set) var organizer: OrganizerProfile? = nil
@@ -96,6 +116,10 @@ final class SocialService {
 
     var unreadNotificationCount: Int { notifications.filter { !$0.read }.count }
     var pendingInvites: [EventInvite] { invites.filter { $0.status == "pending" } }
+    var incomingFriendRequests: [FriendRequestSummary] {
+        guard let uid else { return [] }
+        return friendRequests.filter { $0.toUid == uid }
+    }
 
     private var db: Firestore { Firestore.firestore() }
     private var uid: String? { Auth.auth().currentUser?.uid }
@@ -109,6 +133,8 @@ final class SocialService {
         guard let uid else { clearLocal(); return }
         await withTaskGroup(of: Void.self) { group in
             group.addTask { await self.refreshFollowing(uid: uid) }
+            group.addTask { await self.refreshFriends(uid: uid) }
+            group.addTask { await self.refreshFriendRequests(uid: uid) }
             group.addTask { await self.refreshUserDoc(uid: uid) }
             group.addTask { await self.refreshInvites(uid: uid) }
             group.addTask { await self.refreshNotifications(uid: uid) }
@@ -117,25 +143,46 @@ final class SocialService {
     }
 
     func clearLocal() {
-        followingIDs = []; friends = []; followedOrganizerIDs = []; goingEventIDs = []
-        friendsGoingByEvent = [:]; invites = []; notifications = []; organizer = nil
+        followingIDs = []; friends = []; friendRequests = []; friendInviteURL = nil
+        followedOrganizerIDs = []; goingEventIDs = []
+        friendsGoingByEvent = [:]; friendsUpcoming = []; invites = []; notifications = []; organizer = nil
         followerCount = 0; followingCount = 0; activityPrivacy = "friends"
     }
 
     private func refreshFollowing(uid: String) async {
         do {
             let snap = try await db.collection("users").document(uid).collection("following").getDocuments()
-            var ids = Set<String>(); var people: [FriendSummary] = []; var orgs = Set<String>()
+            var ids = Set<String>(); var orgs = Set<String>()
             for d in snap.documents {
                 ids.insert(d.documentID)
                 let kind = (d.data()["kind"] as? String) ?? "user"
-                let name = Sanitize.text(d.data()["displayName"] as? String, max: 60).ifEmpty("A Verdure member")
                 if kind == "organizer" { orgs.insert(d.documentID) }
-                else { people.append(FriendSummary(uid: d.documentID, displayName: name, kind: kind)) }
             }
             followingIDs = ids
-            friends = people.sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
             followedOrganizerIDs = orgs
+        } catch { lastError = error.localizedDescription }
+    }
+
+    private func refreshFriends(uid: String) async {
+        do {
+            let snap = try await db.collection("users").document(uid).collection("friends").getDocuments()
+            friends = snap.documents.map { d in
+                FriendSummary(uid: d.documentID,
+                              displayName: Sanitize.text(d.data()["displayName"] as? String, max: 60).ifEmpty("Verdure member"))
+            }.sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+        } catch { lastError = error.localizedDescription }
+    }
+
+    private func refreshFriendRequests(uid: String) async {
+        do {
+            let snap = try await db.collection("users").document(uid).collection("friendRequests").getDocuments()
+            friendRequests = snap.documents.compactMap { d in
+                let x = d.data()
+                guard let from = x["fromUid"] as? String, let to = x["toUid"] as? String else { return nil }
+                return FriendRequestSummary(peerUid: d.documentID,
+                    peerName: Sanitize.text(x["peerName"] as? String, max: 60).ifEmpty("Verdure member"),
+                    fromUid: from, toUid: to, createdAt: (x["createdAt"] as? Timestamp)?.dateValue())
+            }
         } catch { lastError = error.localizedDescription }
     }
 
@@ -212,18 +259,18 @@ final class SocialService {
 
     @discardableResult
     func setFollowing(_ targetId: String, kind: String = "user", follow: Bool, displayName: String? = nil) async -> Bool {
+        guard kind == "organizer" else {
+            lastError = "People connect through mutual friend requests."
+            return false
+        }
         do {
             _ = try await Self.call("followUser", ["targetId": targetId, "kind": kind, "follow": follow])
             if follow {
                 followingIDs.insert(targetId)
                 if kind == "organizer" { followedOrganizerIDs.insert(targetId) }
-                else if !friends.contains(where: { $0.uid == targetId }) {
-                    friends.append(FriendSummary(uid: targetId, displayName: displayName ?? "A Verdure member", kind: kind))
-                }
                 followingCount += 1
             } else {
                 followingIDs.remove(targetId); followedOrganizerIDs.remove(targetId)
-                friends.removeAll { $0.uid == targetId }
                 followingCount = max(0, followingCount - 1)
             }
             return true
@@ -231,6 +278,61 @@ final class SocialService {
             lastError = error.localizedDescription
             return false
         }
+    }
+
+    // MARK: - Mutual friendships
+
+    func loadFriendInvite() async {
+        do {
+            let data = try await Self.call("myFriendInvite", [:])
+            friendInviteURL = (data["url"] as? String).flatMap(URL.init(string:))
+        } catch { lastError = error.localizedDescription }
+    }
+
+    @discardableResult
+    func sendFriendRequest(to targetUid: String, inviteToken: String? = nil) async -> Bool {
+        do {
+            var payload: [String: any Sendable] = ["targetUid": targetUid]
+            if let inviteToken { payload["inviteToken"] = inviteToken }
+            let data = try await Self.call("sendFriendRequest", payload)
+            if data["changed"] as? Bool == true {
+                Analytics.log(event: .inviteSent, params: ["kind": "friend_request"])
+            }
+            if let uid { await refreshFriendRequests(uid: uid) }
+            return true
+        } catch { lastError = error.localizedDescription; return false }
+    }
+
+    @discardableResult
+    func respondToFriendRequest(from peerUid: String, accept: Bool) async -> Bool {
+        do {
+            _ = try await Self.call("respondToFriendRequest", ["fromUid": peerUid, "accept": accept])
+            if accept { Analytics.log(event: .inviteAccepted, params: ["kind": "friend_request"]) }
+            if let uid {
+                await refreshFriendRequests(uid: uid)
+                await refreshFriends(uid: uid)
+            }
+            return true
+        } catch { lastError = error.localizedDescription; return false }
+    }
+
+    @discardableResult
+    func removeFriend(_ peerUid: String) async -> Bool {
+        do {
+            _ = try await Self.call("removeFriend", ["peerUid": peerUid])
+            if let uid { await refreshFriends(uid: uid) }
+            return true
+        } catch { lastError = error.localizedDescription; return false }
+    }
+
+    func findFriend(username: String) async -> FriendSummary? {
+        do {
+            let data = try await Self.call("findFriendByUsername", ["username": username])
+            guard let person = data["member"] as? [String: Any],
+                  let id = person["uid"] as? String else { return nil }
+            return FriendSummary(uid: id,
+                displayName: Sanitize.text(person["displayName"] as? String, max: 60).ifEmpty("Verdure member"))
+        } catch { lastError = error.localizedDescription; return nil }
     }
 
     // MARK: - Going / RSVP
@@ -282,6 +384,23 @@ final class SocialService {
                 }
                 friendsGoingByEvent[id] = FriendsGoing(count: entry?["count"] as? Int ?? people.count, friends: people)
                 friendsGoingFetchedAt[id] = now
+            }
+        } catch { lastError = error.localizedDescription }
+    }
+
+    func loadFriendsUpcoming() async {
+        guard uid != nil else { friendsUpcoming = []; return }
+        do {
+            let data = try await Self.call("friendsUpcoming", [:])
+            let raw = data["events"] as? [[String: Any]] ?? []
+            friendsUpcoming = raw.compactMap { item in
+                guard let id = item["id"] as? String,
+                      let ms = (item["startsAt"] as? NSNumber)?.doubleValue else { return nil }
+                return FriendUpcomingEvent(id: id,
+                    title: Sanitize.text(item["title"] as? String, max: 120),
+                    locationName: Sanitize.text(item["locationName"] as? String, max: 100),
+                    startsAt: Date(timeIntervalSince1970: ms / 1000),
+                    friendNames: (item["friends"] as? [String] ?? []).map { Sanitize.text($0, max: 60) })
             }
         } catch { lastError = error.localizedDescription }
     }
@@ -350,14 +469,26 @@ final class SocialService {
     /// Publish an event as the organizer. Returns (eventId, broadcast) or nil.
     func createEvent(title: String, description: String, locationName: String, time: String,
                      start: Date, category: EventCategory, maxAttendees: Int?, isFree: Bool,
-                     latitude: Double?, longitude: Double?, website: String?) async -> (id: String, broadcast: Bool)? {
+                     latitude: Double?, longitude: Double?, website: String?,
+                     expectedSize: Int?, indoorOutdoor: String, ageSuitability: String,
+                     accessibilityFeatures: [String], publicVenue: Bool,
+                     minimumAge: Int?, maximumAge: Int?, applicationDeadline: Date?,
+                     recurring: Bool, virtual: Bool, opportunitySubtype: String?) async -> (id: String, broadcast: Bool)? {
         var payload: [String: any Sendable] = [
             "title": title, "description": description, "locationName": locationName, "time": time,
             "startMs": Int(start.timeIntervalSince1970 * 1000), "category": category.rawValue, "isFree": isFree,
+            "indoorOutdoor": indoorOutdoor, "ageSuitability": ageSuitability,
+            "accessibilityFeatures": accessibilityFeatures, "publicVenue": publicVenue,
+            "recurring": recurring, "virtual": virtual,
         ]
         if let maxAttendees { payload["maxAttendees"] = maxAttendees }
         if let latitude, let longitude { payload["latitude"] = latitude; payload["longitude"] = longitude }
         if let website, !website.isEmpty { payload["website"] = website }
+        if let expectedSize { payload["expectedSize"] = expectedSize }
+        if let minimumAge { payload["minimumAge"] = minimumAge }
+        if let maximumAge { payload["maximumAge"] = maximumAge }
+        if let applicationDeadline { payload["applicationDeadlineMs"] = Int(applicationDeadline.timeIntervalSince1970 * 1000) }
+        if let opportunitySubtype { payload["opportunitySubtype"] = opportunitySubtype }
         do {
             let data = try await Self.call("createEvent", payload)
             guard let id = data["eventId"] as? String else { return nil }

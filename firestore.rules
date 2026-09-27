@@ -75,6 +75,11 @@ service cloud.firestore {
     match /treasury/{docId} {
       allow read, write: if false;
     }
+    // Username lookup is callable-only so a client cannot browse handles or
+    // sidestep the minor exclusion in findFriendByUsername.
+    match /usernames/{handle} {
+      allow read, write: if false;
+    }
     // Partner perks + their code pools are served through listRewardsCatalog /
     // redeemReward so Verdure+ early-access visibility is decided server-side.
     // The code pool must never be readable: it IS the reward.
@@ -202,6 +207,17 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      // Two-sided friendship and request mirrors. Each participant reads only
+      // their own copy; callable transactions write both copies together.
+      match /friends/{friendUid} {
+        allow read: if isOwner(userId);
+        allow write: if false;
+      }
+      match /friendRequests/{peerUid} {
+        allow read: if isOwner(userId);
+        allow write: if false;
+      }
+
       // ── Invites: /users/{userId}/invites/{eventId}_{fromUid} ──
       // Created by inviteToEvent; status changes go through rsvpToEvent /
       // respondToInvite so the sender is told the outcome. Owner-readable.
@@ -312,8 +328,8 @@ service cloud.firestore {
       // Written ONLY by rsvpToEvent (so the count stays honest and blocks are
       // checked server-side) — a client cannot write its own attendee document,
       // let alone anyone else's. A single record is readable by its owner, or
-      // by a reader it is visible to: the attendee set themselves public, or
-      // they follow the reader ("friends" visibility); never across a block in
+      // by an accepted friend; an old public flag or one-way follow cannot
+      // disclose a person's whereabouts. Never across a block in
       // either direction. Listing is denied — the friendsGoing callable is the
       // only way to see who is going, and it applies the same rules.
       match /attendees/{attendeeUid} {
@@ -432,20 +448,23 @@ service cloud.firestore {
           && data.source == 'community'
           && (!('broadcast' in data) || data.broadcast == false)
           && !('sources' in data) && !('sourceKeys' in data) && !('areaId' in data)
-          && !('organizerOwnerUid' in data) && !('lastSeenAt' in data) && !('missedCycles' in data);
+          && !('organizerOwnerUid' in data) && !('lastSeenAt' in data) && !('missedCycles' in data)
+          && !('categories' in data) && !('classificationConfidence' in data)
+          && !('qualityScore' in data) && !('inferredCost' in data)
+          && !('endInferred' in data);
     }
 
     function noStoreFlagChanges() {
       return !request.resource.data.diff(resource.data).affectedKeys()
           .hasAny(['active', 'broadcast', 'source', 'sourceEventId', 'sources', 'sourceKeys',
                    'areaId', 'organizerId', 'organizerOwnerUid', 'ingestedAt', 'lastSeenAt',
-                   'missedCycles', 'inactiveAt', 'attendeeCount']);
+                   'missedCycles', 'inactiveAt', 'attendeeCount', 'categories',
+                   'classificationConfidence', 'qualityScore', 'inferredCost', 'endInferred']);
     }
 
-    // An attendee record is visible when public, or when the attendee follows the caller.
+    // Only a server-owned accepted friendship grants activity visibility.
     function attendeeVisibleToCaller(attendeeUid, data) {
-      return data.get('visibility', 'friends') == 'public'
-          || exists(/databases/$(database)/documents/users/$(attendeeUid)/following/$(request.auth.uid));
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid)/friends/$(attendeeUid));
     }
 
     // Blocks are symmetric: a block in either direction hides both parties from each other.
@@ -490,6 +509,9 @@ service cloud.firestore {
 
       let validInterests = !('interests' in data) ||
         (data.interests is list && data.interests.size() <= 20);
+      let validStudent = !('studentStatus' in data) || data.studentStatus is bool;
+      let validSchool = !('school' in data) ||
+        (data.school is string && data.school.size() <= 100);
 
       let validLastUpdated = !('lastUpdated' in data) ||
         (data.lastUpdated is timestamp);
@@ -515,7 +537,7 @@ service cloud.firestore {
       // exactly what happened when plusExpiresAt and the daily-earn counters
       // were added without updating this list.
       let allowedFields = [
-        'displayName', 'email', 'interests',
+        'displayName', 'email', 'interests', 'studentStatus', 'school',
         'collectedPlaceIDs', 'checkedInEventIDs', 'redeemedRewardIDs',
         'pointsBalance', 'lifetimePoints',
         'lastUpdated', 'createdAt',
@@ -532,6 +554,7 @@ service cloud.firestore {
         // (client-writable, validated in validSocialFields); rsvpEventIDs and the
         // follow counts are written by the callables only.
         'savedEventIDs', 'activityPrivacy', 'rsvpEventIDs', 'followerCount', 'followingCount',
+        'username', 'birthYear', 'ageBand', 'friendInviteToken', 'eventFeedback',
         // Set by createOrganizer; points at the profile this account owns.
         'organizerId',
         // Economy ledgers written only by redeemReward / the earn callables.
@@ -551,7 +574,7 @@ service cloud.firestore {
       ];
       let noExtraFields = data.keys().hasOnly(allowedFields);
 
-      return validDisplayName && validEmail && validInterests
+      return validDisplayName && validEmail && validInterests && validStudent && validSchool
           && validLastUpdated && validCreatedAt && validFcmTokens && noExtraFields
           && validSocialFields(data) && validNotificationPrefs(data);
     }
@@ -614,7 +637,7 @@ service cloud.firestore {
     // Validate event document schema (split into two helpers — the rules
     // compiler allows at most 10 let-bindings per function).
     function validEventDocument(data) {
-      return validEventCoreFields(data) && validEventMetaFields(data);
+      return validEventCoreFields(data) && validEventMetaFields(data) && validEventDetails(data);
     }
 
     function validEventCoreFields(data) {
@@ -657,13 +680,35 @@ service cloud.firestore {
         'active', 'broadcast', 'source', 'sourceEventId', 'sources', 'sourceKeys',
         'areaId', 'organizerId', 'organizerOwnerUid', 'titleKey', 'venueKey', 'startBucket',
         'isFree', 'priceMin', 'website', 'imageURL', 'tags', 'endDate',
-        'ingestedAt', 'lastSeenAt', 'missedCycles', 'inactiveAt'
+        'ingestedAt', 'lastSeenAt', 'missedCycles', 'inactiveAt',
+        'categories', 'classificationConfidence', 'qualityScore', 'inferredCost',
+        'ageSuitability', 'endInferred', 'expectedSize', 'indoorOutdoor',
+        'accessibilityFeatures', 'publicVenue', 'minimumAge', 'maximumAge',
+        'applicationDeadline', 'recurring', 'virtual', 'opportunitySubtype'
       ];
       let noExtraFields = data.keys().hasOnly(allowedFields);
 
       return validAttendees && validMaxAttendees && validCategory
           && validPoints && validCreator && validLatitude && validLongitude
           && noExtraFields;
+    }
+
+    function validEventDetails(data) {
+      let validAge = !('ageSuitability' in data) || data.ageSuitability in ['all', 'children', 'teens', 'adults', 'unknown'];
+      let validSize = !('expectedSize' in data) || (data.expectedSize is int && data.expectedSize >= 1 && data.expectedSize <= 100000);
+      let validSpace = !('indoorOutdoor' in data) || data.indoorOutdoor in ['indoor', 'outdoor', 'mixed', 'unknown'];
+      let validAccess = !('accessibilityFeatures' in data) ||
+        (data.accessibilityFeatures is list && data.accessibilityFeatures.size() <= 8 &&
+         data.accessibilityFeatures.hasOnly(['stepFree', 'accessibleRestroom', 'seating', 'quietSpace', 'asl', 'captions', 'other']));
+      let validVenue = !('publicVenue' in data) || data.publicVenue is bool;
+      let validMinimum = !('minimumAge' in data) || (data.minimumAge is int && data.minimumAge >= 0 && data.minimumAge <= 100);
+      let validMaximum = !('maximumAge' in data) || (data.maximumAge is int && data.maximumAge >= 0 && data.maximumAge <= 100);
+      let validDeadline = !('applicationDeadline' in data) || data.applicationDeadline is timestamp;
+      let validRecurring = !('recurring' in data) || data.recurring is bool;
+      let validVirtual = !('virtual' in data) || data.virtual is bool;
+      return validAge && validSize && validSpace && validAccess && validVenue && validMinimum && validMaximum
+          && validDeadline && validRecurring && validVirtual
+          && (!('opportunitySubtype' in data) || data.opportunitySubtype in ['volunteer', 'workshop', 'program']);
     }
 
     // SERVER-OWNED game fields: only Cloud Functions (Admin SDK) may change these.
@@ -691,6 +736,8 @@ service cloud.firestore {
                    // Social state owned by the callables: a client that could
                    // write rsvpEventIDs could fake attendance; counts must add up.
                    'rsvpEventIDs', 'followerCount', 'followingCount', 'organizerId',
+                   'username', 'birthYear', 'ageBand', 'friendInviteToken',
+                   'eventFeedback',
                    // The rolling 12-month cash ledger — a client that could edit
                    // it could reset its own ceiling.
                    'redemptionBudget', 'lastEarnMonth', 'monthlyEarnPoints',
@@ -721,6 +768,11 @@ service cloud.firestore {
           && (!('rsvpEventIDs' in data) || (data.rsvpEventIDs is list && data.rsvpEventIDs.size() == 0))
           && (!('followerCount' in data) || data.followerCount == 0)
           && (!('followingCount' in data) || data.followingCount == 0)
+          && !('username' in data)
+          && !('birthYear' in data)
+          && !('ageBand' in data)
+          && !('friendInviteToken' in data)
+          && !('eventFeedback' in data)
           && !('redemptionBudget' in data);
     }
 

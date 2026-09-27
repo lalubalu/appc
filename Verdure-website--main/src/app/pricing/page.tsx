@@ -7,7 +7,7 @@ import PricingContent from "./PricingContent";
 export const metadata: Metadata = pageMetadata({
   title: "Pricing — Free and Verdure+ Plans",
   description:
-    "Verdure Free costs nothing, forever. Verdure+ ($4.99/mo or $39.99/yr) adds the AI Adventure Planner, AR exploration, offline maps, and higher-value rewards.",
+    "Verdure Free costs nothing, forever. Verdure+ ($4.99/mo or $49.99/yr) adds unlimited Adventure Planner use, early partner perks, cash gift cards, and advanced stats.",
   socialTitle: "One habit. Two ways to walk it.",
   path: "/pricing",
 });
@@ -24,7 +24,7 @@ export default function PricingPage()
           path: "/pricing",
           name: "Pricing",
           description:
-            "Verdure Free costs nothing, forever. Verdure+ adds the AI Adventure Planner, AR exploration, offline maps, and higher-value rewards.",
+            "Verdure Free costs nothing, forever. Verdure+ adds unlimited Adventure Planner use, early partner perks, cash gift cards, and advanced stats.",
           about: "app",
         })}
       />

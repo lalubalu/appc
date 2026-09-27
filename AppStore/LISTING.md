@@ -73,7 +73,7 @@ feature ships or is pulled, update this file in the same commit.
 > • Unlimited Adventure Planner — free members get 5 plans a month
 > • Early access to partner perks — see and claim new local offers first
 > • Cash gift cards — $5 and $10, members only
-> • Member badge on your player card
+> • Advanced stats — where your points come from and your last 30 days
 >
 > Verdure is free to use. A subscription is entirely optional and never required
 > to earn points or redeem partner perks.
@@ -140,9 +140,10 @@ websites, which is what Apple's "tracking" means.
 | Other User Content | Yes | Yes | No | App Functionality |
 | Purchase History | Yes | Yes | No | App Functionality |
 | Device ID | Yes | Yes | No | App Functionality |
+| Other Data Types (birth year, optional student status and school) | Yes | Yes | No | App Functionality |
+| Other Usage Data (saved events and recommendation feedback) | Yes | Yes | No | App Functionality |
 
-Nothing else is collected — no contacts, health, browsing, search history,
-diagnostics, or advertising data.
+No contacts, health, browsing, diagnostics, or advertising data are collected.
 
 **On Product Interaction (the one unlinked row).** Verdure keeps first-party
 analytics: which screens are opened and which features are used. It is keyed to

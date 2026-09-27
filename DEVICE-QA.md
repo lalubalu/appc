@@ -110,6 +110,14 @@ two numbers.
 | 4.12 | Browse Discover with zero events, then a populated feed | The empty state is readable above the tab bar; events appear ahead of personal stats | ☐ |
 | 4.13 | Increase Dynamic Type through accessibility sizes on every tab | Headings, chips, card actions and tab labels remain readable without clipping | ☐ |
 | 4.14 | Turn on Reduce Motion, then browse every tab | Essential transitions remain clear; decorative movement does not obscure controls | ☐ |
+| 4.15 | Discover → For You, then Everything, with a populated corpus | Ranked order differs from chronological order; Everything pages through every matching event without repeats | ☐ |
+| 4.16 | Open an event and tap More like this / Less like this | The next For You order changes; a mere view does not erase an explicit choice | ☐ |
+| 4.17 | Two accounts: request, decline, request again, accept, then block | Only an accepted friend sees RSVP activity; the block ends access immediately | ☐ |
+| 4.18 | Sign up as a 16-year-old, then search from an adult account | Minor absent from exact-username search; private invite works and requires acceptance | ☐ |
+| 4.19 | Open a friend invitation URL in Safari with the app installed | The token stays out of the HTTP URL; the app opens Friends with the request ready | ☐ |
+| 4.20 | Discover and Plan with large Dynamic Type and VoiceOver | Both mode controls, plan options, feedback buttons and event actions remain reachable | ☐ |
+| 4.21 | Organizer posts an accessible outdoor event with age/size details | Details persist and display under Before you go; invalid minimum/maximum ages are refused | ☐ |
+| 4.22 | Create a student account and browse Opportunities | Student/school affect ordering without hiding events; private fields are absent from public profiles | ☐ |
 
 ## Reporting
 

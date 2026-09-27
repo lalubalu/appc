@@ -15,7 +15,7 @@ export default function PrivacyContent() {
       kicker="Privacy"
       title="What we collect, and "
       accent="what we don't."
-      updated="July 27, 2026"
+      updated="September 27, 2026"
       intro="Verdure is built around getting outside, not around harvesting data. We don't track you, we don't run ads, and we don't sell anything about you. Here is exactly what the app stores and why."
     >
       <div className="callout">
@@ -40,7 +40,7 @@ export default function PrivacyContent() {
       <h3>Account information</h3>
       <p>
         When you create an account we store your <strong>email address</strong>{" "}
-        and a <strong>display name</strong>. Authentication is handled by
+        and a <strong>display name</strong>. We store your birth year to apply age safeguards. If you opt into student recommendations, we also store student status and any school you provide. Authentication is handled by
         Firebase Authentication; we never see or store your password. You can
         also browse as a guest without creating an account.
       </p>
@@ -94,6 +94,13 @@ export default function PrivacyContent() {
       <p>
         Your points, collected places, attended events, streak and badges are
         stored so your progress follows your account across devices.
+      </p>
+
+      <h3>Recommendations</h3>
+      <p>
+        We store your interests, saved and viewed events, and any more or less
+        feedback with your account to order recommendations. Negative feedback
+        fades over time.
       </p>
 
       <h2>What we do not do</h2>

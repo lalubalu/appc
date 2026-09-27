@@ -2,6 +2,8 @@ import Foundation
 import SwiftUI
 import Observation
 @preconcurrency import FirebaseAuth
+@preconcurrency import FirebaseFirestore
+@preconcurrency import FirebaseFunctions
 
 // MARK: - Auth Service (Firebase Auth Wrapper)
 
@@ -14,6 +16,7 @@ final class AuthService {
     var isAuthenticated: Bool { currentUser != nil }
     var isLoading = false
     var errorMessage: String?
+    var ageRegistrationPending = false
 
     // MARK: - Private
 
@@ -50,13 +53,15 @@ final class AuthService {
     // MARK: - Auth Methods
 
     /// Sign up with email, password, and display name.
-    func signUp(email: String, password: String, displayName: String) async throws {
+    func signUp(email: String, password: String, displayName: String, birthYear: Int,
+                studentStatus: Bool, school: String) async throws {
         isLoading = true
         errorMessage = nil
 
         // Sanitize inputs
         let cleanEmail = Self.sanitize(email, maxLength: 320).lowercased()
         let cleanName = Self.sanitize(displayName, maxLength: 100)
+        let cleanSchool = studentStatus ? Self.sanitize(school, maxLength: 100) : ""
 
         // Validate email format
         guard !cleanEmail.isEmpty, Self.isValidEmail(cleanEmail) else {
@@ -95,6 +100,12 @@ final class AuthService {
             errorMessage = "Please enter your name."
             throw AuthError.missingName
         }
+        let currentYear = Calendar.current.component(.year, from: Date())
+        guard birthYear >= currentYear - 110, birthYear <= currentYear - 13 else {
+            isLoading = false
+            errorMessage = "You must be at least 13 to create an account."
+            throw AuthError.unknown(errorMessage!)
+        }
 
         do {
             let result = try await Auth.auth().createUser(withEmail: cleanEmail, password: password)
@@ -102,6 +113,24 @@ final class AuthService {
             let changeRequest = result.user.createProfileChangeRequest()
             changeRequest.displayName = cleanName
             try await changeRequest.commitChanges()
+            // Establish a complete profile before the server records the private
+            // age band. If the network fails afterward, unknown age stays in the
+            // restricted state and the member can retry from Friends.
+            try await Firestore.firestore().collection("users").document(uid).setData([
+                "displayName": cleanName,
+                "email": cleanEmail,
+                "studentStatus": studentStatus,
+                "school": cleanSchool,
+                "createdAt": FieldValue.serverTimestamp(),
+                "lastUpdated": FieldValue.serverTimestamp(),
+            ], merge: true)
+            do {
+                _ = try await Functions.functions().httpsCallable("registerAgeBand")
+                    .call(["birthYear": birthYear])
+                ageRegistrationPending = false
+            } catch {
+                ageRegistrationPending = true
+            }
 
             let user = VerdureUser(
                 uid: uid,
@@ -121,6 +150,18 @@ final class AuthService {
             self.isLoading = false
             self.errorMessage = Self.mapFirebaseError(error as NSError)
             throw AuthError.unknown(self.errorMessage ?? error.localizedDescription)
+        }
+    }
+
+    func retryAgeRegistration(birthYear: Int) async -> Bool {
+        do {
+            _ = try await Functions.functions().httpsCallable("registerAgeBand")
+                .call(["birthYear": birthYear])
+            ageRegistrationPending = false
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
         }
     }
 

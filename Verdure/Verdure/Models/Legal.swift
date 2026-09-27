@@ -25,7 +25,7 @@ enum Legal {
     /// than on ModerationService: that type is @MainActor, so a nonisolated
     /// static like this one cannot read from it (it did not compile).
     static let contactEmail = "support@verdure.app"
-    static let lastUpdated = "August 28, 2026"
+    static let lastUpdated = "September 27, 2026"
 
     /// Subscription facts, stated once so the paywall, the terms and the store
     /// listing cannot disagree. Prices shown to the user come from StoreKit.
@@ -74,7 +74,7 @@ enum Legal {
         Section(title: "The short version",
                 body: "We collect your account details, your location when you check in, and the photos you choose to attach as proof of attendance. We use them to run the app — points, collections, rewards and events. Nothing is sold and nothing is used to target you across other apps or websites. Verdure does show offers from local partners, always labelled; partners are never given your personal information, and a partner offer never changes the order of what we recommend."),
         Section(title: "What we collect",
-                body: "Account: your email address and display name (passwords are handled by Firebase Authentication and never stored by us). Location: with your permission, your precise location to show what's nearby, to check you're close enough to collect a place, and to verify event check-ins; the coordinates at check-in are kept as an attendance record. Photos: only the images you explicitly pick as proof of attendance. Posts, events and RSVPs you create are shown to other users with your display name. Subscription status, so member benefits unlock; Apple handles payment and we never see card details. Game state: points, places, events, streak and badges. The interest categories you pick, used to order what we recommend. We do not collect student status."),
+                body: "Account: your email address, display name, and birth year to apply age safeguards (passwords are handled by Firebase Authentication and never stored by us). If you choose to identify as a student, we store that status and any school you provide to recommend relevant activities. Location: with your permission, your precise location to show what's nearby, to check you're close enough to collect a place, and to verify event check-ins; the coordinates at check-in are kept as an attendance record. Photos: only the images you explicitly pick as proof of attendance. Posts, events and RSVPs you create are shown to other users with your display name. Subscription status, so member benefits unlock; Apple handles payment and we never see card details. Game state: points, places, events, streak and badges. Interests, saved events, viewed events and your more/less feedback are stored with your account to order recommendations."),
         Section(title: "What we do not do",
                 body: "No tracking across other apps or websites, and no third-party advertising or analytics SDKs. No selling or sharing your personal information with data brokers. No background location — it is read only while you use the app. No contacts, health or browsing data. We do keep our own product analytics: which screens and features get used, tied to a random per-install identifier rather than to you, with no names, no message or post content and no precise location in those records. You can switch them off in Profile › Settings."),
         Section(title: "Who processes data for us",

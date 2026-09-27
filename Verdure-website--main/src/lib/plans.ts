@@ -1,8 +1,7 @@
 /**
- * The two plans — owner-supplied names, prices, and features (2026-07-22
- * pricing change: Champion is gone). These are the ONLY plan facts that
- * exist; nothing here may be invented or extended without an owner
- * decision. Single source for /pricing and every other plan reference.
+ * The two plans shown on the website. Keep the price and benefits aligned
+ * with Verdure/Verdure/Views/Paywall/PaywallView.swift and AppStore/LISTING.md.
+ * Do not advertise roadmap benefits before they exist in the app.
  */
 
 export interface Plan
@@ -38,17 +37,13 @@ export let PLANS: Plan[] = [
     name: "Verdure+",
     price: "$4.99",
     cadence: "/mo",
-    annual: "or $39.99/yr",
+    annual: "or $49.99/yr",
     tagline: "Everything in Free, plus:",
     features: [
-      "AI Adventure Planner",
-      "AR outdoor exploration",
-      "Apple Health and Google Fit",
-      "Offline maps and trail guidance",
-      "Crowd forecasts and best times",
-      "Higher-value rewards and multipliers",
-      "Group planning tools",
-      "AI-personalized challenges",
+      "Unlimited Adventure Planner (5 plans a month on Free)",
+      "Early access to local partner perks",
+      "$5 and $10 cash gift cards",
+      "Advanced stats for your last 30 days",
     ],
     featured: true,
   },

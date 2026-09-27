@@ -1,40 +1,57 @@
-# Discovery read budget — 2026-09-26
+# Discovery read budget — 2026-09-27
 
 ## Live measurement and gate
 
 The read-only A1 query found **zero documents** in the live `events`
-collection. The measured candidate reads per feed load are therefore **zero
-against an empty corpus**. This is not a usable load benchmark; C1 cannot be
-declared cost-validated until a real area corpus exists. No live ingest or
-production feed rollout was performed here.
+collection. This is not a usable load benchmark. C1 cannot be declared
+cost-validated until a real area corpus exists. No live ingest or production
+feed rollout was performed here.
 
-For a populated index, a candidate set of 300 documents would cost about 300
-document reads per uncached load, plus any index-entry reads. At three loads per
-user per day, that is 900 reads per user per day. The table is a scenario, **not
-a measured production result**.
+The implementation reads at most 80 public events on a normal client feed
+load, plus up to ten ranked events absent from that first page. A shared
+server candidate snapshot has 180 near-and-soon, 70 quality and 10 × 15
+category-sweep query slots, cached per area for five minutes. Returned
+documents are merged, so the actual count can be far below 400. Each signed-in
+ranking request also reads its profile, accepted friends, blocks and up to 60
+direct friend-event documents. An Everything page reads at most 40 public
+events by date cursor.
 
-| Users | Reads/day at 300 × 3 | Reads/30 days | Gross document-read charge |
+Feedback is kept as a bounded map of at most 100 events on the user profile
+already read by ranking. A feedback action reads its event and profile and
+writes the profile; opening an event records a weak view signal. These reads
+and writes are not included in the scenario table below and must be measured
+before release. Up to 30 attended event documents may also be fetched per
+ranking request to build the behavioral context.
+
+The table is a **scenario, not a measured production result**: 80 feed reads
+plus one 40-document Everything page, three times per user per day. It excludes
+server ranking context, candidate refreshes, other screens, minimum query
+charges, index-entry reads and writes.
+
+| Users | Reads/day at 120 × 3 | Reads/30 days | Gross document-read charge |
 | ---: | ---: | ---: | ---: |
-| 100 | 90,000 | 2.7 million | $0.81 |
-| 1,000 | 900,000 | 27 million | $8.10 |
-| 10,000 | 9 million | 270 million | $81.00 |
+| 100 | 36,000 | 1.08 million | $0.32 |
+| 1,000 | 360,000 | 10.8 million | $3.24 |
+| 10,000 | 3.6 million | 108 million | $32.40 |
 
-The [current Firestore Standard price in us-central1](https://cloud.google.com/firestore/pricing)
-is $0.03 per 100,000 document reads beyond the daily 50,000-read free quota.
-Gross figures deliberately ignore free quota, index-entry reads, writes,
-storage, network, other app reads and functions. They show order of magnitude,
-not a project invoice. The region and edition must be checked before use.
+The [Firestore Standard price in us-central1](https://cloud.google.com/firestore/pricing)
+was checked on 2026-09-27: $0.03 per 100,000 document reads beyond the daily
+50,000-read free quota. Gross figures ignore that quota, index-entry reads,
+writes, storage, network, other app reads and functions. They are a floor for
+this scenario, not a project invoice. Verify the actual region and edition.
 
-## Architecture decision before C1
+## Architecture and meter
 
-Avoid re-reading several hundred Firestore event documents for every pull to
-refresh. Build a bounded shared candidate snapshot per area and short time
-window; rank against it server-side and cache the per-user result for a short
-window. Expose a read counter in `/treasury`. A per-user feed document can make
-client reads one per load, but generating it still reads candidates; schedule
-refreshes and measure total backend reads before claiming a cost reduction.
+The five-minute `feedCaches/{area}` document avoids re-reading the shared
+candidate set for every person. `treasury/{month}.readTelemetry` counts returned
+candidate documents and refreshes. It does **not yet count all** user-context,
+friend, client or index-entry reads, so it is not an invoice-grade counter.
+Before the live gate passes, broaden it or reconcile it against Firestore
+usage metrics. A per-user feed document could cut client reads further, but
+generating one still reads candidates; measure total backend reads first.
 
-Everything mode must use a cursor and a small page size. It must never return
-the full radius set in one query. Before enabling the feed on a populated live
-index, rerun this report with actual document and index-entry reads and a
-measured cache hit rate. Keep the C1 launch gate closed until then.
+Everything uses a cursor and a 40-document page. It never returns the whole
+radius set in one query. Before enabling the feed on a populated live index,
+rerun this report with actual document and index-entry reads, user-context
+reads, a measured cache hit rate and typical session frequency. Keep the C1
+launch gate closed until then.

@@ -12,6 +12,9 @@ struct AuthView: View {
     @State private var name = ""
     @State private var email = ""
     @State private var password = ""
+    @State private var birthDate = Calendar.current.date(byAdding: .year, value: -18, to: Date()) ?? Date()
+    @State private var isStudent = false
+    @State private var school = ""
     @State private var isSubmitting = false
     @State private var appear = false
     @State private var auroraPhase: CGFloat = 0
@@ -163,6 +166,21 @@ struct AuthView: View {
                   content: .emailAddress, keyboard: .emailAddress, autocap: false)
             field(icon: "lock.fill", placeholder: "Password", text: $password, secure: true,
                   content: isSignUp ? .newPassword : .password)
+            if isSignUp {
+                DatePicker("Date of birth", selection: $birthDate,
+                           in: ...Calendar.current.date(byAdding: .year, value: -13, to: Date())!,
+                           displayedComponents: .date)
+                    .font(VType.body(14))
+                    .foregroundStyle(Palette.ink)
+                    .datePickerStyle(.compact)
+                Text("Your birth year stays private. It protects younger members in Friends.")
+                    .font(VType.body(11)).foregroundStyle(Palette.inkSoft)
+                Toggle("I'm a student", isOn: $isStudent)
+                    .font(VType.body(14)).tint(Palette.spruce.base)
+                if isStudent {
+                    field(icon: "graduationcap.fill", placeholder: "School (optional)", text: $school)
+                }
+            }
 
             if let error = authService.errorMessage {
                 Text(error).font(VType.body(12.5, .medium)).foregroundStyle(Palette.danger)
@@ -236,7 +254,9 @@ struct AuthView: View {
                 if isSignUp {
                     try await authService.signUp(email: email.trimmingCharacters(in: .whitespaces),
                                                  password: password,
-                                                 displayName: name.trimmingCharacters(in: .whitespaces))
+                                                 displayName: name.trimmingCharacters(in: .whitespaces),
+                                                 birthYear: Calendar.current.component(.year, from: birthDate),
+                                                 studentStatus: isStudent, school: school)
                 } else {
                     try await authService.signIn(email: email.trimmingCharacters(in: .whitespaces),
                                                  password: password)

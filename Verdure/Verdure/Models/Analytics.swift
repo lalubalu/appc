@@ -61,6 +61,8 @@ enum Analytics {
         case pushPrimerAccepted = "push_primer_accepted"
         case rewardRedeemed = "reward_redeemed"
         case searchPerformed = "search_performed"
+        case inviteSent = "invite_sent"
+        case inviteAccepted = "invite_accepted"
     }
 
     /// Per-install id. Not the uid — see the privacy note above.

@@ -177,6 +177,31 @@ export const createEvent = onCall(async (req) => {
   const lng = parseCoord(req.data?.longitude, 180);
   const website = cleanUrl(req.data?.website) ?? null;
   const isFree = req.data?.isFree !== false;
+  const expectedSize = Number.isInteger(req.data?.expectedSize) && req.data.expectedSize >= 1 && req.data.expectedSize <= 100000
+    ? req.data.expectedSize as number : null;
+  const indoorOutdoor = ["indoor", "outdoor", "mixed", "unknown"].includes(req.data?.indoorOutdoor)
+    ? req.data.indoorOutdoor as string : "unknown";
+  const minimumAge = Number.isInteger(req.data?.minimumAge) && req.data.minimumAge >= 0 && req.data.minimumAge <= 100
+    ? req.data.minimumAge as number : null;
+  const maximumAge = Number.isInteger(req.data?.maximumAge) && req.data.maximumAge >= 0 && req.data.maximumAge <= 100
+    ? req.data.maximumAge as number : null;
+  if (minimumAge !== null && maximumAge !== null && minimumAge > maximumAge) {
+    throw new HttpsError("invalid-argument", "Minimum age must not exceed maximum age.");
+  }
+  const ageSuitability = ["all", "children", "teens", "adults", "unknown"].includes(req.data?.ageSuitability)
+    ? req.data.ageSuitability as string : "unknown";
+  const allowedAccess = new Set(["stepFree", "accessibleRestroom", "seating", "quietSpace", "asl", "captions", "other"]);
+  const accessibilityFeatures = Array.isArray(req.data?.accessibilityFeatures)
+    ? Array.from(new Set((req.data.accessibilityFeatures as unknown[]).filter((x): x is string => typeof x === "string" && allowedAccess.has(x)))).slice(0, 8)
+    : [];
+  const publicVenue = req.data?.publicVenue === true;
+  const recurring = req.data?.recurring === true;
+  const virtual = req.data?.virtual === true;
+  const opportunitySubtype = ["volunteer", "workshop", "program"].includes(req.data?.opportunitySubtype)
+    ? req.data.opportunitySubtype as string : null;
+  const deadlineMs = Number(req.data?.applicationDeadlineMs);
+  const applicationDeadline = Number.isFinite(deadlineMs) && deadlineMs > Date.now() && deadlineMs <= startMs
+    ? Timestamp.fromMillis(deadlineMs) : null;
 
   if (title.length < 3) throw new HttpsError("invalid-argument", "Give the event a title.");
   if (!locationName) throw new HttpsError("invalid-argument", "Where is it?");
@@ -202,6 +227,19 @@ export const createEvent = onCall(async (req) => {
     areaId: area?.id ?? null,
     titleKey: titleKey(title), venueKey: venueKey(locationName), startBucket: startBucket(start),
     isFree, website, tags: [safeText(orgData.category, 40)].filter(Boolean),
+    categories: [category, ...(category === "Workshop" || category === "Volunteer" ? ["Opportunity"] : []),
+      ...(indoorOutdoor === "outdoor" ? ["Outdoors"] : []), ...(isFree ? ["Free"] : [])],
+    classificationConfidence: 1,
+    qualityScore: Math.min(1, (description.length >= 80 ? 0.25 : description.length > 0 ? 0.1 : 0) +
+      (lat !== undefined && lng !== undefined ? 0.25 : 0) + (website ? 0.1 : 0) +
+      (ageSuitability !== "unknown" ? 0.15 : 0) + (indoorOutdoor !== "unknown" ? 0.15 : 0) + 0.1),
+    inferredCost: isFree ? "free" : "paid", ageSuitability, endInferred: true,
+    indoorOutdoor, accessibilityFeatures, publicVenue, recurring, virtual,
+    ...(expectedSize !== null ? { expectedSize } : {}),
+    ...(minimumAge !== null ? { minimumAge } : {}),
+    ...(maximumAge !== null ? { maximumAge } : {}),
+    ...(applicationDeadline !== null ? { applicationDeadline } : {}),
+    ...(opportunitySubtype !== null ? { opportunitySubtype } : {}),
     ingestedAt: now, lastSeenAt: now, missedCycles: 0,
   };
   if (lat !== undefined) doc.latitude = lat;
@@ -227,4 +265,3 @@ export const myOrganizer = onCall(async (req) => {
   if (!org) return { organizer: null };
   return { organizer: { id: org.id, ...pick(org.data(), ["displayName", "category", "description", "website", "status", "eventCount", "followerCount", "hidden"]) } };
 });
-

@@ -751,6 +751,10 @@ async function main() {
     status: "sent", deliverToEmail: delEmail, requestedAt: new Date(), vendorOrderId: "ord_123" });
   await db.doc("analytics/2026-09-27/events/e2e-del-analytics").set({ uid: del.uid,
     installID: "e2e-install", event: "event_opened", ts: new Date() });
+  await db.doc(`users/${del.uid}/friends/${bystander2.uid}`).set({ uid: bystander2.uid });
+  await db.doc(`users/${bystander2.uid}/friends/${del.uid}`).set({ uid: del.uid });
+  await db.doc(`users/${del.uid}/friendRequests/${bystander2.uid}`).set({ fromUid: del.uid, toUid: bystander2.uid });
+  await db.doc(`users/${bystander2.uid}/friendRequests/${del.uid}`).set({ fromUid: del.uid, toUid: bystander2.uid });
   // A report they filed, and their profile picture.
   await call("reportContent", { targetType: "post", targetId: "e2e-post-1", reason: "spam" }, del.idToken);
   const beforeAttendance = await db.collection("attendance").where("uid", "==", del.uid).get();
@@ -763,6 +767,8 @@ async function main() {
   const gone = async (path) => !(await db.doc(path).get()).exists;
   ok("deleted: profile document", await gone(`users/${del.uid}`));
   ok("deleted: block list", await gone(`users/${del.uid}/blocks/${bystander2.uid}`));
+  ok("deleted: reverse friendship edge", await gone(`users/${bystander2.uid}/friends/${del.uid}`));
+  ok("deleted: pending request from both participants", await gone(`users/${bystander2.uid}/friendRequests/${del.uid}`));
   ok("deleted: their post", await gone("posts/e2e-del-post"));
   ok("deleted: their like ledger row", await gone(`postLikes/e2e-post-1_${del.uid}`));
   ok("deleted: their event (no orphan)", await gone("events/e2e-del-event"));
@@ -985,44 +991,75 @@ async function main() {
     latitude: 37.3230, longitude: -121.9200,
   });
 
-  // ── Follows ──
+  // ── Mutual friend requests ──
   r = await call("followUser", { targetId: sarah.uid, kind: "user" }, quinn.idToken);
-  ok("follow: Quinn follows Sarah", r.result?.following === true && r.result?.changed === true, JSON.stringify(r));
-  r = await call("followUser", { targetId: sarah.uid, kind: "user" }, quinn.idToken);
-  ok("follow: repeating a follow is a no-op", r.result?.changed === false);
-  r = await call("followUser", { targetId: quinn.uid, kind: "user" }, sarah.idToken);
-  ok("follow: Sarah follows Quinn back (mutual)", r.result?.following === true);
-  const qDoc = (await db.doc(`users/${quinn.uid}`).get()).data();
-  const sDoc = (await db.doc(`users/${sarah.uid}`).get()).data();
-  ok("follow: counts are maintained server-side",
-     qDoc?.followingCount === 1 && qDoc?.followerCount === 1 && sDoc?.followerCount === 1 && sDoc?.followingCount === 1,
-     JSON.stringify({ q: [qDoc?.followingCount, qDoc?.followerCount], s: [sDoc?.followingCount, sDoc?.followerCount] }));
+  ok("friends: legacy one-way user follow is rejected", r.error?.status === "FAILED_PRECONDITION", JSON.stringify(r));
+  const adultYear = new Date().getUTCFullYear() - 25;
+  r = await call("registerAgeBand", { birthYear: adultYear }, sarah.idToken);
+  ok("friends: adult age band recorded", r.result?.ageBand === "adult", JSON.stringify(r));
+  await call("registerAgeBand", { birthYear: adultYear }, quinn.idToken);
+  await call("claimUsername", { username: "sarahpark" }, sarah.idToken);
+  r = await call("findFriendByUsername", { username: "sarahpark" }, quinn.idToken);
+  ok("friends: exact adult username lookup", r.result?.member?.uid === sarah.uid, JSON.stringify(r));
+  r = await call("sendFriendRequest", { targetUid: sarah.uid }, quinn.idToken);
+  ok("friends: Quinn sends a request", r.result?.status === "pending_sent" && r.result?.changed === true, JSON.stringify(r));
+  r = await call("sendFriendRequest", { targetUid: sarah.uid }, quinn.idToken);
+  ok("friends: repeat request is idempotent", r.result?.changed === false, JSON.stringify(r));
+  const incoming = (await db.doc(`users/${sarah.uid}/friendRequests/${quinn.uid}`).get()).data();
+  ok("friends: request mirrored to both participants", incoming?.fromUid === quinn.uid &&
+     (await db.doc(`users/${quinn.uid}/friendRequests/${sarah.uid}`).get()).exists);
+  r = await call("respondToFriendRequest", { fromUid: quinn.uid, accept: true }, sarah.idToken);
+  ok("friends: Sarah accepts", r.result?.status === "accepted", JSON.stringify(r));
+  ok("friends: acceptance creates both edges and clears request", (await db.doc(`users/${sarah.uid}/friends/${quinn.uid}`).get()).exists &&
+     (await db.doc(`users/${quinn.uid}/friends/${sarah.uid}`).get()).exists &&
+     !(await db.doc(`users/${sarah.uid}/friendRequests/${quinn.uid}`).get()).exists);
+  r = await call("respondToFriendRequest", { fromUid: quinn.uid, accept: true }, sarah.idToken);
+  ok("friends: consumed request cannot be accepted again", r.error?.status === "NOT_FOUND", JSON.stringify(r));
+  r = await call("sendFriendRequest", { targetUid: quinn.uid }, stranger.idToken);
+  ok("friends: unknown-age sender can request an adult", r.result?.status === "pending_sent", JSON.stringify(r));
+  r = await call("respondToFriendRequest", { fromUid: stranger.uid, accept: false }, quinn.idToken);
+  ok("friends: decline clears both request copies", r.result?.status === "declined" &&
+     !(await db.doc(`users/${stranger.uid}/friendRequests/${quinn.uid}`).get()).exists);
+  await call("registerAgeBand", { birthYear: new Date().getUTCFullYear() - 16 }, stranger.idToken);
+  await call("claimUsername", { username: "strangerteen" }, stranger.idToken);
+  r = await call("findFriendByUsername", { username: "strangerteen" }, quinn.idToken);
+  ok("friends: minor absent from adult username search", r.result?.member === null, JSON.stringify(r));
+  const privateInvite = (await call("myFriendInvite", {}, stranger.idToken)).result;
+  r = await call("sendFriendRequest", { targetUid: stranger.uid }, quinn.idToken);
+  ok("friends: unknown-age target requires private invite", r.error?.status === "PERMISSION_DENIED", JSON.stringify(r));
+  r = await call("sendFriendRequest", { targetUid: stranger.uid, inviteToken: privateInvite?.token }, quinn.idToken);
+  ok("friends: private invite permits request", r.result?.status === "pending_sent", JSON.stringify(r));
+  await call("respondToFriendRequest", { fromUid: quinn.uid, accept: false }, stranger.idToken);
   // The suite runs at any local hour. Disable Quinn's quiet window for the
   // notification round-trip; quiet-hours behavior has its own unit checks.
   await db.doc(`users/${quinn.uid}`).set({ notificationPrefs: {
     eventSuggestions: true, friendActivity: true, quietStart: 0, quietEnd: 0,
     timeZone: "America/Los_Angeles",
   } }, { merge: true });
-  r = await call("followUser", { targetId: sarah.uid, kind: "user" }, sarah.idToken);
-  ok("follow: cannot follow yourself", r.error?.status === "FAILED_PRECONDITION");
+  r = await call("sendFriendRequest", { targetUid: sarah.uid }, sarah.idToken);
+  ok("friends: cannot add yourself", r.error?.status === "FAILED_PRECONDITION");
   let fcode;
   try { await setDoc(doc(quinn.fdb, `users/${quinn.uid}/following/${stranger.uid}`), { uid: stranger.uid, kind: "user" }); fcode = "ok"; } catch (e) { fcode = e.code; }
   ok("rules: a client cannot write its own following list (callable only)", fcode === "permission-denied", `got ${fcode}`);
   try { await setDoc(doc(quinn.fdb, `users/${sarah.uid}/following/${quinn.uid}`), { uid: quinn.uid, kind: "user" }); fcode = "ok"; } catch (e) { fcode = e.code; }
   ok("rules: a client cannot write another user's following list", fcode === "permission-denied", `got ${fcode}`);
-  try { fcode = (await getDoc(doc(quinn.fdb, `users/${quinn.uid}/following/${sarah.uid}`))).exists() ? "ok" : "missing"; } catch (e) { fcode = e.code; }
-  ok("rules: owner can read their own following list", fcode === "ok", `got ${fcode}`);
-  try { await getDoc(doc(stranger.fdb, `users/${quinn.uid}/following/${sarah.uid}`)); fcode = "ok"; } catch (e) { fcode = e.code; }
-  ok("rules: others cannot read your following list", fcode === "permission-denied", `got ${fcode}`);
+  try { fcode = (await getDoc(doc(quinn.fdb, `users/${quinn.uid}/friends/${sarah.uid}`))).exists() ? "ok" : "missing"; } catch (e) { fcode = e.code; }
+  ok("rules: owner can read their accepted friends", fcode === "ok", `got ${fcode}`);
+  try { await getDoc(doc(stranger.fdb, `users/${quinn.uid}/friends/${sarah.uid}`)); fcode = "ok"; } catch (e) { fcode = e.code; }
+  ok("rules: others cannot read your friends", fcode === "permission-denied", `got ${fcode}`);
+  try { await setDoc(doc(quinn.fdb, `users/${sarah.uid}/friends/${quinn.uid}`), { uid: quinn.uid }); fcode = "ok"; } catch (e) { fcode = e.code; }
+  ok("rules: no cross-user friend-list writes", fcode === "permission-denied", `got ${fcode}`);
+  try { await getDoc(doc(stranger.fdb, `users/${sarah.uid}/friendRequests/${quinn.uid}`)); fcode = "ok"; } catch (e) { fcode = e.code; }
+  ok("rules: requests visible only to participants", fcode === "permission-denied", `got ${fcode}`);
   try { fcode = await (async () => { await updateDoc(doc(quinn.fdb, `users/${quinn.uid}`), { followerCount: 999 }); return "ok"; })(); } catch (e) { fcode = e.code; }
   ok("rules: client cannot inflate its own follower count", fcode === "permission-denied", `got ${fcode}`);
 
-  // Blocks refuse follows server-side, in both directions.
+  // Blocks refuse friend requests server-side, in both directions.
   await setDoc(doc(blocker.fdb, `users/${blocker.uid}/blocks/${sarah.uid}`), { uid: sarah.uid, createdAt: serverTimestamp() });
-  r = await call("followUser", { targetId: blocker.uid, kind: "user" }, sarah.idToken);
-  ok("follow: a blocked user's follow attempt fails server-side", r.error?.status === "PERMISSION_DENIED", JSON.stringify(r));
-  r = await call("followUser", { targetId: sarah.uid, kind: "user" }, blocker.idToken);
-  ok("follow: the blocker cannot follow the person they blocked either", r.error?.status === "PERMISSION_DENIED", JSON.stringify(r));
+  r = await call("sendFriendRequest", { targetUid: blocker.uid }, sarah.idToken);
+  ok("friends: a blocked user's request fails server-side", r.error?.status === "PERMISSION_DENIED", JSON.stringify(r));
+  r = await call("sendFriendRequest", { targetUid: sarah.uid }, blocker.idToken);
+  ok("friends: blocker cannot request the person they blocked", r.error?.status === "PERMISSION_DENIED", JSON.stringify(r));
 
   // ── Saved events + privacy are the user's own choices ──
   let ucode = await (async () => { try { await updateDoc(doc(quinn.fdb, `users/${quinn.uid}`), { savedEventIDs: [socialEventId] }); return "ok"; } catch (e) { return e.code; } })();
@@ -1060,7 +1097,7 @@ async function main() {
   try { await deleteDoc(doc(quinn.fdb, `events/${socialEventId}/attendees/${sarah.uid}`)); acode = "ok"; } catch (e) { acode = e.code; }
   ok("rules: a client cannot delete another user's RSVP", acode === "permission-denied", `got ${acode}`);
   try { acode = (await getDoc(doc(quinn.fdb, `events/${socialEventId}/attendees/${sarah.uid}`))).exists() ? "ok" : "missing"; } catch (e) { acode = e.code; }
-  ok("rules: a friend Sarah follows CAN read her RSVP", acode === "ok", `got ${acode}`);
+  ok("rules: accepted friend CAN read Sarah's RSVP", acode === "ok", `got ${acode}`);
   try { await getDoc(doc(stranger.fdb, `events/${socialEventId}/attendees/${sarah.uid}`)); acode = "ok"; } catch (e) { acode = e.code; }
   ok("rules: a stranger CANNOT read a friends-only RSVP", acode === "permission-denied", `got ${acode}`);
   try { await getDocs(collection(quinn.fdb, `events/${socialEventId}/attendees`)); acode = "ok"; } catch (e) { acode = e.code; }
@@ -1069,7 +1106,18 @@ async function main() {
   // ── Friends going ──
   r = await call("friendsGoing", { eventIds: [socialEventId] }, quinn.idToken);
   const fg = r.result?.events?.[socialEventId];
-  ok("friendsGoing: Quinn sees Sarah (mutual follow) with count 1", fg?.count === 1 && fg?.friends?.[0]?.uid === sarah.uid && fg.friends[0].initials === "SP", JSON.stringify(r.result));
+  ok("friendsGoing: Quinn sees accepted friend Sarah", fg?.count === 1 && fg?.friends?.[0]?.uid === sarah.uid && fg.friends[0].initials === "SP", JSON.stringify(r.result));
+  r = await call("friendsUpcoming", {}, quinn.idToken);
+  ok("friendsUpcoming: accepted friend's future RSVP leads the tab",
+     r.result?.events?.some((ev) => ev.id === socialEventId && ev.friends.includes("Sarah Park")), JSON.stringify(r.result));
+  r = await call("friendsUpcoming", {}, stranger.idToken);
+  ok("friendsUpcoming: unrelated member sees no friend's plan",
+     !r.result?.events?.some((ev) => ev.id === socialEventId), JSON.stringify(r.result));
+  r = await call("recommendedEvents", { areaId: "san-jose-ca", lat: 37.3382, lng: -121.8863 }, quinn.idToken);
+  ok("ranking: accepted friend's event enters the bounded candidate set",
+     r.result?.events?.some((ev) => ev.id === socialEventId && ev.parts?.social > 0), JSON.stringify(r.result));
+  const feedCache = await db.doc("feedCaches/san-jose-ca").get();
+  ok("ranking: area candidate snapshot is cached", feedCache.exists && Array.isArray(feedCache.data()?.events));
   r = await call("friendsGoing", { eventIds: [socialEventId] }, stranger.idToken);
   ok("friendsGoing: a stranger sees 0 (not a friend)", r.result?.events?.[socialEventId]?.count === 0, JSON.stringify(r.result));
   // ── Friends leaderboard (G4) ──
@@ -1079,7 +1127,7 @@ async function main() {
   // cannot write its own score and that a blocked account disappears from it.
   r = await call("friendsLeaderboard", { period: "allTime" }, quinn.idToken);
   const board = r.result?.rows ?? [];
-  ok("leaderboard: includes me and the people I follow",
+  ok("leaderboard: includes me and accepted friends",
      board.some((x) => x.isMe) && board.some((x) => x.uid === sarah.uid),
      `err=${JSON.stringify(r.error)} result=${JSON.stringify(r.result)}`);
   ok("leaderboard: rows expose only display fields, never email or subscription state",
@@ -1091,21 +1139,25 @@ async function main() {
   ok("leaderboard: a solo user is told so rather than shown an empty board",
      (await call("friendsLeaderboard", {}, stranger.idToken)).result?.isSolo === true);
 
-  // One-way follow + friends-only privacy: Sarah must follow the viewer for her RSVP to show.
+  // Legacy one-way follows never grant activity access, even under an old
+  // public visibility setting. This is the privacy regression the sprint fixes.
   const oneway = await mk("oneway");
-  await call("followUser", { targetId: sarah.uid, kind: "user" }, oneway.idToken);
+  await db.doc(`users/${oneway.uid}/following/${sarah.uid}`).set({ uid: sarah.uid, kind: "user" });
   r = await call("friendsGoing", { eventIds: [socialEventId] }, oneway.idToken);
-  ok("friendsGoing: a one-way follower does NOT see a friends-only RSVP", r.result?.events?.[socialEventId]?.count === 0, JSON.stringify(r.result));
+  ok("friendsGoing: a one-way follower sees nothing", r.result?.events?.[socialEventId]?.count === 0, JSON.stringify(r.result));
   await db.doc(`users/${sarah.uid}`).set({ activityPrivacy: "public" }, { merge: true });
   await call("rsvpToEvent", { eventId: socialEventId, going: false }, sarah.idToken);
   await call("rsvpToEvent", { eventId: socialEventId, going: true }, sarah.idToken);   // re-stamps visibility
   r = await call("friendsGoing", { eventIds: [socialEventId] }, oneway.idToken);
-  ok("friendsGoing: once Sarah is public, her follower sees her", r.result?.events?.[socialEventId]?.count === 1, JSON.stringify(r.result));
+  ok("friendsGoing: old public flag still does not expose RSVP", r.result?.events?.[socialEventId]?.count === 0, JSON.stringify(r.result));
+  try { await getDoc(doc(oneway.fdb, `events/${socialEventId}/attendees/${sarah.uid}`)); acode = "ok"; } catch (e) { acode = e.code; }
+  ok("rules: one-way follower cannot read public-flag RSVP", acode === "permission-denied", `got ${acode}`);
   // Blocks win over everything, in both directions.
   const viewer = await mk("viewer");
-  await call("followUser", { targetId: sarah.uid, kind: "user" }, viewer.idToken);
+  await call("sendFriendRequest", { targetUid: sarah.uid }, viewer.idToken);
+  await call("respondToFriendRequest", { fromUid: viewer.uid, accept: true }, sarah.idToken);
   r = await call("friendsGoing", { eventIds: [socialEventId] }, viewer.idToken);
-  ok("friendsGoing: viewer sees public Sarah before any block", r.result?.events?.[socialEventId]?.count === 1);
+  ok("friendsGoing: accepted viewer sees Sarah before block", r.result?.events?.[socialEventId]?.count === 1);
   await setDoc(doc(viewer.fdb, `users/${viewer.uid}/blocks/${sarah.uid}`), { uid: sarah.uid, createdAt: serverTimestamp() });
   r = await call("friendsGoing", { eventIds: [socialEventId] }, viewer.idToken);
   ok("friendsGoing: after blocking Sarah, her RSVP is invisible to the blocker", r.result?.events?.[socialEventId]?.count === 0);
@@ -1169,6 +1221,11 @@ async function main() {
   r = await call("rsvpToEvent", { eventId: { toString: "x" } }, stranger.idToken);
   ok("rsvp: hostile input is rejected, not crashed", r.error?.status === "INVALID_ARGUMENT", JSON.stringify(r));
 
+  r = await call("removeFriend", { peerUid: sarah.uid }, quinn.idToken);
+  ok("friends: either participant can remove both edges", r.result?.removed === true &&
+     !(await db.doc(`users/${quinn.uid}/friends/${sarah.uid}`).get()).exists &&
+     !(await db.doc(`users/${sarah.uid}/friends/${quinn.uid}`).get()).exists);
+
   // ────────────────────────────────────────────────────────────────────────
   // ORGANIZER ACCOUNTS (Part 2 §5)
   //
@@ -1208,7 +1265,9 @@ async function main() {
 
   // Unverified organizer publishes: visible to followers only.
   r = await call("createEvent", { title: "Pickup Soccer", description: "All levels.", locationName: "Edgewater Park", time: "6:00 PM",
-    startMs: Date.now() + 3 * 86_400_000, category: "Sports", latitude: 37.3230, longitude: -121.9200 }, orgOwner.idToken);
+    startMs: Date.now() + 3 * 86_400_000, category: "Sports", latitude: 37.3230, longitude: -121.9200,
+    expectedSize: 24, indoorOutdoor: "outdoor", ageSuitability: "all", minimumAge: 13,
+    accessibilityFeatures: ["stepFree", "seating"], publicVenue: true, recurring: true }, orgOwner.idToken);
   const orgEventId = r.result?.eventId;
   ok("organizer: pending organizer CAN create — but not broadcast", !!orgEventId && r.result?.broadcast === false && r.result?.organizerStatus === "pending", JSON.stringify(r));
   const orgEv = (await db.doc(`events/${orgEventId}`).get()).data();
@@ -1216,6 +1275,11 @@ async function main() {
      orgEv?.source === "organizer" && orgEv?.organizerId === organizerId && orgEv?.organizerOwnerUid === orgOwner.uid
      && orgEv?.areaId === "san-jose-ca" && orgEv?.active === true && orgEv?.hidden === false && orgEv?.broadcast === false && orgEv?.pointValue === 150,
      JSON.stringify(orgEv && { s: orgEv.source, o: orgEv.organizerId, a: orgEv.areaId, b: orgEv.broadcast, p: orgEv.pointValue }));
+  ok("organizer: practical event details survive publication",
+     orgEv?.expectedSize === 24 && orgEv?.indoorOutdoor === "outdoor" &&
+     orgEv?.ageSuitability === "all" && orgEv?.minimumAge === 13 &&
+     orgEv?.publicVenue === true && orgEv?.recurring === true &&
+     orgEv?.accessibilityFeatures?.includes("stepFree"));
 
   const publicIds = (await getDocs(query(collection(nonfan.fdb, "events"),
     where("hidden", "==", false), where("active", "==", true), where("broadcast", "==", true), where("date", ">=", new Date())))).docs.map((d) => d.id);
@@ -1254,6 +1318,17 @@ async function main() {
   r = await call("createEvent", { title: "Sunset Volleyball", locationName: "Edgewater Beach", startMs: Date.now() + 4 * 86_400_000, category: "Sports" }, orgOwner.idToken);
   ok("organizer: an approved organizer's new events broadcast immediately", r.result?.broadcast === true);
   const approvedEventId = r.result?.eventId;
+  r = await call("recordEventFeedback", { eventId: approvedEventId, kind: "more" }, nonfan.idToken);
+  ok("ranking: explicit event feedback persists on the server",
+     r.result?.recorded === true &&
+     (await db.doc(`users/${nonfan.uid}`).get()).data()?.eventFeedback?.[approvedEventId]?.kind === "more");
+  r = await call("recordEventFeedback", { eventId: approvedEventId, kind: "view" }, nonfan.idToken);
+  ok("ranking: a later view cannot overwrite an explicit preference",
+     r.result?.recorded === true &&
+     (await db.doc(`users/${nonfan.uid}`).get()).data()?.eventFeedback?.[approvedEventId]?.kind === "more");
+  try { await updateDoc(doc(nonfan.fdb, `users/${nonfan.uid}`), { eventFeedback: {} }); ocode = "ok"; }
+  catch (e) { ocode = e.code; }
+  ok("rules: client cannot erase server-owned ranking feedback", ocode === "permission-denied", `got ${ocode}`);
 
   // Suspension pulls everything back.
   r = await call("approveOrganizer", { organizerId, action: "suspend" }, staff.idToken);

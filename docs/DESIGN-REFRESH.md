@@ -66,6 +66,11 @@ Simulator. The live `/events` index is empty, so its honest no-listings state
 is visible below the option controls. Computer lost the Simulator window after
 that capture; the other four new-tab screenshots remain to be taken.
 
-This is navigation and a local planner UI, not the full sprint planner or
-friend system. The server-ranked plan assembly, accepted-only friendship,
-friend availability, and complete For You / Everything retrieval are open.
+Since this capture, mutual friend requests, accepted-only activity, the
+For You / Everything switch and the feedback controls have been built. The
+Plan screen now orders local event cards from the server ranker and marks
+friends who are going. The server model session and dense-corpus visual check
+remain open. Computer inspected the refreshed Discover screen on 2026-09-27;
+it showed the five-tab shell, the For You / Everything switch and QA sample
+cards, but the Simulator window timed out before a new file capture could be
+saved. This document's linked Plan image predates the friend-going addition.

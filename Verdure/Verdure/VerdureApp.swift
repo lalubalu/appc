@@ -93,6 +93,11 @@ struct RootView: View {
             }
         }
         .preferredColorScheme(prefersDarkMode ? .dark : .light)
+        .onOpenURL { url in
+            if let destination = DeepLinkRouter.parse(url.absoluteString) {
+                DeepLinkRouter.shared.handle(destination)
+            }
+        }
     }
 
     /// Wire up Firestore sync + server callables and trigger initial fetches after auth.

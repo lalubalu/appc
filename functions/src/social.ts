@@ -33,9 +33,10 @@ import { FieldValue } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
 import {
   db, inEmulator, requireUid, enforceRateLimit, assertNotSuspended,
-  safeString, safeText, safeBool, isBlockedEitherWay, docIdFrom,
+  safeString, safeText, safeBool, isBlockedEitherWay, blockedSetFor, docIdFrom,
 } from "./common.js";
 import { mayPush } from "./notifications.js";
+import { areFriends, friendIds } from "./friendships.js";
 
 const MAX_INVITES_PER_CALL = 20;
 const MAX_FRIENDS_GOING_EVENTS = 50;
@@ -104,6 +105,9 @@ export const followUser = onCall(async (req) => {
   if (!targetId || targetId.includes("/")) throw new HttpsError("invalid-argument", "Missing target.");
   if (kind !== "user" && kind !== "organizer") throw new HttpsError("invalid-argument", "Unknown follow kind.");
   if (targetId === uid) throw new HttpsError("failed-precondition", "You can't follow yourself.");
+  if (kind === "user" && follow) {
+    throw new HttpsError("failed-precondition", "Send a friend request instead.");
+  }
 
   let targetName = "";
   let targetOwnerUid: string | null = null;
@@ -223,9 +227,8 @@ export const rsvpToEvent = onCall(async (req) => {
       const target = saver.id;
       if (target === uid) continue;
       if (await isBlockedEitherWay(uid, target)) continue;
-      // The saver must count me as a friend; my RSVP must be visible to them.
-      if (!(await follows(target, uid))) continue;
-      if (me.visibility === "friends" && !(await follows(uid, target))) continue;
+      // A follow is not consent to disclose where someone is going.
+      if (!(await areFriends(target, uid))) continue;
       // Preferences, quiet hours and the 2/week push cap. The privacy checks
       // above stay here because they are specific to RSVP visibility; mayPush
       // owns only the things every discretionary push shares. A true result has
@@ -250,8 +253,7 @@ export const rsvpToEvent = onCall(async (req) => {
 // ── Invites ─────────────────────────────────────────────────────────────────
 
 /**
- * inviteToEvent — send an event to selected friends. Only people you follow
- * can be invited (that is what "friend" means here), blocks refuse silently
+ * inviteToEvent — send an event to accepted friends. Blocks refuse silently
  * per recipient, and each recipient gets one invite per (event, sender).
  */
 export const inviteToEvent = onCall(async (req) => {
@@ -273,7 +275,7 @@ export const inviteToEvent = onCall(async (req) => {
   const delivered: string[] = [], skipped: string[] = [];
 
   for (const target of toUids) {
-    if (!(await follows(uid, target))) { skipped.push(target); continue; }
+    if (!(await areFriends(uid, target))) { skipped.push(target); continue; }
     if (await isBlockedEitherWay(uid, target)) { skipped.push(target); continue; }
     const inviteRef = db.doc(`users/${target}/invites/${docIdFrom(eventId, uid)}`);
     const existing = await inviteRef.get();
@@ -309,8 +311,7 @@ export const respondToInvite = onCall(async (req) => {
 // ── Friends going ───────────────────────────────────────────────────────────
 
 /**
- * friendsGoing — for up to 50 events, the attendees the caller follows whose
- * RSVP is visible to the caller (their privacy + no block either way), plus a
+ * friendsGoing — for up to 50 events, accepted friends going, plus a
  * count. This is what the avatar stack on cards, the feed and the planner use;
  * privacy is decided here, never by the client filtering a list it can't read.
  */
@@ -323,9 +324,9 @@ export const friendsGoing = onCall(async (req) => {
   )).slice(0, MAX_FRIENDS_GOING_EVENTS);
   if (!eventIds.length) return { events: {} };
 
-  const followingSnap = await db.collection(`users/${uid}/following`).where("kind", "==", "user").get();
-  const following = new Set(followingSnap.docs.map((d) => d.id));
-  if (!following.size) return { events: Object.fromEntries(eventIds.map((id) => [id, { count: 0, friends: [] }])) };
+  const [friendUids, blocked] = await Promise.all([friendIds(uid), blockedSetFor(uid)]);
+  const accepted = new Set(friendUids.filter((id) => !blocked.has(id)));
+  if (!accepted.size) return { events: Object.fromEntries(eventIds.map((id) => [id, { count: 0, friends: [] }])) };
 
   const events: Record<string, { count: number; friends: { uid: string; displayName: string; initials: string }[] }> = {};
   for (const eventId of eventIds) {
@@ -333,14 +334,49 @@ export const friendsGoing = onCall(async (req) => {
     const friends: { uid: string; displayName: string; initials: string }[] = [];
     for (const a of attendees.docs) {
       const other = a.id;
-      if (other === uid || !following.has(other)) continue;
-      if (await isBlockedEitherWay(uid, other)) continue;
-      const visibility = a.data().visibility === "public" ? "public" : "friends";
-      if (visibility === "friends" && !(await follows(other, uid))) continue;
+      if (other === uid || !accepted.has(other)) continue;
+      if (blocked.has(other)) continue;
       friends.push({ uid: other, displayName: safeText(a.data().displayName, 60), initials: safeText(a.data().initials, 3) });
     }
     events[eventId] = { count: friends.length, friends: friends.slice(0, FRIEND_AVATARS) };
   }
+  return { events };
+});
+
+/** A bounded upcoming view that does not depend on which events the client
+ * happened to load first. It reads accepted friend profiles only; old follows
+ * and a public activity flag cannot grant access. */
+export const friendsUpcoming = onCall(async (req) => {
+  const uid = requireUid(req.auth);
+  await enforceRateLimit(uid, "friendsUpcoming");
+  const [ids, blocked] = await Promise.all([friendIds(uid, 100), blockedSetFor(uid)]);
+  const visible = ids.filter((id) => !blocked.has(id));
+  const profiles = await Promise.all(visible.map((id) => db.collection("users").doc(id).get()));
+  const people = new Map<string, string[]>();
+  for (const profile of profiles) {
+    const name = safeText(profile.data()?.displayName, 60) || "A friend";
+    const rsvps = Array.isArray(profile.data()?.rsvpEventIDs) ? profile.data()!.rsvpEventIDs as unknown[] : [];
+    for (const raw of rsvps.slice(-20)) {
+      const eventId = safeText(raw, 200);
+      if (!eventId || eventId.includes("/")) continue;
+      const names = people.get(eventId) ?? [];
+      if (names.length < 5) names.push(name);
+      people.set(eventId, names);
+    }
+  }
+  const eventIds = Array.from(people.keys()).slice(0, 150);
+  const eventDocs = await Promise.all(eventIds.map((id) => db.collection("events").doc(id).get()));
+  const now = Date.now();
+  const events = eventDocs.flatMap((doc) => {
+    const x = doc.data();
+    const startsAt = typeof x?.date?.toMillis === "function" ? x.date.toMillis() as number : 0;
+    if (!x || x.active !== true || x.hidden === true || startsAt < now) return [];
+    return [{
+      id: doc.id, title: safeText(x.title, 120),
+      locationName: safeText(x.locationName, 100), startsAt,
+      friends: people.get(doc.id) ?? [],
+    }];
+  }).sort((a, b) => a.startsAt - b.startsAt).slice(0, 20);
   return { events };
 });
 
@@ -366,12 +402,12 @@ export const friendsLeaderboard = onCall(async (req) => {
 
   const period = safeString(req.data?.period) === "month" ? "month" : "allTime";
 
-  const [meSnap, followingSnap] = await Promise.all([
+  const [meSnap, accepted] = await Promise.all([
     db.collection("users").doc(uid).get(),
-    db.collection(`users/${uid}/following`).where("kind", "==", "user").limit(200).get(),
+    friendIds(uid),
   ]);
 
-  const candidates = [uid, ...followingSnap.docs.map((d) => d.id)];
+  const candidates = [uid, ...accepted];
   const rows: { uid: string; displayName: string; initials: string; points: number; isMe: boolean }[] = [];
 
   for (const id of candidates) {

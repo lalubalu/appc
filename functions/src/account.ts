@@ -112,6 +112,12 @@ const cleanSocialGraph: Cleaner = async (uid, counts) => {
   // Rows in OTHER users' subcollections that name this user.
   bump(counts, "followersOfMe",
     await deleteQueryBatched(db.collectionGroup("following").where("uid", "==", uid)));
+  bump(counts, "friendEdgesNamingMe",
+    await deleteQueryBatched(db.collectionGroup("friends").where("uid", "==", uid)));
+  bump(counts, "friendRequestsFromMe",
+    await deleteQueryBatched(db.collectionGroup("friendRequests").where("fromUid", "==", uid)));
+  bump(counts, "friendRequestsToMe",
+    await deleteQueryBatched(db.collectionGroup("friendRequests").where("toUid", "==", uid)));
   bump(counts, "blocksNamingMe",
     await deleteQueryBatched(db.collectionGroup("blocks").where("uid", "==", uid)));
   bump(counts, "invitesSent",

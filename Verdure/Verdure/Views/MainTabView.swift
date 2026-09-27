@@ -1,5 +1,6 @@
 import SwiftUI
 import CoreLocation
+import CoreImage.CIFilterBuiltins
 
 private enum AppTab: Int, CaseIterable {
     case discover, plan, friends, rewards, profile
@@ -25,6 +26,11 @@ private enum AppTab: Int, CaseIterable {
     }
 }
 
+private struct FriendInviteLink: Equatable {
+    let uid: String
+    let token: String
+}
+
 struct MainTabView: View {
     private enum DiscoverMode: String, CaseIterable { case events = "Events", places = "Places", map = "Map" }
     @State private var selected: AppTab
@@ -33,6 +39,7 @@ struct MainTabView: View {
     @State private var communityOnLaunch = false
     @State private var router = DeepLinkRouter.shared
     @State private var deepLinkedEventId: BoxedID?
+    @State private var friendInvite: FriendInviteLink?
     @State private var primerTrigger: NotificationPrimer.Trigger?
     @Environment(GameStateManager.self) private var gameState
 
@@ -47,6 +54,9 @@ struct MainTabView: View {
             selected = .discover
             discoverMode = .events
             deepLinkedEventId = BoxedID(id: id)
+        case .friendInvite(let uid, let token):
+            selected = .friends
+            friendInvite = FriendInviteLink(uid: uid, token: token)
         case .perk, .rewards:
             selected = .rewards
         case .notifications:
@@ -88,7 +98,7 @@ struct MainTabView: View {
                 switch selected {
                 case .discover: discoverContent
                 case .plan:     PlanTabView()
-                case .friends:  FriendsTabView(initialCommunity: communityOnLaunch)
+                case .friends:  FriendsTabView(initialCommunity: communityOnLaunch, invite: friendInvite)
                 case .rewards:  RewardsStoreView(showsDoneButton: false)
                 case .profile:   ProfileView()
                 }
@@ -305,7 +315,17 @@ private struct PlanTabView: View {
             let fitsNote = note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
                 "\(event.title) \(event.description ?? "") \(event.locationName)".localizedCaseInsensitiveContains(note)
             return fitsWhen && fitsBudget && underTwenty && fitsCompany && fitsDistance && fitsNote
-        }.sorted { $0.date < $1.date }
+        }.sorted { left, right in
+            if company == "Friends" {
+                let leftFriends = social.friendsGoingByEvent[left.id]?.count ?? 0
+                let rightFriends = social.friendsGoingByEvent[right.id]?.count ?? 0
+                if leftFriends != rightFriends { return leftFriends > rightFriends }
+            }
+            let order = eventsService.rankedEventIDs
+            let a = order.firstIndex(of: left.id) ?? Int.max
+            let b = order.firstIndex(of: right.id) ?? Int.max
+            return a == b ? left.date < right.date : a < b
+        }
     }
 
     private var plannedEvents: [Event] {
@@ -338,8 +358,8 @@ private struct PlanTabView: View {
                     }
                     .buttonStyle(.plain)
 
-                    if company == "Friends" {
-                        Text("Friend availability will appear here after mutual friend requests are available.")
+                    if company == "Friends" && social.friends.isEmpty {
+                        Text("Add a friend in Friends to see who's going and plan together.")
                             .font(VType.body(12)).foregroundStyle(Palette.inkSoft)
                     }
 
@@ -369,6 +389,14 @@ private struct PlanTabView: View {
             .task {
                 await eventsService.fetchNearbyEvents(around: locationManager.userCoordinate,
                                                       followedOrganizerIDs: social.followedOrganizerIDs)
+                if company == "Friends" {
+                    await social.loadFriendsGoing(for: Array(eventsService.events.prefix(50)).map(\.id))
+                }
+            }
+            .onChange(of: company) { _, value in
+                if value == "Friends" {
+                    Task { await social.loadFriendsGoing(for: Array(eventsService.events.prefix(50)).map(\.id)) }
+                }
             }
             .sheet(item: $selectedEvent) { event in
                 EventDetailSheet(event: event, dateFormatter: eventDateFormatter)
@@ -427,11 +455,16 @@ private struct PlanTabView: View {
                         .font(VType.body(12)).foregroundStyle(Palette.inkSoft)
                     Text(event.priceLabel ?? "Price not listed")
                         .font(VType.body(12, .semibold)).foregroundStyle(Palette.spruce.base)
+                    if let going = social.friendsGoingByEvent[event.id], going.count > 0 {
+                        Text("\(going.count) friend\(going.count == 1 ? "" : "s") going")
+                            .font(VType.body(12, .semibold)).foregroundStyle(Palette.spruce.base)
+                    }
                 }
                 Spacer(minLength: 0)
             }
             HStack {
                 Button("Details") { selectedEvent = event }
+                GoingButton(event: event)
                 Spacer()
                 Button("Swap") {
                     excludedIDs.insert(event.id)
@@ -452,11 +485,24 @@ private struct PlanTabView: View {
 
 private struct FriendsTabView: View {
     let initialCommunity: Bool
+    let invite: FriendInviteLink?
+    @Environment(SocialService.self) private var social
+    @Environment(EventsAPIService.self) private var eventsService
+    @Environment(AuthService.self) private var auth
     @State private var showsCommunity = false
     @State private var showNotifications = false
+    @State private var showAddFriend = false
+    @State private var showLeaderboard = false
+    @State private var showAuth = false
+    @State private var selectedEvent: MainTabView.BoxedID?
+    @State private var username = ""
+    @State private var foundFriend: FriendSummary?
+    @State private var searching = false
+    @State private var birthDate = Calendar.current.date(byAdding: .year, value: -18, to: Date()) ?? Date()
 
-    init(initialCommunity: Bool = false) {
+    init(initialCommunity: Bool = false, invite: FriendInviteLink? = nil) {
         self.initialCommunity = initialCommunity
+        self.invite = invite
         _showsCommunity = State(initialValue: initialCommunity)
     }
 
@@ -492,35 +538,36 @@ private struct FriendsTabView: View {
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: Spacing.lg) {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Image(systemName: "person.2.wave.2.fill")
-                                .font(.system(size: 32)).foregroundStyle(Palette.spruce.base)
-                            Text("Find your people here.")
-                                .font(VType.display(26, .semibold)).foregroundStyle(Palette.ink)
-                            Text("Soon you'll see what accepted friends are going to, swap invitations, and plan together.")
-                                .font(VType.body(14)).foregroundStyle(Palette.inkSoft)
-                                .fixedSize(horizontal: false, vertical: true)
-                            ShareLink(item: URL(string: Legal.siteBase)!) {
-                                Label("Invite someone to Verdure", systemImage: "square.and.arrow.up")
-                                    .font(VType.body(14, .semibold))
-                                    .foregroundStyle(Palette.spruce.onColor)
-                                    .padding(14)
-                                    .frame(maxWidth: .infinity)
+                        if auth.currentUser == nil {
+                            friendCard("Your people are waiting", message: "Sign in to add friends and share real plans.")
+                            Button { showAuth = true } label: {
+                                Text("Sign in to Friends")
+                                    .font(VType.body(15, .semibold)).foregroundStyle(Palette.spruce.onColor)
+                                    .frame(maxWidth: .infinity).padding(14)
                                     .background(Palette.spruce.base, in: RoundedRectangle(cornerRadius: Radius.sm))
                             }
+                        } else {
+                            if social.friends.isEmpty {
+                                friendCard("Find your people here.", message: "Share a private invite to start planning together. Only people you accept can see your activity.")
+                            }
+                            Button { showAddFriend = true } label: {
+                                Label("Add friends", systemImage: "person.crop.circle.badge.plus")
+                                    .font(VType.body(15, .semibold)).foregroundStyle(Palette.spruce.onColor)
+                                    .frame(maxWidth: .infinity).padding(14)
+                                    .background(Palette.spruce.base, in: RoundedRectangle(cornerRadius: Radius.sm))
+                            }
+                            if !social.incomingFriendRequests.isEmpty { requestsSection }
+                            goingSection
+                            if !social.pendingInvites.isEmpty { invitesSection }
+                            if !social.friends.isEmpty { friendsSection }
+                            Button { showLeaderboard = true } label: {
+                                Label("Friends leaderboard", systemImage: "chart.bar.xaxis")
+                                    .font(VType.body(15, .semibold)).foregroundStyle(Palette.ink)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(Spacing.md)
+                                    .claySurface(.surface, radius: Radius.md, elevation: 0.6)
+                            }.buttonStyle(.plain)
                         }
-                        .padding(Spacing.lg)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .claySurface(.surface, radius: Radius.lg, elevation: 0.8)
-
-                        Button { showNotifications = true } label: {
-                            Label("Event invitations", systemImage: "envelope.open")
-                                .font(VType.body(15, .semibold)).foregroundStyle(Palette.ink)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(Spacing.md)
-                                .claySurface(.surface, radius: Radius.md, elevation: 0.6)
-                        }
-                        .buttonStyle(.plain)
                     }
                     .padding(Spacing.md).padding(.bottom, 110)
                 }
@@ -529,6 +576,191 @@ private struct FriendsTabView: View {
         }
         .background(VerdureBackground())
         .sheet(isPresented: $showNotifications) { NotificationsInboxView() }
+        .sheet(isPresented: $showAuth) { AuthView(onComplete: { showAuth = false }) }
+        .sheet(isPresented: $showAddFriend) { addFriendSheet }
+        .sheet(isPresented: $showLeaderboard) { StatsAndLeaderboardView() }
+        .sheet(item: $selectedEvent) { EventDeepLinkSheet(eventId: $0.id) }
+        .task {
+            guard auth.currentUser != nil else { return }
+            await social.refreshAll()
+            await social.loadFriendInvite()
+            await social.loadFriendsUpcoming()
+            await social.loadFriendsGoing(for: Array(eventsService.events.prefix(50)).map(\.id))
+        }
+        .onChange(of: eventsService.events.map(\.id)) { _, ids in
+            Task { await social.loadFriendsGoing(for: Array(ids.prefix(50))) }
+        }
+        .onAppear { if invite != nil { showAddFriend = true } }
+        .onChange(of: invite) { _, newValue in if newValue != nil { showAddFriend = true } }
+    }
+
+    private func friendCard(_ title: String, message: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Image(systemName: "person.2.wave.2.fill")
+                .font(.system(size: 30)).foregroundStyle(Palette.spruce.base)
+            Text(title).font(VType.display(24, .semibold)).foregroundStyle(Palette.ink)
+            Text(message).font(VType.body(14)).foregroundStyle(Palette.inkSoft)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Spacing.lg)
+        .claySurface(.surface, radius: Radius.lg, elevation: 0.8)
+    }
+
+    private var requestsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Friend requests").font(VType.display(21, .semibold)).foregroundStyle(Palette.ink)
+            ForEach(social.incomingFriendRequests) { request in
+                HStack {
+                    Text(request.peerName).font(VType.body(15, .semibold)).foregroundStyle(Palette.ink)
+                    Spacer()
+                    Button("Decline") { Task { _ = await social.respondToFriendRequest(from: request.peerUid, accept: false) } }
+                        .font(VType.body(12)).foregroundStyle(Palette.inkSoft)
+                    Button("Accept") { Task { _ = await social.respondToFriendRequest(from: request.peerUid, accept: true) } }
+                        .font(VType.body(12, .semibold)).foregroundStyle(Palette.spruce.base)
+                }
+                .padding(Spacing.md).claySurface(.surface, radius: Radius.md, elevation: 0.4)
+            }
+        }
+    }
+
+    private var goingSection: some View {
+        let upcoming = social.friendsUpcoming.prefix(10)
+        return VStack(alignment: .leading, spacing: 10) {
+            Text("Going soon").font(VType.display(21, .semibold)).foregroundStyle(Palette.ink)
+            if upcoming.isEmpty {
+                Text(social.friends.isEmpty ? "Add a friend to see their upcoming plans." : "No shared plans yet. Check back as friends RSVP.")
+                    .font(VType.body(13)).foregroundStyle(Palette.inkSoft)
+            }
+            ForEach(Array(upcoming)) { event in
+                Button { selectedEvent = .init(id: event.id) } label: {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(event.title).font(VType.body(15, .semibold)).foregroundStyle(Palette.ink)
+                        Text("\(event.friendNames.joined(separator: ", ")) · \(event.startsAt.formatted(date: .abbreviated, time: .shortened))")
+                            .font(VType.body(12)).foregroundStyle(Palette.inkSoft)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(Spacing.md).claySurface(.surface, radius: Radius.md, elevation: 0.4)
+                }.buttonStyle(.plain)
+            }
+        }
+    }
+
+    private var invitesSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Invitations").font(VType.display(21, .semibold)).foregroundStyle(Palette.ink)
+            ForEach(social.pendingInvites) { invite in
+                HStack {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(invite.eventTitle).font(VType.body(14, .semibold)).foregroundStyle(Palette.ink)
+                        Text("From \(invite.fromName)").font(VType.body(12)).foregroundStyle(Palette.inkSoft)
+                    }
+                    Spacer()
+                    Button("Decline") { Task { await social.declineInvite(invite.id) } }
+                        .font(VType.body(12)).foregroundStyle(Palette.inkSoft)
+                    Button("View") { selectedEvent = .init(id: invite.eventId) }
+                        .font(VType.body(12, .semibold)).foregroundStyle(Palette.spruce.base)
+                }
+                .padding(Spacing.md).claySurface(.surface, radius: Radius.md, elevation: 0.4)
+            }
+        }
+    }
+
+    private var friendsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Your friends").font(VType.display(21, .semibold)).foregroundStyle(Palette.ink)
+            ForEach(social.friends) { friend in
+                HStack {
+                    Text(friend.displayName).font(VType.body(14, .semibold)).foregroundStyle(Palette.ink)
+                    Spacer()
+                    Menu {
+                        Button("Remove friend", role: .destructive) {
+                            Task { _ = await social.removeFriend(friend.uid) }
+                        }
+                    } label: { Image(systemName: "ellipsis").foregroundStyle(Palette.inkSoft).frame(width: 44, height: 44) }
+                }
+                .padding(.leading, Spacing.md).claySurface(.surface, radius: Radius.md, elevation: 0.4)
+            }
+        }
+    }
+
+    private var addFriendSheet: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: Spacing.lg) {
+                    Text("Invite someone you know").font(VType.display(24, .semibold)).foregroundStyle(Palette.ink)
+                    Text("Share this private link or show its QR code. You choose whether to accept a request.")
+                        .font(VType.body(14)).foregroundStyle(Palette.inkSoft)
+                    if let url = social.friendInviteURL {
+                        if let qr = qrImage(url.absoluteString) {
+                            Image(uiImage: qr).interpolation(.none).resizable()
+                                .frame(width: 190, height: 190).frame(maxWidth: .infinity)
+                                .accessibilityLabel("Private friend invite QR code")
+                        }
+                        ShareLink(item: url) {
+                            Label("Share invite", systemImage: "square.and.arrow.up")
+                                .font(VType.body(15, .semibold)).foregroundStyle(Palette.spruce.onColor)
+                                .frame(maxWidth: .infinity).padding(14)
+                                .background(Palette.spruce.base, in: RoundedRectangle(cornerRadius: Radius.sm))
+                        }
+                    }
+                    if let invite {
+                        Button("Send request from invite") {
+                            Task {
+                                if await social.sendFriendRequest(to: invite.uid, inviteToken: invite.token) {
+                                    showAddFriend = false
+                                }
+                            }
+                        }
+                        .font(VType.body(15, .semibold))
+                        .foregroundStyle(Palette.spruce.base)
+                    }
+                    Text("Find an adult by exact username")
+                        .font(VType.display(19, .semibold)).foregroundStyle(Palette.ink)
+                    HStack {
+                        TextField("Username", text: $username)
+                            .textInputAutocapitalization(.never).autocorrectionDisabled()
+                            .font(VType.body(15)).padding(12)
+                            .claySurface(.surface, radius: Radius.sm, elevation: 0.3)
+                        Button("Find") {
+                            searching = true; foundFriend = nil
+                            Task { foundFriend = await social.findFriend(username: username); searching = false }
+                        }.disabled(username.count < 3 || searching)
+                    }
+                    if let foundFriend {
+                        HStack {
+                            Text(foundFriend.displayName).font(VType.body(15)).foregroundStyle(Palette.ink)
+                            Spacer()
+                            Button("Request") { Task { _ = await social.sendFriendRequest(to: foundFriend.uid); self.foundFriend = nil } }
+                                .font(VType.body(14, .semibold)).foregroundStyle(Palette.spruce.base)
+                        }.padding(Spacing.md).claySurface(.surface, radius: Radius.sm, elevation: 0.3)
+                    }
+                    if auth.ageRegistrationPending {
+                        DatePicker("Confirm birth date", selection: $birthDate,
+                                   in: ...Calendar.current.date(byAdding: .year, value: -13, to: Date())!, displayedComponents: .date)
+                        Button("Finish age protection") {
+                            Task { _ = await auth.retryAgeRegistration(birthYear: Calendar.current.component(.year, from: birthDate)) }
+                        }
+                    }
+                    if let error = social.lastError ?? auth.errorMessage {
+                        Text(error).font(VType.body(12)).foregroundStyle(Palette.danger)
+                    }
+                }
+                .padding(Spacing.lg)
+            }
+            .background(VerdureBackground())
+            .navigationTitle("Add friends")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { showAddFriend = false } } }
+        }
+    }
+
+    private func qrImage(_ value: String) -> UIImage? {
+        let filter = CIFilter.qrCodeGenerator()
+        filter.message = Data(value.utf8)
+        guard let image = filter.outputImage else { return nil }
+        let scaled = image.transformed(by: CGAffineTransform(scaleX: 8, y: 8))
+        guard let cg = CIContext().createCGImage(scaled, from: scaled.extent) else { return nil }
+        return UIImage(cgImage: cg)
     }
 }
 
