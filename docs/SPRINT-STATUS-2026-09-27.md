@@ -89,7 +89,7 @@ environment switch has been performed. `CLAUDE.md` deploy status is untouched.
 
 | Scope | Still needed |
 | --- | --- |
-| A/B | Populate live events; re-run coverage and record the delta; complete County Parks/volunteer supply and required City probes; verify duplicate rate under 5% against live cycles. |
+| A/B | Populate live events; re-run coverage and record the delta; assess County Parks/volunteer structured access; verify duplicate rate under 5% against live cycles. The required City and County path probes are recorded, and six new sources are configured. |
 | C0/P2 | Named human reviewer for all 200 sampled classifications, category accuracy and fixes; review a populated-corpus backfill dry run before writing it live. |
 | P3/C1 | Measure full Firestore reads against a populated index, including user context, client reads and index entries, before enabling the feed at scale. |
 | C3/C10/C11 | Full radius and filter behavior against a dense corpus; named reviewer and 20-profile golden set; live measurement of impression/outcome coverage and cost. |
