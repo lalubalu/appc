@@ -180,3 +180,6 @@ The sprint is **not complete**. The table separates engineering still to do
 from the required live corpus, named human review, device QA and external
 accounts/partners. No unmeasured ranking or coverage claim is treated as a
 release pass.
+
+The company-facing account, budget, email, and owner request list is in
+[BOSS-ACCOUNTS-AND-BUDGET-2026-09-27.md](BOSS-ACCOUNTS-AND-BUDGET-2026-09-27.md).
