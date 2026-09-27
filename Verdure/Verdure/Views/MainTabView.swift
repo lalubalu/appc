@@ -580,19 +580,17 @@ private struct PlanTabView: View {
 
     private func planCard(_ event: Event, number: Int) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top) {
-                Text(String(format: "%02d", number))
-                    .font(VType.num(24, .bold)).foregroundStyle(Palette.spruce.base)
+            HStack(alignment: .top, spacing: 12) {
+                planArtwork(event)
                 VStack(alignment: .leading, spacing: 5) {
+                    Text(String(format: "STOP %02d", number))
+                        .font(VType.num(10, .bold)).foregroundStyle(Palette.spruce.base)
                     Text(event.title).font(VType.display(20, .semibold)).foregroundStyle(Palette.ink)
                     Text("\(event.date.formatted(date: .abbreviated, time: .shortened)) · \(event.locationName)")
                         .font(VType.body(12)).foregroundStyle(Palette.inkSoft)
                     Text(event.priceLabel ?? "Price not listed")
                         .font(VType.body(12, .semibold)).foregroundStyle(Palette.spruce.base)
-                    if let going = social.friendsGoingByEvent[event.id], going.count > 0 {
-                        Text("\(going.count) friend\(going.count == 1 ? "" : "s") going")
-                            .font(VType.body(12, .semibold)).foregroundStyle(Palette.spruce.base)
-                    }
+                    FriendsGoingStack(eventId: event.id, compact: true)
                     if let why = planReasons[event.id], !why.isEmpty {
                         Text(why).font(VType.body(12)).foregroundStyle(Palette.inkSoft)
                     }
@@ -601,7 +599,7 @@ private struct PlanTabView: View {
             }
             HStack {
                 Button("Details") { selectedEvent = event }
-                GoingButton(event: event)
+                GoingButton(event: event, compact: true)
                 Spacer()
                 Menu("Refine") {
                     ForEach(["Swap", "Earlier", "Later", "Cheaper", "Closer", "More like this", "Remove"], id: \.self) { label in
@@ -617,6 +615,38 @@ private struct PlanTabView: View {
         .padding(Spacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
         .claySurface(.surface, radius: Radius.md, elevation: 0.8)
+    }
+
+    @ViewBuilder
+    private func planArtwork(_ event: Event) -> some View {
+        if let imageURL = event.imageURL, let url = URL(string: imageURL) {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image.resizable().scaledToFill()
+                case .empty, .failure:
+                    planArtworkPlaceholder(event)
+                @unknown default:
+                    planArtworkPlaceholder(event)
+                }
+            }
+            .frame(width: 82, height: 82)
+            .clipShape(RoundedRectangle(cornerRadius: Radius.sm))
+            .accessibilityHidden(true)
+        } else {
+            planArtworkPlaceholder(event)
+                .frame(width: 82, height: 82)
+                .clipShape(RoundedRectangle(cornerRadius: Radius.sm))
+                .accessibilityHidden(true)
+        }
+    }
+
+    private func planArtworkPlaceholder(_ event: Event) -> some View {
+        Image(systemName: event.imagePlaceholder)
+            .font(.system(size: 25, weight: .medium))
+            .foregroundStyle(Palette.spruce.base)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Palette.surface)
     }
 }
 

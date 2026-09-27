@@ -92,6 +92,11 @@ struct DiscoveryFilterState: Codable, Equatable {
     var rarities: Set<PlaceRarity> = []
     var dateRange: DateRangeOption = .any
     var price: PriceOption = .any
+    var eventSetting: String? = nil       // indoor | outdoor | virtual
+    var eventAudience: String? = nil      // children | teens | adults
+    var maxExpectedSize: Int? = nil
+    var requiredAccessibility: String? = nil
+    var publicVenueOnly = false
     var eventSort: SortOption = .soonest
     var placeSort: SortOption = .distance
     var recentSearches: [String] = []
@@ -99,8 +104,40 @@ struct DiscoveryFilterState: Codable, Equatable {
     static let radiusChoices: [Double] = [2, 5, 10, 25, 50]
     static let maxRecentSearches = 8
 
+    init() {}
+
+    // Existing users have a v1 snapshot without the organizer-detail filters.
+    // Decode missing keys individually so a relaunch preserves their choices.
+    private enum CodingKeys: String, CodingKey {
+        case radiusMiles, eventCategories, placeCategories, rarities, dateRange, price
+        case eventSetting, eventAudience, maxExpectedSize, requiredAccessibility, publicVenueOnly
+        case eventSort, placeSort, recentSearches
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        radiusMiles = try values.decodeIfPresent(Double.self, forKey: .radiusMiles) ?? 10
+        eventCategories = try values.decodeIfPresent(Set<EventCategory>.self, forKey: .eventCategories) ?? []
+        placeCategories = try values.decodeIfPresent(Set<PlaceCategory>.self, forKey: .placeCategories) ?? []
+        rarities = try values.decodeIfPresent(Set<PlaceRarity>.self, forKey: .rarities) ?? []
+        dateRange = try values.decodeIfPresent(DateRangeOption.self, forKey: .dateRange) ?? .any
+        price = try values.decodeIfPresent(PriceOption.self, forKey: .price) ?? .any
+        eventSetting = try values.decodeIfPresent(String.self, forKey: .eventSetting)
+        eventAudience = try values.decodeIfPresent(String.self, forKey: .eventAudience)
+        maxExpectedSize = try values.decodeIfPresent(Int.self, forKey: .maxExpectedSize)
+        requiredAccessibility = try values.decodeIfPresent(String.self, forKey: .requiredAccessibility)
+        publicVenueOnly = try values.decodeIfPresent(Bool.self, forKey: .publicVenueOnly) ?? false
+        eventSort = try values.decodeIfPresent(SortOption.self, forKey: .eventSort) ?? .soonest
+        placeSort = try values.decodeIfPresent(SortOption.self, forKey: .placeSort) ?? .distance
+        recentSearches = try values.decodeIfPresent([String].self, forKey: .recentSearches) ?? []
+    }
+
     var activeEventFilterCount: Int {
-        (eventCategories.isEmpty ? 0 : 1) + (dateRange == .any ? 0 : 1) + (price == .any ? 0 : 1) + (radiusMiles == 10 ? 0 : 1)
+        (eventCategories.isEmpty ? 0 : 1) + (dateRange == .any ? 0 : 1) +
+        (price == .any ? 0 : 1) + (radiusMiles == 10 ? 0 : 1) +
+        (eventSetting == nil ? 0 : 1) + (eventAudience == nil ? 0 : 1) +
+        (maxExpectedSize == nil ? 0 : 1) + (requiredAccessibility == nil ? 0 : 1) +
+        (publicVenueOnly ? 1 : 0)
     }
     var activePlaceFilterCount: Int {
         (placeCategories.isEmpty ? 0 : 1) + (rarities.isEmpty ? 0 : 1) + (radiusMiles == 10 ? 0 : 1)
@@ -145,6 +182,8 @@ final class DiscoveryFilters {
 
     func resetEventFilters() {
         state.eventCategories = []; state.dateRange = .any; state.price = .any; state.eventSort = .soonest
+        state.eventSetting = nil; state.eventAudience = nil; state.maxExpectedSize = nil
+        state.requiredAccessibility = nil; state.publicVenueOnly = false
     }
     func resetPlaceFilters() {
         state.placeCategories = []; state.rarities = []; state.placeSort = .distance
@@ -169,6 +208,22 @@ final class DiscoveryFilters {
             case .free: if e.isFree == false { return false }       // unknown price passes
             case .paid: if e.isFree != false { return false }
             }
+            if let setting = state.eventSetting {
+                switch setting {
+                case "virtual": if e.virtual != true { return false }
+                case "indoor", "outdoor":
+                    if e.indoorOutdoor != setting && e.indoorOutdoor != "mixed" { return false }
+                default: return false
+                }
+            }
+            if let audience = state.eventAudience,
+               e.ageSuitability != "all" && e.ageSuitability != audience { return false }
+            if let maximum = state.maxExpectedSize {
+                guard let size = e.expectedSize, size <= maximum else { return false }
+            }
+            if let feature = state.requiredAccessibility,
+               !e.accessibilityFeatures.contains(feature) { return false }
+            if state.publicVenueOnly && e.publicVenue != true { return false }
             if let userLocation, let coord = e.coordinate {
                 let miles = userLocation.distance(from: CLLocation(latitude: coord.latitude, longitude: coord.longitude)) / 1609.344
                 if miles > state.radiusMiles { return false }

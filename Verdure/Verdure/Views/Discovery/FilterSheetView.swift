@@ -24,6 +24,7 @@ struct FilterSheetView: View {
                         eventCategorySection
                         dateSection
                         priceSection
+                        organizerDetailSection
                     } else {
                         placeCategorySection
                         raritySection
@@ -48,7 +49,7 @@ struct FilterSheetView: View {
                 }
             }
         }
-        .presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
+        .presentationDetents([.large]).presentationDragIndicator(.visible)
     }
 
     // MARK: Sections
@@ -78,9 +79,9 @@ struct FilterSheetView: View {
     private var eventCategorySection: some View {
         let enoughVolunteers = eventsService.events.filter { event in
             guard event.category == .volunteer, event.date > Date(),
-                  let coordinate = event.coordinate, let origin = locationManager.userLocation else { return false }
+                  let coordinate = event.coordinate else { return false }
             return CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
-                .distance(from: origin) <= filters.state.radiusMiles * 1609.344
+                .distance(from: locationManager.browsingLocation) <= filters.state.radiusMiles * 1609.344
         }.count >= 30
         let choices = EventCategory.allCases.filter { $0 != .volunteer || enoughVolunteers }
         return section("Category") {
@@ -135,6 +136,52 @@ struct FilterSheetView: View {
                     chip(p.label, selected: filters.state.price == p) { filters.state.price = p }
                 }
             }
+        }
+    }
+
+    private var organizerDetailSection: some View {
+        VStack(alignment: .leading, spacing: Spacing.lg) {
+            section("Setting") {
+                FlowChips(items: [("indoor", "house"), ("outdoor", "tree"), ("virtual", "video")],
+                          isSelected: { filters.state.eventSetting == $0 },
+                          label: { $0.capitalized }) { value in
+                    filters.state.eventSetting = filters.state.eventSetting == value ? nil : value
+                }
+            }
+            section("Suitable for") {
+                FlowChips(items: [("children", "figure.and.child.holdinghands"),
+                                  ("teens", "person.2"), ("adults", "person")],
+                          isSelected: { filters.state.eventAudience == $0 },
+                          label: { $0 == "children" ? "Kids" : $0.capitalized }) { value in
+                    filters.state.eventAudience = filters.state.eventAudience == value ? nil : value
+                }
+            }
+            section("Group size") {
+                chip("20 people or fewer", icon: "person.3", selected: filters.state.maxExpectedSize == 20) {
+                    filters.state.maxExpectedSize = filters.state.maxExpectedSize == 20 ? nil : 20
+                }
+            }
+            section("Accessibility") {
+                FlowChips(items: [("stepFree", "figure.roll"),
+                                  ("accessibleRestroom", "door.left.hand.open"),
+                                  ("quietSpace", "speaker.slash")],
+                          isSelected: { filters.state.requiredAccessibility == $0 },
+                          label: { value in
+                              switch value {
+                              case "stepFree": "Step-free"
+                              case "accessibleRestroom": "Accessible restroom"
+                              default: "Quiet space"
+                              }
+                          }) { value in
+                    filters.state.requiredAccessibility = filters.state.requiredAccessibility == value ? nil : value
+                }
+            }
+            Toggle("Public venue only", isOn: Binding(
+                get: { filters.state.publicVenueOnly },
+                set: { filters.state.publicVenueOnly = $0 }))
+                .font(VType.body(14, .medium)).tint(Palette.spruce.base)
+            Text("These choices show listings with confirmed details from the organizer or source.")
+                .font(VType.body(11)).foregroundStyle(Palette.inkFaint)
         }
     }
 

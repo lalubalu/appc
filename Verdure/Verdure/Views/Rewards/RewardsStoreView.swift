@@ -466,7 +466,7 @@ private struct EmptyPerksCard: View {
                 Text("No perks live yet").font(VType.scaledDisplay(16, .semibold))
                     .foregroundStyle(Palette.ink)
             }
-            Text("Perks are small offers from local partners — a free coffee, a discount at a shop near a trail — that cost far fewer points than a gift card. We're signing up the first partners in your area now.")
+            Text("Perks are small offers from local partners — a free coffee, a discount at a shop near a trail — that cost far fewer points than a gift card. Local offers will appear here when partners join.")
                 .font(VType.scaledBody(13)).foregroundStyle(Palette.inkSoft)
                 .fixedSize(horizontal: false, vertical: true).lineSpacing(3)
             Text("Your points keep accruing in the meantime.")

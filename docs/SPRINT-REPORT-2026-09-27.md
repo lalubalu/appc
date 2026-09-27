@@ -1,0 +1,102 @@
+# Verdure next sprint: engineering report
+
+Date: 2026-09-27. Scope: the supplied 584-line “Verdure — Next Sprint”
+brief, applied to the Verdure iOS app in `Connectify App-iOS` and its Functions
+and website companions. This is a local engineering report, not a release
+certificate. No deploy, billing change, Apple Developer action, or production
+environment flip was performed. `CLAUDE.md` deploy status was left untouched.
+
+## Verdict
+
+The sprint is **not fully complete**. The broad local implementation is in
+place and builds, but several explicit acceptance gates cannot be passed with
+the live `/events` collection empty. A named human must review 200 classifier
+examples and label a 20-profile ranking golden set. Partner/API access, an
+Idealist business contact, Apple/Blaze setup, and physical-device QA remain
+external inputs. The simulator UI automation suite stalled before a result.
+
+This report does not turn an emulator pass into proof of live coverage, paid
+model quality, real-device behavior, or launch readiness.
+
+## What was built
+
+| Area | Delivered locally | Evidence / limit |
+| --- | --- | --- |
+| A / B supply | Coverage baseline recorded; “Sports & Outdoors” label; source fingerprinter; SCU LiveWhale adapter; City and County probes; six additional source configurations; frozen source list before C0 lexicon work. | [Coverage](COVERAGE-SAN-JOSE.md), [survey](FEED-SURVEY-SAN-JOSE.md), [freeze](SOURCE-FREEZE-SAN-JOSE.md). The live collection has **0** documents, so coverage delta and duplicate rate against real cycles are not measurable. |
+| C0 classification | Ingest-time multi-label enrichment, confidence/quality and eligibility fields, geocode cache, resumable dry-run-first backfill, low-confidence CLI and stratified reviewer sample. | [Audit packet](CLASSIFICATION-AUDIT.md). The 200-item human review and live backfill approval are outstanding. |
+| C discovery and P3 cost | Bounded multi-strategy candidate retrieval, shared short-window area cache, client feed limit, 40-event Everything pages, interest synonyms, For You/Everything, implicit/explicit feedback, exploration, friends-going exception, and read counters. | [Read budget](READ-BUDGET.md), [ranking evaluation](RANKING-EVAL.md). Full Firestore read pricing and ranking quality require a populated corpus. |
+| D design | Editorial serif display type, calmer radii/depth, disciplined accents, five-tab shell and refreshed screen hierarchy. | [Before/after Simulator captures](DESIGN-REFRESH.md). Empty-state visual pass exists; populated cards, larger Dynamic Type, VoiceOver, dark mode and device contrast remain open. |
+| E friends | Mutual request/accept/decline/remove, rules and server checks, minor protections, invite links/QR, accepted-only activity, Friends navigation and zero-friend state. | Emulator tests passed; a real two-device invite and public website link need device/deploy access. |
+| F planner | Options-first UI, verified-event-only plan sessions, deterministic fallback, in-place refinements, date picker, quota and model cost accounting, group-plan entry, real image/fallback, RSVP and friends-going card elements. | Automated acceptance tests cover profile difference, repeat avoidance and no invention. The actual model secret and populated-event card review remain open. |
+| G opportunities | Student/household fields and ranking signals; Opportunity labels; organizer metadata capture/display/filter; volunteer/program minimum-count gates; four volunteer organizations fingerprinted. | [Supply findings](VOLUNTEER-SUPPLY-2026-09-27.md). Volunteer sources were not added after the P1 freeze because the C0 audit has not passed; the live threshold is unmet. |
+| I / H | Verdure+ named interest profiles, saved filters, distance presets, exclusions and verified entitlement; group-plan invites, shortlist voting and independent RSVPs. | Emulator checks passed. Real purchase and multi-device UX remain open. Offline packs and AR are deferred and removed from sales copy. |
+| Honest copy | App/website privacy, invite and pricing copy aligned with implemented benefits and the $49.99 annual paywall. | Local website build/tests passed. Website changes are not deployed. |
+
+## Final Simulator pass and corrections
+
+Computer inspected Discover, Places, Map, Plan and its date picker, Friends,
+Rewards, Profile, Community, Collection, and the event filter sheet on an
+iPhone 16 Plus Simulator. The captures are linked from
+[DESIGN-REFRESH.md](DESIGN-REFRESH.md). Current event and social captures show
+empty/signed-out states because there are no live events or test friendships.
+
+That pass found and fixed four concrete defects:
+
+1. Organizer attributes were shown on events but had no corresponding
+   persisted setting, audience, group-size, accessibility or public-venue
+   filter. Old filter snapshots now migrate without losing earlier choices.
+2. A zero-result filter could silently restore unrelated event cards. Only
+   the deliberate lone-category shortcut may widen the deck; other filters
+   keep their empty result and a useful explanation.
+3. With GPS unavailable, Map opened at a continent scale and Places did not
+   fetch. Both now browse from the San Jose launch-area center, then refresh
+   after a real fix. GPS-based check-ins still use the actual location only.
+4. Places said “within 10 mi” while showing a 35-mile card. The browse center
+   now applies to the same radius filter; the corrected capture shows one
+   6.3-mile card under the 10-mile label.
+
+Plan event cards gained source images with a fallback icon and accepted-friend
+avatars. The filter sheet opens at full height for the longer form. A Rewards
+empty-state sentence was changed so it does not assert that local partners
+are already being signed up. The device QA checklist gained checks for these
+flows; no checkbox was marked passed by simulator inspection alone.
+
+## Verification record
+
+- Latest iOS Simulator build: **passed** after the final browse-location edit.
+- Latest iOS unit suite: **103 tests, 0 failures**; focused discovery-filter
+  suite: **12 tests, 0 failures**. Logs: `/tmp/verdure-final-units.log` and
+  `/tmp/verdure-final-filter-tests.log` on this machine.
+- Earlier in this sprint: Functions TypeScript build, 49 ranking units,
+  8 planner units, 328 backend emulator E2E checks, 49 blocked red-team
+  attacks, and active website tests/build were reported passing in
+  [SPRINT-STATUS-2026-09-27.md](SPRINT-STATUS-2026-09-27.md).
+- Simulator UI automation did **not** return a result before stalling. A
+  manual Computer screenshot pass covers the visible empty-state navigation,
+  not the full UI test matrix.
+
+## Exact remaining gates and inputs
+
+1. Populate the event index through an authorized ingest path; re-run the
+   baseline/end coverage measurement, by-source delta, duplicate rate,
+   backfill dry run and read-budget measurement on real documents. Current
+   zero-document evidence is in the coverage report.
+2. Assign a named reviewer for all 200 classifier samples and a named owner
+   for 20 human-judged ranking profiles. Record per-category accuracy,
+   precision@10 and corrections. The frozen source list prevents adding G4
+   volunteer feeds until this audit passes or is explicitly rerun.
+3. Obtain permitted structured endpoints or organizer access for four
+   volunteer organizations. A fingerprint is not an ingest. The prepared
+   Idealist application needs a verified organization/contact name and email.
+   National API access is documented in [NATIONAL-API-EVALUATION.md](NATIONAL-API-EVALUATION.md).
+4. Configure the planner model secret in an authorized environment and test
+   actual model sequencing, cost and sponsor trust against real candidates.
+5. Run populated-event, Dynamic Type, VoiceOver, dark-mode, cellular/GPS,
+   queue replay and two-device friend/group/RSVP QA; then resolve any defects.
+   Apple Developer, Blaze, partner agreements and device access are launch
+   inputs outside this local sprint. See [DEVICE-QA.md](../DEVICE-QA.md).
+6. Review the active website's legacy policy and settle the app/listing
+   `verdure.app` URLs versus the active `verdure-app.com` domain before
+   publishing. Deploying the local invite page needs a separate release step.
+
+The current, shorter checklist is [SPRINT-STATUS-2026-09-27.md](SPRINT-STATUS-2026-09-27.md).

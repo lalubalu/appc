@@ -57,6 +57,34 @@ final class DiscoveryFiltersTests: XCTestCase {
         XCTAssertEqual(Set(out.map(\.id)), ["a", "e"])
     }
 
+    func testOrganizerDetailFiltersUseConfirmedMetadata() {
+        var suitable = event("suitable", title: "Garden workshop")
+        suitable.indoorOutdoor = "outdoor"
+        suitable.ageSuitability = "all"
+        suitable.expectedSize = 18
+        suitable.accessibilityFeatures = ["stepFree"]
+        suitable.publicVenue = true
+        var tooLarge = event("large", title: "Large garden workshop")
+        tooLarge.indoorOutdoor = "outdoor"
+        tooLarge.ageSuitability = "all"
+        tooLarge.expectedSize = 80
+        tooLarge.accessibilityFeatures = ["stepFree"]
+        tooLarge.publicVenue = true
+        let unknown = event("unknown", title: "Unspecified listing")
+        var state = DiscoveryFilterState()
+        state.eventSetting = "outdoor"
+        state.eventAudience = "children"
+        state.maxExpectedSize = 20
+        state.requiredAccessibility = "stepFree"
+        state.publicVenueOnly = true
+        let result = DiscoveryFilters.filterEvents([suitable, tooLarge, unknown], state: state,
+                                                   query: "", userLocation: nil)
+        XCTAssertEqual(result.map(\.id), ["suitable"])
+        XCTAssertEqual(state.activeEventFilterCount, 5)
+        state.eventSetting = "virtual"
+        XCTAssertTrue(DiscoveryFilters.filterEvents([suitable], state: state, query: "", userLocation: nil).isEmpty)
+    }
+
     func testSearchMatchesTitleOrganizerLocationCategoryAndTags() {
         var tagged = event("t", title: "Storytime")
         tagged.tags = ["library", "Children Ages 0-5"]
@@ -97,6 +125,22 @@ final class DiscoveryFiltersTests: XCTestCase {
 
     // MARK: Places
 
+    func testBrowseRadiusUsesLaunchAreaWhenGPSIsUnavailable() {
+        var state = DiscoveryFilterState()
+        state.radiusMiles = 10
+        let close = Place(id: "close", name: "Close park", category: .parks, shortDescription: "",
+                          distance: "1 mi", distanceValue: 1, rating: nil, reviewCount: nil,
+                          imagePlaceholder: "leaf.fill", accentColor: .verdureGreen,
+                          isFeatured: false, latitude: 37.34, longitude: -121.89)
+        let far = Place(id: "far", name: "Far park", category: .parks, shortDescription: "",
+                        distance: "35 mi", distanceValue: 35, rating: nil, reviewCount: nil,
+                        imagePlaceholder: "leaf.fill", accentColor: .verdureGreen,
+                        isFeatured: false, latitude: 37.05, longitude: -122.10)
+        let filters = DiscoveryFilters(defaults: suite)
+        filters.state = state
+        XCTAssertEqual(filters.apply(to: [close, far], query: "", userLocation: sanJose).map(\.id), ["close"])
+    }
+
     func testCollectiblesFilterByRarityCategoryRadiusAndSortByRarity() {
         var state = DiscoveryFilterState()
         state.rarities = [.legendary, .rare]
@@ -128,6 +172,8 @@ final class DiscoveryFiltersTests: XCTestCase {
         first.state.dateRange = .thisWeekend
         first.state.price = .free
         first.state.eventSort = .points
+        first.state.eventSetting = "outdoor"
+        first.state.requiredAccessibility = "stepFree"
         first.recordSearch("soccer")
 
         let relaunched = DiscoveryFilters(defaults: suite)
@@ -136,7 +182,25 @@ final class DiscoveryFiltersTests: XCTestCase {
         XCTAssertEqual(relaunched.state.dateRange, .thisWeekend)
         XCTAssertEqual(relaunched.state.price, .free)
         XCTAssertEqual(relaunched.state.eventSort, .points)
+        XCTAssertEqual(relaunched.state.eventSetting, "outdoor")
+        XCTAssertEqual(relaunched.state.requiredAccessibility, "stepFree")
         XCTAssertEqual(relaunched.state.recentSearches, ["soccer"])
+    }
+
+    func testLegacyFilterSnapshotKeepsExistingChoices() throws {
+        var old = DiscoveryFilterState()
+        old.radiusMiles = 25
+        old.eventCategories = [.workshop]
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(old)) as? [String: Any])
+        for key in ["eventSetting", "eventAudience", "maxExpectedSize", "requiredAccessibility", "publicVenueOnly"] {
+            object.removeValue(forKey: key)
+        }
+        suite.set(try JSONSerialization.data(withJSONObject: object), forKey: DiscoveryFilters.storageKey)
+        let restored = DiscoveryFilters(defaults: suite)
+        XCTAssertEqual(restored.state.radiusMiles, 25)
+        XCTAssertEqual(restored.state.eventCategories, [.workshop])
+        XCTAssertNil(restored.state.eventSetting)
+        XCTAssertFalse(restored.state.publicVenueOnly)
     }
 
     func testRecentSearchesDedupeAndCapAtEight() {

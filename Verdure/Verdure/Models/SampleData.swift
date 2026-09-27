@@ -191,8 +191,8 @@ enum SampleData {
 
     // MARK: - Collectible Places
 
-    /// Default center (Minneapolis) used before GPS lock
-    static let defaultCenter = CLLocationCoordinate2D(latitude: 44.9778, longitude: -93.2650)
+    /// QA fixtures follow the configured launch area when GPS is unavailable.
+    static let defaultCenter = LaunchArea.builtIn[0].center
 
     /// Generates collectible places around a center coordinate.
     static func collectiblePlaces(around center: CLLocationCoordinate2D) -> [CollectiblePlace] {

@@ -87,10 +87,17 @@ final class LocationManager: NSObject {
         return miles < radius
     }
 
-    /// Live GPS when available; otherwise fall back to Cupertino (a sensible default
-    /// for the simulator, where a real fix isn't always delivered).
+    /// Live GPS when available; otherwise browse the configured launch area.
+    /// A fallback coordinate never authorizes proximity check-ins.
     var userCoordinate: CLLocationCoordinate2D {
-        userLocation?.coordinate ?? CLLocationCoordinate2D(latitude: 37.3230, longitude: -122.0322)
+        userLocation?.coordinate ?? LaunchArea.builtIn[0].center
+    }
+
+    /// Search and map filters use the launch-area center until GPS is available.
+    /// Proximity check-ins still require `userLocation` itself.
+    var browsingLocation: CLLocation {
+        let coordinate = userCoordinate
+        return CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
     }
 }
 

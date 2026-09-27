@@ -70,13 +70,16 @@ struct EventsView: View {
     /// Category, date range, free/paid, radius, search and sort — all local, all
     /// persisted. A cold-cache search never triggers a network call.
     private var filteredEvents: [Event] {
-        filters.apply(to: sourceEvents, query: searchText, userLocation: locationManager.userLocation)
+        filters.apply(to: sourceEvents, query: searchText, userLocation: locationManager.browsingLocation)
     }
     private var hasActiveSearch: Bool { !searchText.trimmingCharacters(in: .whitespaces).isEmpty }
-    /// Events shown in the deck/timeline. A category filter never blanks the screen —
-    /// it falls back to all events; only an explicit text search can yield a true "no match".
+    /// A lone category shortcut can show the wider deck when empty. Other
+    /// explicit constraints must stay in force, including organizer details.
+    private var categoryFallbackEligible: Bool {
+        selectedCategory != nil && !hasActiveSearch && filters.state.activeEventFilterCount == 1
+    }
     private var displayEvents: [Event] {
-        let base = (filteredEvents.isEmpty && !hasActiveSearch) ? sourceEvents : filteredEvents
+        let base = (filteredEvents.isEmpty && categoryFallbackEligible) ? sourceEvents : filteredEvents
         guard !eventsService.rankedEventIDs.isEmpty else { return base }
         let order = Dictionary(uniqueKeysWithValues: eventsService.rankedEventIDs.enumerated().map { ($0.element, $0.offset) })
         // Keep local cards outside the server's top 50 reachable. Ranking is
@@ -95,7 +98,7 @@ struct EventsView: View {
     }
     /// True when the selected category had no events and we fell back to showing all.
     private var categoryFellBack: Bool {
-        selectedCategory != nil && filteredEvents.isEmpty && !hasActiveSearch
+        categoryFallbackEligible && filteredEvents.isEmpty
     }
     private let dateFormatter: DateFormatter = {
         let f = DateFormatter(); f.dateFormat = "EEE, MMM d"; return f
@@ -521,7 +524,7 @@ struct EventsView: View {
                 .fixedSize(horizontal: false, vertical: true)
             Text(sourceEvents.isEmpty
                  ? (eventsService.lastError ?? "We only show real events from real sources. Pull to refresh, or check back soon — new events are ingested every hour.")
-                 : (searchText.isEmpty ? "Try a different category." : "Try a different search or category."))
+                 : (searchText.isEmpty ? "Try changing a filter or widening your distance." : "Try a different search or filter."))
                 .font(VType.scaledBody(13, relativeTo: .footnote))
                 .foregroundStyle(Palette.inkSoft).multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)

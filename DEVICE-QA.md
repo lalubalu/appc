@@ -123,6 +123,9 @@ two numbers.
 | 4.25 | Build a Plan from real events, swap, make it shorter/longer, then reopen | Cards and RSVP work; refinement stays in the same session and never invents a stop | ☐ |
 | 4.26 | Two accepted friends share a group plan | Invitee opts in, both shortlist, each independently RSVPs; an unaccepted user cannot find the plan | ☐ |
 | 4.27 | Scroll For You, tap, save, RSVP and dismiss a card | Server impression records position, score, signals and the strongest outcome only for displayed cards | ☐ |
+| 4.28 | Filter by setting, age audience, group size, accessibility and public venue, then relaunch | Only listings with matching confirmed details remain; selections persist; Reset clears them; an empty result never restores unrelated cards | ☐ |
+| 4.29 | Build a Plan with one event image and one missing image while an accepted friend is going | Real image loads without stretching, fallback icon remains legible, friend avatars appear, and RSVP/Refine controls fit at large Dynamic Type | ☐ |
+| 4.30 | Deny location, then open Places and Map | Browse from the named launch area, radius count matches displayed cards, no GPS-based check-in is enabled, and a later GPS fix refreshes the list | ☐ |
 
 ## Reporting
 

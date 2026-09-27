@@ -30,7 +30,7 @@ struct ExploreView: View {
     private var filteredPlaces: [Place] {
         // Persisted filters (radius, category) + search, all local; then the
         // screen's own For You / chip narrowing on top.
-        filters.apply(to: sourcePlaces, query: placeSearch, userLocation: locationManager.userLocation).filter { p in
+        filters.apply(to: sourcePlaces, query: placeSearch, userLocation: locationManager.browsingLocation).filter { p in
             if let cat = placeFilter { return p.category == cat }
             if forYou && showForYou { return interests.contains(p.category) }
             return true
@@ -54,6 +54,12 @@ struct ExploreView: View {
                 .padding(.bottom, 110)
             }
             .background(VerdureBackground())
+            .task { await placesService.fetchNearbyPlaces(around: locationManager.userCoordinate) }
+            .onChange(of: locationManager.userLocation) { _, location in
+                guard location != nil else { return }
+                Task { await placesService.fetchNearbyPlaces(around: locationManager.userCoordinate) }
+            }
+            .refreshable { await placesService.fetchNearbyPlaces(around: locationManager.userCoordinate) }
             .searchable(text: Bindable(search).text, placement: .navigationBarDrawer(displayMode: .automatic),
                         prompt: "Search nearby places")
             .onSubmit(of: .search) { search.commit(into: filters) }
@@ -62,14 +68,11 @@ struct ExploreView: View {
             }
             .navigationDestination(for: Place.self) { PlaceDetailView(place: $0) }
             .sheet(isPresented: $showPlanner) {
-                // Cupertino is the app's documented default when there's no fix
-                // yet — same fallback the rest of the app uses, so the planner
-                // still works indoors on a fresh install.
-                let coord = locationManager.userLocation?.coordinate
+                let coord = locationManager.userCoordinate
                 AdventurePlannerView(
                     places: sourcePlaces.filter { $0.coordinate != nil },
-                    latitude: coord?.latitude ?? 37.3230,
-                    longitude: coord?.longitude ?? -122.0322
+                    latitude: coord.latitude,
+                    longitude: coord.longitude
                 )
             }
             .fullScreenCover(isPresented: $showGem) {
@@ -368,7 +371,8 @@ struct ExploreView: View {
             if filteredPlaces.isEmpty {
                 HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass").foregroundStyle(Palette.inkFaint)
-                    Text("No places match.")
+                    Text(placesService.isLoading ? "Finding nearby places…" :
+                         sourcePlaces.isEmpty ? "No nearby places loaded yet." : "No places match these choices.")
                         .font(VType.scaledBody(14, .medium, relativeTo: .subheadline))
                         .foregroundStyle(Palette.inkSoft)
                         .fixedSize(horizontal: false, vertical: true)

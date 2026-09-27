@@ -12,13 +12,15 @@ Plus simulator before D1-D4.
 
 | Surface | Before | After |
 | --- | --- | --- |
-| Events / Discover | [before](design-refresh/before/events.png) | [after](design-refresh/after/events.png) |
-| Explore | [before](design-refresh/before/explore.png) | Pending |
-| Map | [before](design-refresh/before/map.png) | Pending |
-| Collect | [before](design-refresh/before/collect.png) | Pending |
-| Community | [before](design-refresh/before/community.png) | Pending |
-| Profile | [before](design-refresh/before/profile.png) | Pending |
-| Plan (new) | — | [Simulator capture](design-refresh/after/plan.png) |
+| Events / Discover | [before](design-refresh/before/events.png) | [current](design-refresh/after/discover.jpg) · [filters](design-refresh/after/filters.jpg) |
+| Explore / Places | [before](design-refresh/before/explore.png) | [current](design-refresh/after/places.jpg) |
+| Map | [before](design-refresh/before/map.png) | [current](design-refresh/after/map.jpg) |
+| Collect | [before](design-refresh/before/collect.png) | [current](design-refresh/after/collection.jpg) |
+| Community | [before](design-refresh/before/community.png) | [current](design-refresh/after/community.jpg) |
+| Profile | [before](design-refresh/before/profile.png) | [current](design-refresh/after/profile.jpg) |
+| Plan (new) | — | [current](design-refresh/after/plan-current.jpg) · [date picker](design-refresh/after/plan-date.jpg) |
+| Friends (new) | — | [current](design-refresh/after/friends.jpg) |
+| Rewards (new) | — | [current](design-refresh/after/rewards.jpg) |
 
 ## Token contract
 
@@ -38,43 +40,29 @@ Plus simulator before D1-D4.
 - Are empty states honest when the live event index is empty?
 - After the five-tab restructure, can every existing surface still be found?
 
-The Events after image was captured with Computer on the iPhone 16 Plus
-Simulator after the token commit and layout sweep. Moving attendance stats to
-Profile freed the first screen for actual events and their empty state. With an
-empty live event index, the screen honestly shows no event cards and the
-network error. Its count, filters, and empty-state explanation are visible
-above the tab bar.
+Computer inspected and captured the five-tab shell and its reachable surfaces
+on the iPhone 16 Plus Simulator. The live event index is empty, so Discover
+shows an honest no-listings state, and Plan cannot display populated cards in
+this capture. Friends and Rewards likewise show signed-out or empty states.
+Places loaded nearby results from the launch-area center without GPS. Map now
+opens over San Jose instead of a continent-wide view. The corrected Places
+capture shows one place within 10 miles and a 6.3-mile card; previously it
+showed a 35-mile card under the same label. These are visual checks of the
+displayed states, not a populated-corpus or physical-device accessibility pass.
 
-The Profile and Collection summaries were also compressed in code, and the
-Explore now starts with nearby places; level, points, and challenges stay in
-Profile. Arbitrary accent rotation in badges, challenges, and community posts
-was removed in favor of a consistent spruce accent. The Simulator build passed
-after that sweep. Computer screenshot
-capture subsequently timed out on
-the Simulator window, so their after screenshots and visual accessibility
-review remain pending. No physical-device contrast or Dynamic Type result is
-claimed. Re-run the full screen matrix once the Simulator window is reachable.
+The Profile and Collection summaries were compressed in code. Explore starts
+with nearby places; level, points and challenges stay in Profile. Arbitrary
+accent rotation in badges, challenges and community posts was removed in favor
+of a consistent spruce accent. A larger Dynamic Type, VoiceOver, dark-mode
+and physical-device matrix remains open.
 
 ## Five-tab follow-up
 
 The new navigation has Discover, Plan, Friends, Rewards, and Profile. Events,
 Places, and Map are modes inside Discover; Community is under Friends;
 Collection opens from Profile. The old `QATab` surface names remain routable.
-The new Plan screen uses options first and displays only real indexed events.
-The linked Plan capture above was taken with Computer on the iPhone 16 Plus
-Simulator. The live `/events` index is empty, so its honest no-listings state
-is visible below the option controls. Computer lost the Simulator window after
-that capture; the other four new-tab screenshots remain to be taken.
-
-Since this capture, mutual friend requests, accepted-only activity, the
-For You / Everything switch and the feedback controls have been built. The
-Plan screen now uses a server session to show verified event cards, supports
-in-place refinements and offers a private group-plan sheet. It marks friends
-who are going. The actual model path and dense-corpus visual check remain
-open. Computer inspected the refreshed Discover screen on 2026-09-27;
-it showed the five-tab shell, the For You / Everything switch and QA sample
-cards, but the Simulator window timed out before a new file capture could be
-saved. This document's linked Plan image predates the server session, group
-sheet and friend-going addition. A later Computer inspection showed Discover's
-five-tab shell and empty live-corpus state, but a saved updated capture is
-still pending because the Simulator window intermittently disappeared.
+Plan uses options first and displays only real indexed events. The current
+capture shows the date picker, group-plan entry and honest empty state. Its
+event-card image, RSVP and friend-going layout need visual review with a
+populated index. The model path also needs its configured secret and a
+populated-index review.

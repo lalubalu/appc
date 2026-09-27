@@ -12,13 +12,14 @@ struct MapExploreView: View {
     @State private var showList = false
     @State private var hasCentered = false
     @State private var hasFetched = false
+    @State private var fetchedFallback = false
     @State private var showCelebration = false
     @State private var celebrationCollectible: CollectiblePlace? = nil
     @State private var celebrationPoints = 0
 
     /// Pins, deck and list honour the same persisted filters + search as every other surface.
     private var collectiblePlaces: [CollectiblePlace] {
-        filters.apply(to: placesService.collectiblePlaces, query: search.debounced, userLocation: locationManager.userLocation)
+        filters.apply(to: placesService.collectiblePlaces, query: search.debounced, userLocation: locationManager.browsingLocation)
     }
     private var nearbyUncollected: [CollectiblePlace] {
         gameState.uncollected(from: collectiblePlaces, nearbyOnly: true, userLocation: locationManager.userLocation)
@@ -138,7 +139,7 @@ struct MapExploreView: View {
                 ProgressView().scaleEffect(0.6).tint(Palette.teal.base)
             }
         } else if !locationManager.isAuthorized {
-            pill(icon: "location.slash.fill", text: "No GPS", tint: Palette.terracotta.base) { EmptyView() }
+            pill(icon: "location.slash.fill", text: "Showing San Jose · no GPS", tint: Palette.terracotta.base) { EmptyView() }
         }
     }
 
@@ -316,18 +317,22 @@ struct MapExploreView: View {
     // MARK: - Helpers
 
     private func fetchPlacesIfNeeded() {
-        guard !hasFetched, locationManager.userLocation != nil else { return }
+        let usingFallback = locationManager.userLocation == nil
+        guard !hasFetched || (fetchedFallback && !usingFallback) else { return }
         hasFetched = true
+        fetchedFallback = usingFallback
         Task { await placesService.fetchNearbyPlaces(around: locationManager.userCoordinate) }
     }
 
     private func centerOnUser() {
-        guard let loc = locationManager.userLocation else { return }
+        let hasGPS = locationManager.userLocation != nil
+        let center = locationManager.userCoordinate
+        let delta = hasGPS ? 0.035 : 0.12
         withAnimation(.easeInOut(duration: 0.5)) {
-            position = .region(MKCoordinateRegion(center: loc.coordinate,
-                span: MKCoordinateSpan(latitudeDelta: 0.035, longitudeDelta: 0.035)))
+            position = .region(MKCoordinateRegion(center: center,
+                span: MKCoordinateSpan(latitudeDelta: delta, longitudeDelta: delta)))
         }
-        hasCentered = true
+        hasCentered = hasGPS
     }
 }
 

@@ -38,6 +38,8 @@ environment switch has been performed. `CLAUDE.md` deploy status is untouched.
   is unavailable. Refinements stay in the same session without a model call.
   The date option now opens a calendar picker and filters verified candidates
   to that local day, as the brief specifies.
+  Plan cards now use real source images when present, a clear fallback when
+  absent, compact RSVP controls and the accepted-friends avatar stack.
   Monthly free-plan quota is transactional; model cost is counted in treasury.
   Emulator acceptance checks cover profile difference, no invention and
   repeat avoidance. The actual model path still needs a configured key and
@@ -45,6 +47,11 @@ environment switch has been performed. `CLAUDE.md` deploy status is untouched.
 - G1 stores private age band, optional student status and school, with a
   student ranking boost. G2's Opportunity labels and G3's organizer event
   attributes (age, size, setting, accessibility, venue, deadline) are local.
+  Confirmed setting, age audience, group size, accessibility and public-venue
+  details can now be filtered in Discover; old saved filters still decode.
+  Empty filter results no longer restore unrelated events. Places and Map now
+  browse from San Jose when GPS is unavailable, with the same center applied
+  to the radius filter; check-ins still require a real location fix.
   C9 adds an optional youngest-child household setting, a family ranking lift
   and age/late-ending warnings where event metadata supports them. App and
   website privacy copy was updated for these fields. Volunteer filters stay
@@ -69,8 +76,10 @@ environment switch has been performed. `CLAUDE.md` deploy status is untouched.
 
 ## Verification
 
-- iOS Simulator Debug build: passed after the current iOS changes. The iOS
-  unit suite passed after updating its paywall-benefit count from four to five.
+- iOS Simulator Debug build: passed after the current iOS changes. The full
+  unit suite passed **103/103** after the organizer-detail, location-fallback
+  and radius-matching changes. The focused DiscoveryFilters suite passed
+  **12/12**.
   The separate simulator UI suite stalled before any UI test result appeared;
   it was interrupted after roughly three minutes, so UI automation is unverified.
 - Functions TypeScript build: passed.
@@ -80,10 +89,12 @@ environment switch has been performed. `CLAUDE.md` deploy status is untouched.
 - Red team: **49 attacks blocked, 0 vulnerable** after the feedback addition.
 - All Functions unit suites passed; active website tests and production build
   passed after the invite and pricing changes.
-- Computer inspected Discover For You and reopened Verdure to its Daily Gem
-  screen on iPhone 16 Plus. Further taps returned `noWindowsAvailable`, so
-  the full interactive visual sweep remains unverified. The saved Plan capture
-  in `DESIGN-REFRESH.md` predates the new date picker and server results.
+- Computer inspected the five tabs plus Places, Map, Community, Collection and
+  the Plan date picker on iPhone 16 Plus, and saved the visible states in
+  `DESIGN-REFRESH.md`. It confirmed Map centered on San Jose without GPS and
+  Places loading nearby results. It also found a radius-label mismatch, which
+  prompted the fallback filter fix. The live index is empty, so event cards,
+  populated ranking and populated Plan results are not visually verified.
 
 ## Open completion gates
 
@@ -93,7 +104,7 @@ environment switch has been performed. `CLAUDE.md` deploy status is untouched.
 | C0/P2 | Named human reviewer for all 200 sampled classifications, category accuracy and fixes; review a populated-corpus backfill dry run before writing it live. |
 | P3/C1 | Measure full Firestore reads against a populated index, including user context, client reads and index entries, before enabling the feed at scale. |
 | C3/C10/C11 | Full radius and filter behavior against a dense corpus; named reviewer and 20-profile golden set; live measurement of impression/outcome coverage and cost. |
-| D/E | Full screenshot and accessibility matrix, physical-device QA, and real installed-app invite round trip. The website invite page needs deployment before public links work. |
+| D/E | Populated-screen, Dynamic Type, VoiceOver, dark-mode and physical-device QA; real installed-app invite round trip. The empty-state Simulator screenshot matrix is captured. The website invite page needs deployment before public links work. |
 | F | Configure and exercise the actual model secret; review sequencing, sponsor trust and session spend against a populated index. Emulator tests prove the verified-ID fallback and session mechanics. |
 | G | At least 30 live local volunteer listings before surfacing that subtype; the Volunteer chip is hidden below this threshold. Partner/API access and Idealist application remain; any post-freeze source addition requires a renewed classification audit. |
 | I/H | Profile and group-plan controls need device QA and a real two-phone invite test. Offline packs and AR stay deferred and are no longer advertised. |
