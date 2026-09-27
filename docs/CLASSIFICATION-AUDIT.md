@@ -75,6 +75,16 @@ regenerate predictions, and have the owner review affected rows again.
 
 ## Corpus migration gate
 
+A populated local Firestore emulator pass on 2026-09-27 processed 9,832
+documents in dry-run mode and proposed **zero** changes to freshly enriched
+records. An earlier pass exposed 485 unintended changes, primarily confidence
+drift from recomputing complete records using the stored primary category;
+the backfill now targets legacy records missing enrichment fields and retains
+complete merged-source metadata. A two-record emulator regression check
+confirmed legacy migration, merged-label preservation and zero second-pass
+changes. The local corpus had 3,349 records below 0.65 confidence; that is
+not an accuracy score. See [the populated local gate](LOCAL-CORPUS-AND-PUBLIC-READ-2026-09-27.md).
+
 `functions/scripts/backfill-classify.mjs` is idempotent, cursor-based, and
 defaults to dry-run. Dry-run and `--write` were exercised only against an empty
 Firestore emulator and reported 0 processed / 0 changed. The live index is

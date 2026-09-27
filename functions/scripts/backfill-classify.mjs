@@ -17,9 +17,10 @@ const db = getFirestore();
 const progressRef = db.collection("maintenance").doc("backfill-classify-v1");
 const batchSize = 200;
 const fields = ["categories", "classificationConfidence", "qualityScore", "inferredCost", "ageSuitability", "endInferred"];
-const emptyStats = () => ({ processed: 0, changed: 0, reclassified: 0, geocoded: 0,
+const emptyStats = () => ({ processed: 0, alreadyEnriched: 0, changed: 0, reclassified: 0, geocoded: 0,
   belowConfidence: 0, fieldsAdded: Object.fromEntries(fields.map((f) => [f, 0])),
-  categoriesBefore: {}, categoriesAfter: {}, unresolvedVenues: 0 });
+  categoriesBefore: {}, categoriesAfter: {}, unresolvedVenues: 0,
+  changedFields: {}, changeExamples: [] });
 const increment = (map, key) => { map[key] = (map[key] ?? 0) + 1; };
 const identity = (data) => `${String(data.organizer || "").trim().toLowerCase()}|${venueKey(String(data.locationName || ""))}`;
 
@@ -62,6 +63,9 @@ for (;;) {
 const saved = write ? (await progressRef.get()).data() : null;
 let cursor = saved?.status === "running" ? saved.cursor : undefined;
 const stats = saved?.status === "running" && saved.stats ? saved.stats : emptyStats();
+stats.alreadyEnriched ??= 0;
+stats.changedFields ??= {};
+stats.changeExamples ??= [];
 for (;;) {
   const base = db.collection("events").orderBy(FieldPath.documentId());
   const snap = await (cursor ? base.startAfter(cursor) : base).limit(batchSize).get();
@@ -75,18 +79,31 @@ for (;;) {
     const resolved = rec.latitude == null && rec.longitude == null && cached
       ? { ...rec, latitude: cached.lat, longitude: cached.lng } : rec;
     const enriched = enrichEvent(resolved);
+    // This is a migration for legacy documents, not a second classifier pass
+    // over freshly ingested ones. Recomputing an enriched document from its
+    // stored primary category loses the original source category; a merged
+    // document can also lose labels contributed by its secondary feed.
+    const needsEnrichment = !Array.isArray(original.categories) || original.categories.length === 0 ||
+      !Number.isFinite(original.classificationConfidence) || !Number.isFinite(original.qualityScore) ||
+      typeof original.inferredCost !== "string" || typeof original.ageSuitability !== "string" ||
+      typeof original.endInferred !== "boolean";
     stats.processed++;
+    if (!needsEnrichment) stats.alreadyEnriched++;
     increment(stats.categoriesBefore, rec.category);
-    for (const label of enriched.categories) increment(stats.categoriesAfter, label);
-    if (rec.category !== enriched.category) stats.reclassified++;
-    if (enriched.classificationConfidence < 0.65) stats.belowConfidence++;
+    for (const label of needsEnrichment ? enriched.categories : original.categories)
+      increment(stats.categoriesAfter, label);
+    if (needsEnrichment && rec.category !== enriched.category) stats.reclassified++;
+    if ((needsEnrichment ? enriched.classificationConfidence : original.classificationConfidence) < 0.65)
+      stats.belowConfidence++;
     if (rec.latitude == null && resolved.latitude != null) stats.geocoded++;
     if (resolved.latitude == null) stats.unresolvedVenues++;
     const target = {
-      category: enriched.category, categories: enriched.categories,
-      classificationConfidence: enriched.classificationConfidence,
-      qualityScore: enriched.qualityScore, inferredCost: enriched.inferredCost,
-      ageSuitability: enriched.ageSuitability, endInferred: enriched.endInferred,
+      ...(needsEnrichment ? {
+        category: enriched.category, categories: enriched.categories,
+        classificationConfidence: enriched.classificationConfidence,
+        qualityScore: enriched.qualityScore, inferredCost: enriched.inferredCost,
+        ageSuitability: enriched.ageSuitability, endInferred: enriched.endInferred,
+      } : {}),
       ...(original.endDate === undefined && enriched.end ? { endDate: enriched.end } : {}),
       ...(rec.latitude == null && resolved.latitude != null
         ? { latitude: resolved.latitude, longitude: resolved.longitude } : {}),
@@ -98,7 +115,14 @@ for (;;) {
       const after = value instanceof Date ? value.getTime() : value;
       if (JSON.stringify(before) !== JSON.stringify(after)) update[key] = value;
     }
-    if (Object.keys(update).length) { stats.changed++; if (write) batch.update(doc.ref, update); }
+    if (Object.keys(update).length) {
+      stats.changed++;
+      for (const field of Object.keys(update)) increment(stats.changedFields, field);
+      if (!write && stats.changeExamples.length < 12) {
+        stats.changeExamples.push({ id: doc.id, fields: Object.keys(update) });
+      }
+      if (write) batch.update(doc.ref, update);
+    }
   }
   if (write) await batch.commit();
   cursor = snap.docs.at(-1).id;

@@ -142,6 +142,20 @@ completed SMS send, so installed-app conversion still needs field validation.
 
 ## Exact remaining gates and inputs
 
+The later [populated local corpus and live public-read check](LOCAL-CORPUS-AND-PUBLIC-READ-2026-09-27.md)
+exercised 9,813 upcoming event documents in a disposable emulator and measured
+359 candidate documents for the first area-cache refresh. It also identified
+a current live-app blocker: the deployed Firestore rules require authentication
+for every `/events` read, so the signed-out iOS feed gets `permission-denied`.
+The local rules and backend are not deployed, per the owner's instruction.
+The same read-only audit found zero deployed Cloud Functions and zero composite
+Firestore indexes, so production needs a coordinated release rather than a
+single rule update.
+The same full-size corpus exposed and helped fix backfill drift: the final
+dry run proposed zero changes to 9,832 already enriched documents. A separate
+emulator check proved legacy migration and second-pass idempotence. It counted
+3,349 predictions below 0.65 confidence, which still require human review.
+
 The subsequent no-cost, no-deploy pass is recorded in
 [FREE-EXTERNAL-GATES-2026-09-27.md](FREE-EXTERNAL-GATES-2026-09-27.md).
 It confirmed 11 working public adapters, 3,213 dated/geocoded source records

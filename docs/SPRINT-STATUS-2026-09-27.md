@@ -122,6 +122,24 @@ environment switch has been performed. `CLAUDE.md` deploy status is untouched.
 
 ## Open completion gates
 
+**Populated local gate and live-read finding:** a disposable Firestore emulator
+ingested 9,813 upcoming active public-feed records. Its suspected duplicate
+rate was 0.12%, and one shared ranking refresh returned 359 candidate documents
+for 285 distinct cached candidates; four sample profiles received different
+top tens. [Details and limits](LOCAL-CORPUS-AND-PUBLIC-READ-2026-09-27.md).
+The full-size backfill dry run now proposes zero changes to 9,832 already
+enriched records after an idempotence fix; a legacy-record migration and
+second pass also passed in a separate emulator check. 3,349 local records
+remain below the classifier's 0.65 confidence threshold pending human review.
+The exact public iOS feed query against the live project returned
+`permission-denied`, matching the Simulator's “Couldn't reach the event store”
+message. A read-only Rules API check confirmed the active live ruleset still
+requires authentication to read any event, while the tested local rules allow
+visible broadcast events to guests. The live project also reports zero deployed
+Cloud Functions and zero composite Firestore indexes. No deployment occurred.
+This environment gap must be resolved in
+addition to populating the currently empty live corpus.
+
 **Free follow-up on September 27:** all 11 public adapters responded again;
 3,213 dated, geocoded source records fell within 25 miles over the next 30
 days, including 55 provisional Volunteer classifications before deduplication

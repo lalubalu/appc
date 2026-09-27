@@ -18,6 +18,9 @@
     "seed:partners": "npm run build && cd .. && npx firebase-tools@13 emulators:exec --only firestore \"node functions/scripts/seed-partners.mjs\"",
     "coverage": "npm run build && node scripts/coverage-check.mjs",
     "coverage:emulator": "cd .. && npx firebase-tools@13 emulators:exec --only firestore \"node functions/scripts/coverage-check.mjs\"",
+    "corpus:local": "npm run build && cd .. && npx firebase-tools@13 emulators:exec --only firestore \"node functions/scripts/local-corpus-gate.mjs\"",
+    "public-feed:check": "node scripts/check-public-feed.mjs",
+    "backfill:emulator-test": "cd .. && npx firebase-tools@13 emulators:exec --only firestore \"node functions/scripts/backfill-migration-test.mjs\"",
     "seed:review": "node scripts/seed-review-account.mjs"
   },
   "dependencies": {

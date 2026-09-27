@@ -2,6 +2,12 @@
 
 ## Live measurement and gate
 
+A populated **local emulator** run on 2026-09-27 returned 359 candidate
+documents for one shared-cache refresh and stored 285 distinct ranked
+candidates; four profiles reused that one refresh. It ingested 9,813 upcoming
+active records. See [the local corpus and public-read check](LOCAL-CORPUS-AND-PUBLIC-READ-2026-09-27.md).
+This is useful scale evidence but not a production bill or index-entry meter.
+
 The read-only A1 query found **zero documents** in the live `events`
 collection. This is not a usable load benchmark. C1 cannot be declared
 cost-validated until a real area corpus exists. No live ingest or production
