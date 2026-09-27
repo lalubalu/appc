@@ -149,6 +149,9 @@ export const checkInToEvent = onCall(async (req) => {
   let award = Math.min(claimed, CATEGORY_MAX_POINTS[category] ?? 100);
   let distanceM: number | null = null;
   const eventSnap = await db.collection("events").doc(eventId).get();
+  if (!eventSnap.exists) {
+    throw new HttpsError("not-found", "That event no longer exists.");
+  }
   if (eventSnap.exists) {
     const ev = eventSnap.data() ?? {};
 

@@ -28,7 +28,7 @@ import {
 const PROJECT = "connectify-19dd8";
 const REGION = "us-central1";
 const AUTH = `http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1`;
-const FN = `http://127.0.0.1:5001/${PROJECT}/${REGION}`;
+const FN = `http://127.0.0.1:${process.env.FUNCTIONS_EMULATOR_PORT || "5001"}/${PROJECT}/${REGION}`;
 const BUCKET = process.env.STORAGE_BUCKET || `${PROJECT}.firebasestorage.app`;
 const STORAGE = `http://127.0.0.1:9199/v0/b/${BUCKET}/o`;
 
@@ -224,20 +224,29 @@ async function main() {
     (await tryWrite(() => setDoc(doc(cdb, `users/rt-fresh-${Date.now()}`), { pointsBalance: 50000 }))) === "permission-denied");
 
   // Daily earning ceiling: even with a legitimate path, value extraction is
-  // bounded. Drive one account past the cap using distinct external events.
+  // bounded. Drive one account past the cap using distinct indexed events.
   const capUser = await signUp(`cap-${Date.now()}@evil.test`, pw);
   const capProof = `proofs/${capUser.uid}/p.jpg`;
   await upload(capProof, capUser.idToken);
   let totalAwarded = 0;
+  let validCheckIns = 0;
   for (let i = 0; i < 12; i++) {
+    await db.doc(`events/rt-ext-${i}`).set({
+      title: `Indexed event ${i}`, organizer: "V", date: new Date("2026-10-01T17:00:00Z"),
+      time: "12 PM", locationName: "Venue", attendeeCount: 0, category: "Festival",
+      imagePlaceholder: "party.popper.fill", pointValue: 250, creatorID: "system:ingest",
+      createdAt: new Date(), latitude: NEAR.lat, longitude: NEAR.lng, source: "serpapi",
+    });
     const res = await call("checkInToEvent", {
       eventId: `rt-ext-${i}`, category: "Festival", claimedPoints: 250,
       proofPath: capProof, lat: NEAR.lat, lng: NEAR.lng,
     }, capUser.idToken);
+    if (res.result?.alreadyCheckedIn === false) validCheckIns++;
     totalAwarded += res.result?.awarded ?? 0;
   }
   expectBlocked("daily earning ceiling caps total value extracted (600/day)",
-    totalAwarded <= 600, `earned ${totalAwarded} in one day`);
+    validCheckIns === 12 && totalAwarded === 600,
+    `valid=${validCheckIns}, earned ${totalAwarded} in one day`);
 
   // ══ 2. ATTENDANCE EVIDENCE ══
   console.log("\n── Attendance evidence ──");
@@ -257,6 +266,10 @@ async function main() {
   r = await call("checkInToEvent", { eventId: "rt-legit-event", category: "Market",
     claimedPoints: 75, proofPath: proof, lat: 45.9, lng: -93.26 }, atk.idToken);
   expectBlocked("check-in from 100km away", !!r.error);
+
+  r = await call("checkInToEvent", { eventId: "rt-forged-nonexistent", category: "Festival",
+    claimedPoints: 250, proofPath: proof, lat: NEAR.lat, lng: NEAR.lng }, atk.idToken);
+  expectBlocked("missing event cannot mint points", r.error?.status === "NOT_FOUND", JSON.stringify(r));
 
   r = await call("checkInToEvent", { eventId: "rt-legit-event", category: "Market",
     claimedPoints: 75, proofPath: "proofs/../../etc/passwd", lat: NEAR.lat, lng: NEAR.lng }, atk.idToken);

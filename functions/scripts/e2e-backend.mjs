@@ -29,7 +29,7 @@ import {
 const PROJECT = "connectify-19dd8";
 const REGION = "us-central1";
 const AUTH = `http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1`;
-const FN = `http://127.0.0.1:5001/${PROJECT}/${REGION}`;
+const FN = `http://127.0.0.1:${process.env.FUNCTIONS_EMULATOR_PORT || "5001"}/${PROJECT}/${REGION}`;
 // Must match PROOF_BUCKET in functions/src/index.ts — the default bucket differs
 // between local and CI environments, so both sides pin it explicitly.
 const BUCKET = process.env.STORAGE_BUCKET || `${PROJECT}.firebasestorage.app`;
@@ -185,6 +185,11 @@ async function main() {
   });
   await db.doc("events/e2e-event-1").set(event("E2E Cleanup One"));
   await db.doc("events/e2e-event-2").set(event("E2E Cleanup Two"));
+  for (const id of ["serp-e2e-external-1", "serp-e2e-plus-multiplier",
+    "serp-e2e-plus-capped", "serp-e2e-plain"]) {
+    await db.doc(`events/${id}`).set({ ...event("E2E Festival"),
+      category: "Festival", pointValue: 250, creatorID: "system:ingest", source: "serpapi" });
+  }
 
   // Storage rules: owner path accepted, foreign path rejected.
   const own = await uploadProofDebug(`proofs/${uid}/p1.jpg`, idToken);
@@ -205,6 +210,10 @@ async function main() {
   r = await call("checkInToEvent", { eventId: "e2e-event-1", category: "Volunteer", claimedPoints: 200, proofPath: "proofs/not-you/x.jpg", lat: NEAR.lat, lng: NEAR.lng }, idToken);
   ok("checkIn with foreign proofPath rejected", r.error?.status === "INVALID_ARGUMENT", JSON.stringify(r));
 
+  r = await call("checkInToEvent", { eventId: "event-that-does-not-exist", category: "Volunteer", claimedPoints: 200,
+    proofPath, lat: NEAR.lat, lng: NEAR.lng }, idToken);
+  ok("checkIn cannot award points for a missing event", r.error?.status === "NOT_FOUND", JSON.stringify(r));
+
   // T4 — valid check-in near the venue → stored pointValue
   r = await call("checkInToEvent", { eventId: "e2e-event-1", category: "Volunteer", claimedPoints: 200, proofPath, lat: NEAR.lat, lng: NEAR.lng }, idToken);
   ok("checkIn near venue awards stored pointValue", r.result?.awarded === 200 && r.result?.newBalance === 200, JSON.stringify(r));
@@ -217,7 +226,7 @@ async function main() {
   r = await call("checkInToEvent", { eventId: "e2e-event-2", category: "Volunteer", claimedPoints: 200, proofPath, lat: FAR.lat, lng: FAR.lng }, idToken);
   ok("checkIn too far rejected (haversine)", r.error?.status === "FAILED_PRECONDITION", JSON.stringify(r));
 
-  // T7 — external event (no doc): claims clamp to the category ceiling
+  // T7 — indexed external event: claims clamp to the category ceiling
   r = await call("checkInToEvent", { eventId: "serp-e2e-external-1", category: "Festival", claimedPoints: 99999, proofPath, lat: NEAR.lat, lng: NEAR.lng }, idToken);
   ok("external checkIn clamped to category ceiling (250)", r.result?.awarded === 250 && r.result?.newBalance === 450, JSON.stringify(r));
 
@@ -740,6 +749,8 @@ async function main() {
     status: "pending", deliverToEmail: delEmail, requestedAt: new Date() });
   await db.doc(`fulfillments/${del.uid}_dunkin-5`).set({ uid: del.uid, rewardId: "dunkin-5", pointsSpent: 1000,
     status: "sent", deliverToEmail: delEmail, requestedAt: new Date(), vendorOrderId: "ord_123" });
+  await db.doc("analytics/2026-09-27/events/e2e-del-analytics").set({ uid: del.uid,
+    installID: "e2e-install", event: "event_opened", ts: new Date() });
   // A report they filed, and their profile picture.
   await call("reportContent", { targetType: "post", targetId: "e2e-post-1", reason: "spam" }, del.idToken);
   const beforeAttendance = await db.collection("attendance").where("uid", "==", del.uid).get();
@@ -761,6 +772,7 @@ async function main() {
      (await db.doc("events/e2e-event-2").get()).data()?.attendeeCount === 4);
   ok("deleted: attendance (GPS) rows", (await db.collection("attendance").where("uid", "==", del.uid).get()).empty);
   ok("deleted: rate-limit counters", (await db.collection("rateLimits").where("uid", "==", del.uid).get()).empty);
+  ok("deleted: analytics event rows", await gone("analytics/2026-09-27/events/e2e-del-analytics"));
   ok("deleted: queued (pending) fulfilment", await gone(`fulfillments/${del.uid}_starbucks-5`));
   const sentRow = (await db.doc(`fulfillments/${del.uid}_dunkin-5`).get()).data();
   ok("kept but anonymised: a DELIVERED gift card (financial record, no PII)",
@@ -985,6 +997,12 @@ async function main() {
   ok("follow: counts are maintained server-side",
      qDoc?.followingCount === 1 && qDoc?.followerCount === 1 && sDoc?.followerCount === 1 && sDoc?.followingCount === 1,
      JSON.stringify({ q: [qDoc?.followingCount, qDoc?.followerCount], s: [sDoc?.followingCount, sDoc?.followerCount] }));
+  // The suite runs at any local hour. Disable Quinn's quiet window for the
+  // notification round-trip; quiet-hours behavior has its own unit checks.
+  await db.doc(`users/${quinn.uid}`).set({ notificationPrefs: {
+    eventSuggestions: true, friendActivity: true, quietStart: 0, quietEnd: 0,
+    timeZone: "America/Los_Angeles",
+  } }, { merge: true });
   r = await call("followUser", { targetId: sarah.uid, kind: "user" }, sarah.idToken);
   ok("follow: cannot follow yourself", r.error?.status === "FAILED_PRECONDITION");
   let fcode;

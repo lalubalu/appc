@@ -135,7 +135,7 @@ const cleanServerRecords: Cleaner = async (uid, counts) => {
   bump(counts, "rateLimits",
     await deleteQueryBatched(db.collection("rateLimits").where("uid", "==", uid)));
   bump(counts, "analytics",
-    await deleteQueryBatched(db.collectionGroup("events_log").where("uid", "==", uid)));
+    await deleteQueryBatched(db.collectionGroup("events").where("uid", "==", uid)));
   bump(counts, "plannerRuns",
     await deleteQueryBatched(db.collection("plannerRuns").where("uid", "==", uid)));
 };
