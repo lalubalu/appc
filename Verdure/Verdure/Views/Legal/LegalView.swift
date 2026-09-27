@@ -95,9 +95,8 @@ struct LegalView: View {
                 ClayButton("Apple's Standard EULA", systemImage: "doc.text", kind: .ghost, fullWidth: true) {
                     openURL(Legal.appleStandardEULAURL)
                 }
-                ClayButton("Terms on the web", systemImage: "safari", kind: .ghost, fullWidth: true) {
-                    openURL(Legal.termsOfUseURL)
-                }
+                // The active website does not publish /terms yet. The bundled
+                // terms above and Apple's EULA remain accessible offline.
             } else {
                 ClayButton("Privacy Policy on the web", systemImage: "safari", kind: .ghost, fullWidth: true) {
                     openURL(Legal.privacyPolicyURL)

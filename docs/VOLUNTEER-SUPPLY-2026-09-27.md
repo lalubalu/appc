@@ -26,3 +26,19 @@ The official [Idealist Open Network API page](https://www.idealist.org/en/open-n
 routes applicants to an inquiry form. The application is prepared in
 `IDEALIST-INQUIRY.md`; it has not been submitted because the project has no
 verified business contact name/email in the repository.
+
+## Existing-feed supply preview
+
+A read-only `node functions/scripts/ingest-smoke.mjs` run after the classifier
+corrections fetched **12,267 raw records** from all 11 configured public feeds.
+Of those, **3,213** were dated in the following 30 days, carried coordinates,
+and lay strictly within 25 miles of the San José center. **55** of those were
+classified Volunteer before deduplication or human review: San José Public
+Library 42, Midpen 10, SJSU 2, Stanford 1. The log is
+`/tmp/verdure-radius-preview-20260927.log`.
+
+This is promising source supply, **not** a pass of the 30-live-listing gate.
+The production `/events` collection remains empty, repeated occurrences and
+false-positive volunteer labels have not been removed, and some source entries
+may not ask attendees to volunteer. Review each candidate's activity and age
+eligibility before deciding whether the subtype can appear.

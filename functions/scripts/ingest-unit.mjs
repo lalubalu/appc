@@ -437,6 +437,28 @@ ok("classifier: library console gaming is not a sport",
 ok("classifier: volunteer-led sewing class stays Workshop",
    enrichEvent({ ...enrichedWorkshop, title: "Sewing with FabMo", description: "A class led by a volunteer.",
      tags: ["library", "Adults"], category: "Volunteer" }).category === "Workshop");
+ok("classifier: library snack pickup is not Sports from a broad health tag",
+   enrichEvent({ ...enrichedWorkshop, title: "Snack Break-Free Snacks for Kids!",
+     description: "Pick up a free after-school snack. USDA nondiscrimination on the basis of race.",
+     tags: ["library", "Health & Fitness", "Kids"], category: "Sports" }).category !== "Sports");
+ok("classifier: tabletop club is not a sport from the recreation tag",
+   enrichEvent({ ...enrichedWorkshop, title: "Teen Dungeons and Dragons Social Club",
+     description: "Drop in to watch the long running game with different fantasy races.",
+     tags: ["library", "Entertainment & Recreation", "Teens"], category: "Sports" }).category !== "Sports");
+ok("classifier: homework help is a Workshop even with a generic source category",
+   enrichEvent({ ...enrichedWorkshop, title: "Homework Help for Grades K-6",
+     description: "Get help from a tutor.", tags: ["library"], category: "Meetup" }).category === "Workshop");
+ok("classifier: a volleyball match is Sports",
+   enrichEvent({ ...enrichedWorkshop, source: "livewhale", title: "Women's Volleyball vs Seattle",
+     description: "Cheer on the team.", tags: ["Athletics"], category: "Social" }).category === "Sports");
+ok("classifier: help provided by a volunteer is not a volunteer opportunity",
+   enrichEvent({ ...enrichedWorkshop, title: "One-On-One Tech Help",
+     description: "Get personalized assistance from an adult volunteer.",
+     tags: ["library", "Computer Help"], category: "Volunteer" }).category === "Workshop");
+ok("classifier: teen volunteer orientation remains Volunteer",
+   enrichEvent({ ...enrichedWorkshop, title: "Teens Reach Orientation",
+     description: "New to volunteering? Attend orientation and start earning volunteer service hours.",
+     tags: ["library", "Teens"], category: "Volunteer" }).category === "Volunteer");
 
 console.log("\n── payload coercion (runIngest payload mode) ──");
 const good = coercePayloadRecord({ source: "libcal", sourceEventId: "x1", title: "<b>Book Club</b>", start: "2026-10-01T18:00:00Z", locationName: "Main Library", tags: ["library", 42] }, SAN_JOSE);

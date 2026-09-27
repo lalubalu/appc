@@ -5,21 +5,19 @@ import Foundation
 // App Review 3.1.2 requires an auto-renewable subscription to link to its Terms
 // of Use (EULA) and Privacy Policy INSIDE the app, and 5.1.1 requires the policy
 // to be reachable from the app. Both documents ship in the binary so the links
-// are live even before the marketing site's domain resolves; the web copies are
-// offered as well. The text below is the single source for the in-app pages —
-// the website mirrors it (Verdure Website/src/app/privacy, /terms).
+// remain available even when a website route is unavailable. The active
+// website is Verdure-website--main; its privacy copy needs owner review before
+// publication, and its Terms and Support routes have not been published.
 
 enum Legal {
-    /// Canonical public site. The listing's Support/Privacy URLs are built from
-    /// this; deploying the site is a pre-submission blocker in AppStore/LISTING.md.
-    static let siteBase = "https://verdure.app"
+    /// Confirmed public domain. Only /privacy is live; /terms and /support
+    /// remain pre-submission blockers in AppStore/LISTING.md.
+    static let siteBase = "https://verdure-app.com"
 
     /// Apple's standard Licensed Application End User License Agreement — the
     /// EULA declared for the app in App Store Connect, and always reachable.
     static let appleStandardEULAURL = URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!
     static let privacyPolicyURL = URL(string: "\(siteBase)/privacy")!
-    static let termsOfUseURL = URL(string: "\(siteBase)/terms")!
-    static let supportURL = URL(string: "\(siteBase)/support")!
 
     /// The single source of truth for the support address. Declared HERE rather
     /// than on ModerationService: that type is @MainActor, so a nonisolated

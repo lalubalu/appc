@@ -122,6 +122,17 @@ environment switch has been performed. `CLAUDE.md` deploy status is untouched.
 
 ## Open completion gates
 
+**Free follow-up on September 27:** all 11 public adapters responded again;
+3,213 dated, geocoded source records fell within 25 miles over the next 30
+days, including 55 provisional Volunteer classifications before deduplication
+or review. The 200-row classifier sample was regenerated after correcting
+obvious library/sports/volunteer false positives; 56 rows remain below 0.65
+confidence, with no human accuracy score. Ingest unit checks passed 122/122,
+and the iOS Simulator build passed after switching the in-app website base to
+`verdure-app.com` and removing the dead public Terms button. The registered
+Firebase Verdure iOS app matches the local bundle ID and plist. No production
+write or deploy occurred.
+
 | Scope | Still needed |
 | --- | --- |
 | A/B | Populate live events; re-run coverage and record the delta; assess County Parks/volunteer structured access; verify duplicate rate under 5% against live cycles. The required City and County path probes are recorded, and six new sources are configured. |
@@ -132,7 +143,7 @@ environment switch has been performed. `CLAUDE.md` deploy status is untouched.
 | F | Configure and exercise the actual model secret; review sequencing, sponsor trust and session spend against a populated index. Emulator tests prove the verified-ID fallback and session mechanics. |
 | G | At least 30 live local volunteer listings before surfacing that subtype; the Volunteer chip is hidden below this threshold. Partner/API access and Idealist application remain; any post-freeze source addition requires a renewed classification audit. |
 | I/H | Profile and group-plan controls need device QA and a real two-phone invite test. Offline packs and AR stay deferred and are no longer advertised. |
-| Legal/web alignment | Have the owner review the active website's legacy policy, which still lists phone, billing and shipping data and under-16 language was locally corrected to under-13. Resolve the app/listing `verdure.app` URLs versus the `verdure-app.com` website before publishing either. |
+| Legal/web alignment | Have the owner review the active website's legacy policy, which still lists phone, billing and shipping data and under-16 language was locally corrected to under-13. The app and listing now use the confirmed `verdure-app.com` domain; `/terms`, `/support`, and the receiving support/privacy inbox remain unavailable. The owner declined email setup for now and said no deployment yet. |
 
 The sprint is **not complete**. The table separates engineering still to do
 from the required live corpus, named human review, device QA and external

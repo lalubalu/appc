@@ -8,12 +8,13 @@ environment switch was made. The owner explicitly said **no deployment yet**.
 
 `node functions/scripts/ingest-smoke.mjs` fetched records from all 11
 configured public sources on September 27. The log is
-`/tmp/verdure-free-source-smoke-20260927.log`. The adapters returned 12,268
+`/tmp/verdure-radius-preview-20260927.log`. The latest adapters returned 12,267
 raw records in total, including 6,018 from San José Public Library, 1,916
 from Santa Clara County Library District and 54 from Midpen. These are source
 responses, not deduplicated, radius-filtered live Firestore events. Ticketmaster
 and NPS were skipped because their keys are unset. This run made no Firestore
-writes. C0 human classification review and the live-corpus read/cost gates still
+writes. The one-record change from the earlier smoke run came from the live SCU
+feed. C0 human classification review and the live-corpus read/cost gates still
 precede production ingestion.
 
 ## Website and hosting
@@ -25,6 +26,19 @@ precede production ingestion.
 - `https://verdure-app.com/privacy` responds `200` and displays a policy dated
   July 26, 2026, including payment and shipping language. The newer local
   policy is unpublished.
+- `https://verdure-app.com/terms` and `/support` respond `404`. The App Store
+  listing now treats those routes as unbuilt on the active site. The iOS app's
+  canonical website was corrected from `verdure.app` (also `404`) to the
+  confirmed `verdure-app.com`; its dead "Terms on the web" button was removed
+  while the packaged terms and Apple's EULA remain accessible.
+- Neither domain currently has an MX record. The owner confirmed Verdure does
+  not yet have a receiving support/privacy inbox and said **not yet** to email
+  setup. Do not publish a support contact or submit App Store metadata until a
+  mailbox is configured and delivery-tested. The active domain uses Vercel DNS;
+  [Vercel says it provides no mail service](https://vercel.com/docs/domains/working-with-domains).
+  [ImprovMX](https://www.improvmx.com/pricing/) and
+  [Forward Email](https://forwardemail.net/en) currently offer free forwarding
+  to an existing inbox, but neither was configured.
 - `npx --yes vercel whoami` reports Logged out; no `.vercel` project link is
   present in the local website directory. GitHub CLI is signed in, but the
   repository has no GitHub deployment records. No push or deploy was attempted.

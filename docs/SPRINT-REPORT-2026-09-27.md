@@ -142,6 +142,17 @@ completed SMS send, so installed-app conversion still needs field validation.
 
 ## Exact remaining gates and inputs
 
+The subsequent no-cost, no-deploy pass is recorded in
+[FREE-EXTERNAL-GATES-2026-09-27.md](FREE-EXTERNAL-GATES-2026-09-27.md).
+It confirmed 11 working public adapters, 3,213 dated/geocoded source records
+within the 25-mile launch radius in 30 days, and 55 provisional Volunteer
+candidates before deduplication or review. A targeted classifier correction
+and regenerated 200-row packet are in [CLASSIFICATION-AUDIT.md](CLASSIFICATION-AUDIT.md).
+The registered Firebase Verdure iOS app matches this project's bundle ID and
+plist. The active website's `/terms` and `/support` routes return 404, and
+Verdure has no receiving email yet. The owner requested no deployment and no
+email setup at this time. None of these preview counts pass a live gate.
+
 1. Populate the event index through an authorized ingest path; re-run the
    baseline/end coverage measurement, by-source delta, duplicate rate,
    backfill dry run and read-budget measurement on real documents. Current

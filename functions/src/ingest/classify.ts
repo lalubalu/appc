@@ -19,22 +19,28 @@ export interface EnrichedEvent extends NormalizedEvent {
 }
 
 type CategoryRule = { category: EventCategory; pattern: RegExp };
+const SPORTS_ACTIVITY = /\b(?:sports?|hike|hiking|trail walk|nature walk|birding|marathon|race|running|yoga|exercise|fitness class|cycling|soccer|basketball|volleyball|baseball|football|tennis|pickleball|kayak(?:ing)?|swim(?:ming)?)\b/i;
+// "Race" in a library's civil-rights notice and "long running game" in a
+// tabletop description are not athletics. Accept those words in a title only.
+const SPORTS_DESCRIPTION = /\b(?:sports?|hike|hiking|trail walk|nature walk|birding|marathon|yoga|exercise|fitness class|cycling|soccer|basketball|volleyball|baseball|football|tennis|pickleball|kayak(?:ing)?|swim(?:ming)?)\b/i;
+const VOLUNTEER_TITLE = /\b(?:volunteer(?:ing)?|stewardship|restoration|service day|give back|food drive|trail maintenance|habitat restoration|broom removal)\b/i;
+const VOLUNTEER_INVITATION = /\b(?:volunteer(?:ing)? opportunities?|volunteers? needed|join (?:us|our) (?:volunteer|stewardship)|sign up to volunteer|become (?:a|an) (?:volunteer|adult literacy tutor)|new to volunteering|earn(?:ing)? volunteer service hours)\b/i;
 const RULES: CategoryRule[] = [
   { category: "Cleanup", pattern: /\b(?:clean[ -]?up|litter|trash pick|creek clean|beach clean)\b/i },
   { category: "Volunteer", pattern: /\b(?:volunteer(?:ing)?|stewardship|restoration|service day|give back|internship|food drive|trail maintenance|habitat restoration|broom removal)\b/i },
   { category: "Hackathon", pattern: /\b(?:hackathon|hack night|code jam|devfest)\b/i },
-  { category: "Workshop", pattern: /\b(?:workshop|class|clinic|bootcamp|intro(?:duction)? to|learn to|hands[ -]?on|maker|lab|training|story\s?time|coding|3d printing|seminar)\b/i },
+  { category: "Workshop", pattern: /\b(?:workshop|class|clinic|bootcamp|intro(?:duction)? to|learn to|hands[ -]?on|maker|lab|training|story\s?time|coding|3d printing|seminar|homework help|tutoring?|tech help|computer help|digital help)\b/i },
   { category: "Market", pattern: /\b(?:farmers? market|flea market|craft fair|bazaar|swap meet|book sale)\b/i },
   { category: "Festival", pattern: /\b(?:festival|concert|live music|comedy show|theat(?:er|re)|orchestra|symphony|parade|film screening)\b/i },
-  { category: "Sports", pattern: /\b(?:sports?|hike|hiking|trail walk|nature walk|birding|marathon|race|yoga|cycling|soccer|basketball|pickleball|kayak(?:ing)?|swim(?:ming)?)\b/i },
-  { category: "Meetup", pattern: /\b(?:meetup|meet up|mixer|networking|club meeting|book club|quiz club|advisory group|public meeting|community gathering)\b/i },
+  { category: "Sports", pattern: SPORTS_ACTIVITY },
+  { category: "Meetup", pattern: /\b(?:meetup|meet up|mixer|networking|club meeting|book club|quiz club|advisory group|public meeting|trustees meeting|community gathering)\b/i },
 ];
 
 /** Feed event-type fields are a stronger signal than incidental description words. */
 const STRUCTURED_RULES: CategoryRule[] = [
   { category: "Workshop", pattern: /\b(?:storytimes?|learning|classes?|seminars?|lectures?|technology & innovation|arts, crafts, & how-to|life skills)\b/i },
   { category: "Festival", pattern: /\b(?:performance|concerts?|exhibitions?|dance|music)\b/i },
-  { category: "Sports", pattern: /\b(?:health & fitness|hikes?|outdoor recreation)\b/i },
+  { category: "Sports", pattern: /\b(?:hikes?|outdoor recreation|athletics)\b/i },
   { category: "Meetup", pattern: /\b(?:clubs?|social events and gatherings|community meetings?)\b/i },
   { category: "Volunteer", pattern: /\b(?:volunteer opportunities|community service)\b/i },
 ];
@@ -48,6 +54,23 @@ const OPPORTUNITY = /\b(?:volunteer|internship|career|job search|resume|service 
 
 /** Category priors reflect what a feed can actually guarantee. */
 function sourcePrior(rec: NormalizedEvent): { category: EventCategory; confidence: number } {
+  // Generic library tags such as "Health & Fitness" and "Entertainment &
+  // Recreation" can make a snack pickup or tabletop game look like sport.
+  // The upstream free-text classifier also matches "sport" inside words such
+  // as "transport". Require an actual activity before retaining that prior.
+  if (rec.category === "Sports" && ["bibliocommons", "libcal", "localist", "livewhale"].includes(rec.source) &&
+      !SPORTS_ACTIVITY.test(rec.title) && !/\b(?:hikes?|outdoor recreation|athletics)\b/i.test(rec.tags.join(" "))) {
+    return { category: "Social", confidence: 0.55 };
+  }
+  // A class or help desk may be run by volunteers while its attendees are
+  // learners. Do not carry the source's volunteer prior into the public
+  // Opportunities category without an invitation for attendees to serve.
+  if (rec.category === "Volunteer" && ["bibliocommons", "libcal", "localist", "livewhale"].includes(rec.source) &&
+      !VOLUNTEER_TITLE.test(rec.title) &&
+      !/\b(?:volunteer opportunities|community service)\b/i.test(rec.tags.join(" ")) &&
+      !VOLUNTEER_INVITATION.test(rec.description)) {
+    return { category: "Social", confidence: 0.55 };
+  }
   switch (rec.source) {
   case "midpen": return { category: "Sports", confidence: 0.78 };
   case "legistar": return { category: "Meetup", confidence: 0.88 };
@@ -96,11 +119,11 @@ export function enrichEvent(rec: NormalizedEvent): EnrichedEvent {
     let confidence = 0;
     if (rule.pattern.test(title)) confidence = 0.94;
     else if (rule.pattern.test(structured)) confidence = 0.88;
-    else if (rule.pattern.test(rec.description)) {
+    else if ((rule.category === "Sports" ? SPORTS_DESCRIPTION : rule.pattern).test(rec.description)) {
       // A volunteer leading a class does not make the class a volunteer
       // opportunity. Description-only volunteering needs an invitation to act.
       confidence = rule.category === "Volunteer" &&
-        !/\b(?:volunteer(?:ing)? opportunities?|join (?:us|our) (?:volunteer|stewardship)|sign up to volunteer|volunteers? needed)\b/i.test(rec.description)
+        !VOLUNTEER_INVITATION.test(rec.description)
         ? 0 : 0.68;
     }
     if (confidence) scores.set(rule.category, Math.max(confidence, scores.get(rule.category) ?? 0));

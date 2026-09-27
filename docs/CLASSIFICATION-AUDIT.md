@@ -36,12 +36,23 @@ accuracy report.
 | Midpeninsula Regional Open Space District | 18 |
 | City of San José | 14 |
 
-The current sample has **60/200 predictions below 0.65 confidence**. That is a
+The current sample has **56/200 predictions below 0.65 confidence**. That is a
 review queue, not an error rate. Regenerate the sample with the final build
 before hand review if the classifier changes; do not edit predicted columns
 manually. The CSV includes each official source URL, date, venue, full
 normalized description, and structured tags so the reviewer can resolve
 ambiguous cases at the source.
+
+### Preliminary code audit, not the human review
+
+The source-linked sample exposed broad source-category errors. In the local
+classifier, library "Health & Fitness" no longer makes a snack pickup a sport;
+"race" in a civil-rights notice and "long running game" in a tabletop event
+no longer imply athletics. An event led by a volunteer is not classified as a
+volunteer opportunity unless the attendee is invited to serve. Homework help,
+computer help and volleyball now have activity-specific title rules. The
+sample was regenerated after these changes. Its reviewer fields remain blank;
+the named reviewer must still judge every row and calculate category accuracy.
 
 ## Reviewer rubric
 

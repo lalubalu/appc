@@ -10,7 +10,8 @@
 // Prints one line per source: count, a sample title, and how many records
 // carry coordinates. Exit code 1 if any configured source returns zero.
 
-import { SAN_JOSE } from "../lib/ingest/areas.js";
+import { SAN_JOSE, isInsideArea } from "../lib/ingest/areas.js";
+import { enrichEvent } from "../lib/ingest/classify.js";
 import { fetchTicketmaster } from "../lib/ingest/sources/ticketmaster.js";
 import { fetchIcsFeed } from "../lib/ingest/sources/icsfeed.js";
 import { fetchLibCal } from "../lib/ingest/sources/libcal.js";
@@ -32,6 +33,14 @@ function report(name, records) {
   for (const r of records) cats[r.category] = (cats[r.category] ?? 0) + 1;
   console.log(`${records.length ? "✅" : "❌"} ${name}: ${records.length} events, ${withCoords} with coords, ${free} free · ${sample}`);
   console.log(`     categories: ${JSON.stringify(cats)}`);
+  const now = Date.now();
+  const next30Days = now + 30 * 86_400_000;
+  const inRadius = records.filter((r) => r.latitude != null && r.longitude != null &&
+    isInsideArea(area, r.latitude, r.longitude, 0) &&
+    r.start.getTime() >= now && r.start.getTime() < next30Days);
+  const volunteerCandidates = inRadius.filter((r) => enrichEvent(r).category === "Volunteer");
+  console.log(`     preview only: ${inRadius.length} dated, geocoded records within ${area.radiusMiles} mi in 30 days; ` +
+    `${volunteerCandidates.length} classified Volunteer before dedupe/human review`);
   if (!records.length) failures++;
 }
 

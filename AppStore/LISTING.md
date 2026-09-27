@@ -94,17 +94,24 @@ outdoors,parks,trails,hiking,walk,nature,community,events,local,explore,rewards,
 
 ## Support / marketing URLs
 
+**Pre-submission blocker:** Verdure does not yet have a receiving support or
+privacy inbox. Neither `verdure.app` nor `verdure-app.com` currently publishes
+MX records. The active website's `/support` and `/terms` routes return 404.
+Set up and test an inbox, then align the in-app, website and App Store contact
+copy before submitting. The bundled in-app legal text remains available.
+
 | Field | Value |
 |---|---|
-| Support URL | `https://verdure.app/support` — page built (`/support`) |
-| Marketing URL | `https://verdure.app` *(the Verdure Website in this repo, once deployed)* |
-| Privacy Policy URL | `https://verdure.app/privacy` — page built (`/privacy`) |
-| Terms of Use (EULA) | Apple's standard EULA, plus `https://verdure.app/terms` — page built (`/terms`) |
+| Support URL | `https://verdure-app.com/support` — not built on the active site; requires a verified support inbox before publishing |
+| Marketing URL | `https://verdure-app.com` — verified production domain |
+| Privacy Policy URL | `https://verdure-app.com/privacy` — live page requires owner review and local update deployment |
+| Terms of Use (EULA) | Apple's standard EULA; an active-site Verdure Terms route is still needed before linking it publicly |
 
 The domain is set in one place in the app (`Legal.siteBase` in
 `Verdure/Verdure/Models/Legal.swift`). Both documents also ship **inside the
 binary** (`LegalView`), linked from the paywall, the sign-up form and Profile ›
-Settings › Terms & Privacy — so the links are live even before DNS is.
+Settings › Terms & Privacy. Their in-app text remains available even while
+the public Terms and Support routes are missing.
 
 ---
 
@@ -161,7 +168,7 @@ switch it off in Profile › Settings › Product Analytics.
 > Sign in with:
 >
 > ```
-> Email:    appreview@verdure.app
+> Email:    <verified review account email — create before submission>
 > Password: (see the Demo Account fields in App Store Connect)
 > ```
 >
@@ -176,7 +183,7 @@ switch it off in Profile › Settings › Product Analytics.
 > It cannot be created until Cloud Functions are deployed, because points and
 > redemptions are server-authoritative and a client cannot mint them. Steps,
 > once the backend is live:
->   1. Register `appreview@verdure.app` through the normal sign-up screen.
+>   1. Register a real review-account email through the normal sign-up screen.
 >   2. Run `node functions/scripts/seed-review-account.mjs <uid>` against the
 >      live project to grant the balance, RSVPs, badge and perk code.
 >   3. Put the credentials in App Store Connect › App Review Information.
@@ -198,8 +205,8 @@ switch it off in Profile › Settings › Product Analytics.
 > different people report it, and anything unreviewed at the 24-hour mark is
 > removed by a scheduled job (`moderationSweep`). Blocking is mutual and
 > enforced server-side. Blocked members can be managed in Profile › Settings ›
-> Safety & Blocking, which also publishes our contact address for concerns:
-> **support@verdure.app**. To exercise the flow, report any post from a second
+> Safety & Blocking, which currently contains an unverified contact address;
+> replace it with a receiving inbox before submission. To exercise the flow, report any post from a second
 > test account — the reporter sees a confirmation and the reviewer queue
 > receives the item.
 >
