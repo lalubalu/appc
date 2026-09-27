@@ -144,6 +144,23 @@ const cleanServerRecords: Cleaner = async (uid, counts) => {
     await deleteQueryBatched(db.collectionGroup("events").where("uid", "==", uid)));
   bump(counts, "plannerRuns",
     await deleteQueryBatched(db.collection("plannerRuns").where("uid", "==", uid)));
+  bump(counts, "eventPlanSessions",
+    await deleteQueryBatched(db.collection("eventPlanSessions").where("uid", "==", uid)));
+  bump(counts, "feedSessions",
+    await deleteQueryBatched(db.collection("feedSessions").where("uid", "==", uid)));
+  bump(counts, "feedImpressions",
+    await deleteQueryBatched(db.collection("feedImpressions").where("uid", "==", uid)));
+  const ownedPlans = await db.collection("groupPlans").where("ownerUid", "==", uid).get();
+  for (const plan of ownedPlans.docs) await plan.ref.delete();
+  bump(counts, "groupPlansOwned", ownedPlans.size);
+  const memberPlans = await db.collection("groupPlans").where("memberUIDs", "array-contains", uid).get();
+  for (const plan of memberPlans.docs) await plan.ref.update({
+    memberUIDs: FieldValue.arrayRemove(uid), [`votes.${uid}`]: FieldValue.delete(),
+  });
+  bump(counts, "groupPlansJoined", memberPlans.size);
+  const invitations = await db.collection("groupPlans").where("pendingUIDs", "array-contains", uid).get();
+  for (const plan of invitations.docs) await plan.ref.update({ pendingUIDs: FieldValue.arrayRemove(uid) });
+  bump(counts, "groupPlanInvites", invitations.size);
 };
 
 /** Gift-card queue: queued rows vanish, delivered rows are anonymised (financial record). */

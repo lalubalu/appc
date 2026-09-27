@@ -68,9 +68,13 @@ that capture; the other four new-tab screenshots remain to be taken.
 
 Since this capture, mutual friend requests, accepted-only activity, the
 For You / Everything switch and the feedback controls have been built. The
-Plan screen now orders local event cards from the server ranker and marks
-friends who are going. The server model session and dense-corpus visual check
-remain open. Computer inspected the refreshed Discover screen on 2026-09-27;
+Plan screen now uses a server session to show verified event cards, supports
+in-place refinements and offers a private group-plan sheet. It marks friends
+who are going. The actual model path and dense-corpus visual check remain
+open. Computer inspected the refreshed Discover screen on 2026-09-27;
 it showed the five-tab shell, the For You / Everything switch and QA sample
 cards, but the Simulator window timed out before a new file capture could be
-saved. This document's linked Plan image predates the friend-going addition.
+saved. This document's linked Plan image predates the server session, group
+sheet and friend-going addition. A later Computer inspection showed Discover's
+five-tab shell and empty live-corpus state, but a saved updated capture is
+still pending because the Simulator window intermittently disappeared.

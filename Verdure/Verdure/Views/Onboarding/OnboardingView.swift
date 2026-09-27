@@ -331,7 +331,8 @@ struct OnboardingView: View {
                         password: userPassword,
                         displayName: userName.trimmingCharacters(in: .whitespaces),
                         birthYear: Calendar.current.component(.year, from: birthDate),
-                        studentStatus: isStudent, school: school)
+                        studentStatus: isStudent, school: school,
+                        interests: selectedInterests.map(\.rawValue))
                 } else {
                     try await authService.signIn(
                         email: userEmail.trimmingCharacters(in: .whitespaces),

@@ -1,6 +1,9 @@
 import SwiftUI
 import PhotosUI
 import CoreLocation
+@preconcurrency import FirebaseFunctions
+@preconcurrency import FirebaseFirestore
+@preconcurrency import FirebaseAuth
 
 struct EventsView: View {
     private enum FeedMode: String, CaseIterable { case forYou = "For You", everything = "Everything" }
@@ -10,6 +13,7 @@ struct EventsView: View {
     @Environment(EventsAPIService.self) private var eventsService
     @Environment(ModerationService.self) private var moderation
     @Environment(SocialService.self) private var social
+    @Environment(StoreService.self) private var store
     @Environment(DiscoveryFilters.self) private var filters
     @State private var search = SearchDebouncer()
     @State private var selectedEvent: Event? = nil
@@ -17,6 +21,7 @@ struct EventsView: View {
     @State private var showSaved = false
     @State private var showCalendar = false
     @State private var showInterestPicker = false
+    @State private var showProfiles = false
     /// Single-select chips write into the shared, persisted filter state.
     private var selectedCategory: EventCategory? { filters.state.eventCategories.count == 1 ? filters.state.eventCategories.first : nil }
     private var searchText: String { search.debounced }
@@ -27,6 +32,15 @@ struct EventsView: View {
         // build with nothing nearby shows the honest empty deck instead.
         // Events from blocked organizers never render (mutual block, App Review 1.2).
         eventsService.events.filter { !moderation.isBlocked($0.creatorID) }
+    }
+    private var visibleCategoryChoices: [EventCategory] {
+        let enoughVolunteers = sourceEvents.filter { event in
+            guard event.category == .volunteer, event.date > Date(),
+                  let coordinate = event.coordinate, let origin = locationManager.userLocation else { return false }
+            return CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+                .distance(from: origin) <= filters.state.radiusMiles * 1609.344
+        }.count >= 30
+        return EventCategory.allCases.filter { $0 != .volunteer || enoughVolunteers }
     }
 
     // MARK: Personalization ("For You")
@@ -95,6 +109,14 @@ struct EventsView: View {
                     if let notice = eventsService.coverageNotice { coverageBanner(notice) }
                     if feedMode == .forYou {
                         kineticHero.dramaticRise(index: 0)
+                        if store.isPlus {
+                            Button { showProfiles = true } label: {
+                                Label("Your interest profiles", systemImage: "square.stack.3d.up")
+                                    .font(VType.body(13, .semibold)).foregroundStyle(Palette.spruce.base)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.horizontal, Spacing.md)
+                            }.buttonStyle(.plain)
+                        }
                         if !sourceEvents.isEmpty { forYouSection.dramaticRise(index: 1) }
                         posterDeck.dramaticRise(index: 2)
                         upcomingTimeline.dramaticRise(index: 3)
@@ -155,6 +177,7 @@ struct EventsView: View {
                 InterestPickerSheet()
                     .presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
             }
+            .sheet(isPresented: $showProfiles) { InterestProfilesSheet() }
         }
     }
 
@@ -298,10 +321,14 @@ struct EventsView: View {
                     .padding(.horizontal, Spacing.md)
 
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 14) {
+                    LazyHStack(spacing: 14) {
                         ForEach(forYouEvents) { event in
                             ForYouEventCard(event: event, dateFormatter: dateFormatter)
-                                .onTapGesture { Haptics.soft(); selectedEvent = event }
+                                .onAppear { Task { await eventsService.recordFeedEvent(for: event.id, action: "impression") } }
+                                .onTapGesture {
+                                    Haptics.soft(); selectedEvent = event
+                                    Task { await eventsService.recordFeedEvent(for: event.id, action: "tap") }
+                                }
                         }
                     }
                     .padding(.horizontal, Spacing.md)
@@ -406,7 +433,7 @@ struct EventsView: View {
                                  tint: Palette.spruce.base, isSelected: filters.state.eventCategories.isEmpty) {
                         withAnimation(.spring(response: 0.35)) { filters.state.eventCategories = [] }
                     }
-                    ForEach(EventCategory.allCases) { cat in
+                    ForEach(visibleCategoryChoices) { cat in
                         CategoryPill(label: cat.displayName, icon: cat.icon, tint: cat.accent.base,
                                      isSelected: selectedCategory == cat) {
                             withAnimation(.spring(response: 0.35)) { filters.state.eventCategories = [cat] }
@@ -537,6 +564,7 @@ private struct EventPoster: View {
     let event: Event
     let isCheckedIn: Bool
     @Environment(GameStateManager.self) private var gameState
+    @Environment(EventsAPIService.self) private var eventsService
     private var kind: ClayStyle.ClayAccentKind { event.category.clayKind }
     private var on: Color { kind.accent.onColor }
 
@@ -551,6 +579,9 @@ private struct EventPoster: View {
                 VStack(alignment: .trailing, spacing: 8) {
                     Button {
                         withAnimation(.spring(response: 0.35, dampingFraction: 0.6)) { gameState.toggleSaved(event) }
+                        if gameState.isSaved(event.id) {
+                            Task { await eventsService.recordFeedEvent(for: event.id, action: "save") }
+                        }
                     } label: {
                         Image(systemName: gameState.isSaved(event.id) ? "bookmark.fill" : "bookmark")
                             .font(.system(size: 14, weight: .bold)).foregroundStyle(on)
@@ -957,6 +988,18 @@ struct EventDetailSheet: View {
     @State private var venueCoordinate: CLLocationCoordinate2D? = nil
     @State private var geocodeFinished = false
     @State private var feedbackChoice: String? = nil
+    @State private var householdYoungestAge: Int?
+
+    private var householdWarning: String? {
+        guard let age = householdYoungestAge, age < 13 else { return nil }
+        if event.ageSuitability == "adults" || (event.minimumAge ?? 0) > age {
+            return "This listing may not suit a child age \(age). Check the organizer's age rules."
+        }
+        if let end = event.endDate, Calendar.current.component(.hour, from: end) >= 21 {
+            return "This event ends late for a household with a young child."
+        }
+        return nil
+    }
 
     private var isCheckedIn: Bool { gameState.isCheckedIn(event.id) }
     private var kind: ClayStyle.ClayAccentKind { event.category.clayKind }
@@ -1005,6 +1048,13 @@ struct EventDetailSheet: View {
                         VStack(alignment: .leading, spacing: Spacing.md) {
                             Text(event.title).font(VType.display(24, .semibold)).foregroundStyle(Palette.ink)
                             Text("Organized by \(event.organizer)").font(VType.body(14)).foregroundStyle(Palette.inkSoft)
+                            if let householdWarning {
+                                Label(householdWarning, systemImage: "exclamationmark.triangle")
+                                    .font(VType.body(12)).foregroundStyle(Palette.terracotta.base)
+                                    .padding(Spacing.sm)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .claySurface(.surface, radius: Radius.sm)
+                            }
                             if let desc = event.description, !desc.isEmpty {
                                 Text(desc).font(VType.body(14)).foregroundStyle(Palette.ink).lineSpacing(3)
                                     .padding(Spacing.md).frame(maxWidth: .infinity, alignment: .leading)
@@ -1031,6 +1081,9 @@ struct EventDetailSheet: View {
                             Button {
                                 withAnimation(.spring(response: 0.35, dampingFraction: 0.6)) {
                                     gameState.toggleSaved(event)
+                                }
+                                if gameState.isSaved(event.id) {
+                                    Task { await eventsService.recordFeedEvent(for: event.id, action: "save") }
                                 }
                             } label: {
                                 Image(systemName: gameState.isSaved(event.id) ? "bookmark.fill" : "bookmark")
@@ -1059,6 +1112,11 @@ struct EventDetailSheet: View {
                 geocodeFinished = true
                 locationManager.startUpdating()
                 await eventsService.recordFeedback(for: event.id, kind: "view")
+                await eventsService.recordFeedEvent(for: event.id, action: "tap")
+                if let uid = Auth.auth().currentUser?.uid,
+                   let snapshot = try? await Firestore.firestore().collection("users").document(uid).getDocument() {
+                    householdYoungestAge = snapshot.data()?["householdYoungestAge"] as? Int
+                }
             }
         }
     }
@@ -1387,9 +1445,244 @@ private struct ForYouEventCard: View {
 
 // MARK: - Interest picker (personalizes the For You section)
 
+/// Plus members can keep distinct sets without replacing the free account's
+/// onboarding interests. The server owns all writes and checks entitlement.
+struct InterestProfilesSheet: View {
+    private struct ProfileRow: Identifiable {
+        let id: String
+        let name: String
+        let interests: [String]
+        let radiusMiles: Double
+    }
+    private struct FilterRow: Identifiable {
+        let id: String
+        let name: String
+        let categories: [String]
+        let radiusMiles: Double
+        let cost: String
+        let dateRange: String
+    }
+
+    @Environment(EventsAPIService.self) private var eventsService
+    @Environment(LocationManager.self) private var locationManager
+    @Environment(DiscoveryFilters.self) private var discoveryFilters
+    @Environment(\.dismiss) private var dismiss
+    @AppStorage("interestCategories") private var interestCategoriesRaw = ""
+    @State private var profiles: [ProfileRow] = []
+    @State private var savedFilters: [FilterRow] = []
+    @State private var activeProfileId: String?
+    @State private var serverPlus = false
+    @State private var name = ""
+    @State private var filterName = ""
+    @State private var selectedInterests: Set<PlaceCategory> = []
+    @State private var excludedCategories: Set<EventCategory> = []
+    @State private var radius = 25.0
+    @State private var preset = "balanced"
+    @State private var working = false
+    @State private var errorMessage: String?
+
+    private func call(_ data: [String: any Sendable]) async throws -> [String: Any] {
+        let result = try await Functions.functions().httpsCallable("manageInterestProfiles").call(data)
+        return result.data as? [String: Any] ?? [:]
+    }
+
+    private func load() async {
+        do {
+            let result = try await call(["action": "list"])
+            serverPlus = result["plus"] as? Bool ?? false
+            activeProfileId = result["activeProfileId"] as? String
+            let profileMap = result["profiles"] as? [String: [String: Any]] ?? [:]
+            profiles = profileMap.map { id, raw in
+                ProfileRow(id: id, name: raw["name"] as? String ?? "Profile",
+                           interests: raw["interests"] as? [String] ?? [],
+                           radiusMiles: raw["radiusMiles"] as? Double ?? 25)
+            }.sorted { $0.name < $1.name }
+            let filterMap = result["savedFilters"] as? [String: [String: Any]] ?? [:]
+            savedFilters = filterMap.map { id, raw in
+                FilterRow(id: id, name: raw["name"] as? String ?? "Filters",
+                          categories: raw["categories"] as? [String] ?? [],
+                          radiusMiles: raw["radiusMiles"] as? Double ?? 25,
+                          cost: raw["cost"] as? String ?? "any",
+                          dateRange: raw["dateRange"] as? String ?? "any")
+            }.sorted { $0.name < $1.name }
+        } catch { errorMessage = error.localizedDescription }
+    }
+
+    private func createProfile() async {
+        guard !working else { return }
+        working = true; defer { working = false }
+        do {
+            let profile: [String: any Sendable] = [
+                "name": name, "interests": selectedInterests.map(\.rawValue),
+                "radiusMiles": radius, "categories": [String](),
+                "exclusions": excludedCategories.map(\.rawValue), "distancePreset": preset,
+            ]
+            _ = try await call(["action": "save", "profile": profile])
+            name = ""
+            await load()
+            await eventsService.refresh(around: locationManager.userCoordinate)
+        } catch { errorMessage = error.localizedDescription }
+    }
+
+    private func switchProfile(_ row: ProfileRow) async {
+        do {
+            _ = try await call(["action": "switch", "id": row.id])
+            interestCategoriesRaw = row.interests.joined(separator: ",")
+            await load()
+            await eventsService.refresh(around: locationManager.userCoordinate)
+        } catch { errorMessage = error.localizedDescription }
+    }
+
+    private func deleteProfile(_ id: String) async {
+        do {
+            _ = try await call(["action": "delete", "id": id])
+            await load()
+            await eventsService.refresh(around: locationManager.userCoordinate)
+        } catch { errorMessage = error.localizedDescription }
+    }
+
+    private func saveFilters() async {
+        do {
+            let state = discoveryFilters.state
+            _ = try await call(["action": "saveFilter", "name": filterName,
+                "categories": state.eventCategories.map(\.rawValue), "radiusMiles": state.radiusMiles,
+                "cost": state.price == .free ? "free" : "any",
+                "dateRange": state.dateRange == .thisWeekend ? "weekend" :
+                    state.dateRange == .thisWeek ? "week" : state.dateRange == .thisMonth ? "month" : "any"])
+            filterName = ""
+            await load()
+        } catch { errorMessage = error.localizedDescription }
+    }
+
+    private func applyFilter(_ row: FilterRow) {
+        discoveryFilters.state.eventCategories = Set(row.categories.compactMap(EventCategory.init(rawValue:)))
+        discoveryFilters.state.radiusMiles = row.radiusMiles
+        discoveryFilters.state.price = row.cost == "free" ? .free : .any
+        discoveryFilters.state.dateRange = row.dateRange == "weekend" ? .thisWeekend :
+            row.dateRange == "week" ? .thisWeek : row.dateRange == "month" ? .thisMonth : .any
+        dismiss()
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: Spacing.lg) {
+                    if let errorMessage {
+                        Text(errorMessage).font(VType.body(12)).foregroundStyle(.red)
+                    }
+                    if !serverPlus {
+                        EmptyStateCard(icon: "lock.fill", title: "Verdure+ profiles",
+                                       message: "Your subscription must be active on your account to use extra profiles.")
+                    } else {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Your profiles").font(VType.display(24, .semibold))
+                            ForEach(profiles) { row in
+                                HStack {
+                                    VStack(alignment: .leading) {
+                                        Text(row.name).font(VType.body(15, .semibold))
+                                        Text("\(row.interests.joined(separator: ", ")) · \(Int(row.radiusMiles)) mi")
+                                            .font(VType.body(12)).foregroundStyle(Palette.inkSoft)
+                                    }
+                                    Spacer()
+                                    if row.id == activeProfileId {
+                                        Text("Active").font(VType.body(12, .semibold)).foregroundStyle(Palette.spruce.base)
+                                    } else {
+                                        Button("Use") { Task { await switchProfile(row) } }
+                                    }
+                                    Menu {
+                                        Button("Delete profile", role: .destructive) { Task { await deleteProfile(row.id) } }
+                                    } label: { Image(systemName: "ellipsis").frame(width: 44, height: 44) }
+                                }.padding(Spacing.md).claySurface(.surface, radius: Radius.md, elevation: 0.4)
+                            }
+                        }
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Create a profile").font(VType.display(22, .semibold))
+                            TextField("Name, like Solo weekend", text: $name)
+                                .textInputAutocapitalization(.words).padding(12)
+                                .background(ClayBackground(style: .inset, radius: Radius.sm))
+                            Text("Interests").font(VType.body(13, .semibold))
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack {
+                                    ForEach(PlaceCategory.allCases) { interest in
+                                        Button(interest.rawValue) {
+                                            if selectedInterests.contains(interest) { selectedInterests.remove(interest) }
+                                            else { selectedInterests.insert(interest) }
+                                        }
+                                        .font(VType.body(12, .medium))
+                                        .padding(10)
+                                        .background(selectedInterests.contains(interest) ? Palette.spruce.base : Palette.surface,
+                                                    in: RoundedRectangle(cornerRadius: Radius.sm))
+                                        .foregroundStyle(selectedInterests.contains(interest) ? Palette.spruce.onColor : Palette.ink)
+                                    }
+                                }
+                            }
+                            Text("Typical radius: \(Int(radius)) miles").font(VType.body(13))
+                            Slider(value: $radius, in: 1...100, step: 1)
+                            Picker("Travel preference", selection: $preset) {
+                                Text("Close to home").tag("close")
+                                Text("Balanced").tag("balanced")
+                                Text("Worth the drive").tag("drive")
+                            }.pickerStyle(.segmented)
+                            Text("Never show these categories").font(VType.body(13, .semibold))
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack {
+                                    ForEach(EventCategory.allCases) { category in
+                                        Button(category.displayName) {
+                                            if excludedCategories.contains(category) { excludedCategories.remove(category) }
+                                            else { excludedCategories.insert(category) }
+                                        }
+                                        .font(VType.body(12, .medium)).padding(10)
+                                        .background(excludedCategories.contains(category) ? Palette.spruce.base : Palette.surface,
+                                                    in: RoundedRectangle(cornerRadius: Radius.sm))
+                                        .foregroundStyle(excludedCategories.contains(category) ? Palette.spruce.onColor : Palette.ink)
+                                    }
+                                }
+                            }
+                            Button("Save profile") { Task { await createProfile() } }
+                                .font(VType.body(15, .semibold)).foregroundStyle(Palette.spruce.base)
+                                .disabled(name.trimmingCharacters(in: .whitespaces).count < 2 || working)
+                        }
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Saved event filters").font(VType.display(22, .semibold))
+                            ForEach(savedFilters) { row in
+                                HStack {
+                                    Button(row.name) { applyFilter(row) }
+                                    Spacer()
+                                    Button(role: .destructive) {
+                                        Task {
+                                            _ = try? await call(["action": "deleteFilter", "id": row.id])
+                                            await load()
+                                        }
+                                    } label: { Image(systemName: "trash") }
+                                }.font(VType.body(14)).padding(Spacing.md)
+                                    .claySurface(.surface, radius: Radius.md, elevation: 0.4)
+                            }
+                            TextField("Name current filters", text: $filterName)
+                                .padding(12).background(ClayBackground(style: .inset, radius: Radius.sm))
+                            Button("Save current filters") { Task { await saveFilters() } }
+                                .font(VType.body(14, .semibold)).foregroundStyle(Palette.spruce.base)
+                                .disabled(filterName.trimmingCharacters(in: .whitespaces).count < 2)
+                        }
+                    }
+                }
+                .padding(Spacing.md).padding(.bottom, Spacing.xl)
+            }
+            .background(VerdureBackground())
+            .navigationTitle("Interest profiles")
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
+            .task {
+                selectedInterests = Set(interestCategoriesRaw.split(separator: ",")
+                    .compactMap { PlaceCategory(rawValue: String($0)) })
+                await load()
+            }
+        }
+    }
+}
+
 private struct InterestPickerSheet: View {
     @AppStorage("interestCategories") private var interestCategoriesRaw = ""
     @Environment(\.dismiss) private var dismiss
+    @Environment(EventsAPIService.self) private var eventsService
 
     private var selected: Set<PlaceCategory> {
         Set(interestCategoriesRaw.split(separator: ",").compactMap { PlaceCategory(rawValue: String($0)) })
@@ -1399,6 +1692,7 @@ private struct InterestPickerSheet: View {
         var current = selected
         if current.contains(category) { current.remove(category) } else { current.insert(category) }
         interestCategoriesRaw = current.map(\.rawValue).joined(separator: ",")
+        Task { await eventsService.updateInterests(current.map(\.rawValue)) }
         Haptics.tap()
     }
 
@@ -1458,6 +1752,7 @@ private struct InterestPickerSheet: View {
         .environment(ModerationService())
         .environment(AuthService())
         .environment(SocialService())
+        .environment(StoreService())
         .environment(DiscoveryFilters())
 }
 

@@ -102,6 +102,7 @@ struct Event: Identifiable, Hashable {
     var expectedSize: Int? = nil
     var indoorOutdoor: String? = nil
     var ageSuitability: String? = nil
+    var endDate: Date? = nil
     var minimumAge: Int? = nil
     var maximumAge: Int? = nil
     var accessibilityFeatures: [String] = []

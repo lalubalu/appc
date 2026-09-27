@@ -15,6 +15,7 @@ struct AuthView: View {
     @State private var birthDate = Calendar.current.date(byAdding: .year, value: -18, to: Date()) ?? Date()
     @State private var isStudent = false
     @State private var school = ""
+    @AppStorage("interestCategories") private var interestCategoriesRaw = ""
     @State private var isSubmitting = false
     @State private var appear = false
     @State private var auroraPhase: CGFloat = 0
@@ -256,7 +257,8 @@ struct AuthView: View {
                                                  password: password,
                                                  displayName: name.trimmingCharacters(in: .whitespaces),
                                                  birthYear: Calendar.current.component(.year, from: birthDate),
-                                                 studentStatus: isStudent, school: school)
+                                                 studentStatus: isStudent, school: school,
+                                                 interests: interestCategoriesRaw.split(separator: ",").map(String.init))
                 } else {
                     try await authService.signIn(email: email.trimmingCharacters(in: .whitespaces),
                                                  password: password)

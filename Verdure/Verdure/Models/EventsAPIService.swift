@@ -26,6 +26,7 @@ final class EventsAPIService {
 
     var events: [Event] = []
     private(set) var rankedEventIDs: [String] = []
+    private var feedSessionID: String?
     private(set) var everythingEvents: [Event] = []
     private(set) var everythingHasMore = true
     private(set) var everythingLoading = false
@@ -116,8 +117,10 @@ final class EventsAPIService {
             let area = LaunchArea.nearest(to: center, in: launchAreas)?.id ?? "san-jose-ca"
             let data = try await Functions.functions().httpsCallable("recommendedEvents").call([
                 "areaId": area, "lat": center.latitude, "lng": center.longitude, "limit": 50,
+                "telemetryEnabled": Analytics.isEnabled,
             ]).data as? [String: Any] ?? [:]
             let rows = data["events"] as? [[String: Any]] ?? []
+            feedSessionID = data["feedSessionId"] as? String
             let ids = rows.compactMap { $0["id"] as? String }
             for id in ids.prefix(10) where !events.contains(where: { $0.id == id }) {
                 if let event = await event(withID: id) { events.append(event) }
@@ -126,6 +129,20 @@ final class EventsAPIService {
         } catch {
             // A local event list still works while Functions are unavailable.
             rankedEventIDs = []
+            feedSessionID = nil
+        }
+    }
+
+    func recordFeedEvent(for eventID: String, action: String) async {
+        guard !QAData.offline, Analytics.isEnabled, Auth.auth().currentUser != nil,
+              let feedSessionID, rankedEventIDs.contains(eventID) else { return }
+        do {
+            let payload: [String: any Sendable] = [
+                "sessionId": feedSessionID, "eventId": eventID, "action": action
+            ]
+            _ = try await Functions.functions().httpsCallable("recordFeedEvent").call(payload)
+        } catch {
+            print("[EventsAPI] feed telemetry failed: \(error.localizedDescription)")
         }
     }
 
@@ -136,9 +153,21 @@ final class EventsAPIService {
         do {
             _ = try await Functions.functions().httpsCallable("recordEventFeedback")
                 .call(["eventId": eventID, "kind": kind])
+            if kind == "less" { await recordFeedEvent(for: eventID, action: "dismiss") }
             if kind != "view" { await fetchPersonalized(around: cachedCenter ?? LaunchArea.builtIn[0].center) }
         } catch {
             print("[EventsAPI] feedback failed: \(error.localizedDescription)")
+        }
+    }
+
+    func updateInterests(_ names: [String]) async {
+        guard let uid = Auth.auth().currentUser?.uid else { return }
+        let clean = Array(Set(names.map { Sanitize.text($0, max: 40) }.filter { !$0.isEmpty })).sorted().prefix(20)
+        do {
+            try await db.collection("users").document(uid).setData(["interests": Array(clean)], merge: true)
+            await fetchPersonalized(around: cachedCenter ?? LaunchArea.builtIn[0].center)
+        } catch {
+            print("[EventsAPI] interests sync failed: \(error.localizedDescription)")
         }
     }
 
@@ -200,6 +229,12 @@ final class EventsAPIService {
         } catch {
             print("[EventsAPI] event(withID:) failed: \(error.localizedDescription)")
             return nil
+        }
+    }
+
+    func ensureEvents(_ ids: [String]) async {
+        for id in ids.prefix(4) where !events.contains(where: { $0.id == id }) {
+            if let event = await event(withID: id) { events.append(event) }
         }
     }
 
@@ -407,6 +442,7 @@ final class EventsAPIService {
             expectedSize: data["expectedSize"] as? Int,
             indoorOutdoor: data["indoorOutdoor"] as? String,
             ageSuitability: data["ageSuitability"] as? String,
+            endDate: (data["endDate"] as? Timestamp)?.dateValue(),
             minimumAge: data["minimumAge"] as? Int,
             maximumAge: data["maximumAge"] as? Int,
             accessibilityFeatures: data["accessibilityFeatures"] as? [String] ?? [],
@@ -520,6 +556,7 @@ private struct CachedEvent: Codable {
     let expectedSize: Int?
     let indoorOutdoor: String?
     let ageSuitability: String?
+    let endDate: Date?
     let minimumAge: Int?
     let maximumAge: Int?
     let accessibilityFeatures: [String]?
@@ -541,7 +578,8 @@ private struct CachedEvent: Codable {
         priceMin = event.priceMin; imageURL = event.imageURL; tags = event.tags
         areaId = event.areaId; organizerId = event.organizerId; isBroadcast = event.isBroadcast
         expectedSize = event.expectedSize; indoorOutdoor = event.indoorOutdoor
-        ageSuitability = event.ageSuitability; minimumAge = event.minimumAge; maximumAge = event.maximumAge
+        ageSuitability = event.ageSuitability; endDate = event.endDate
+        minimumAge = event.minimumAge; maximumAge = event.maximumAge
         accessibilityFeatures = event.accessibilityFeatures; publicVenue = event.publicVenue
         recurring = event.recurring; virtual = event.virtual
         applicationDeadline = event.applicationDeadline?.timeIntervalSince1970
@@ -560,7 +598,7 @@ private struct CachedEvent: Codable {
             source: source ?? "community", sourceCount: sourceCount ?? 1, isFree: isFree,
             priceMin: priceMin, imageURL: imageURL, tags: tags ?? [],
             areaId: areaId, organizerId: organizerId, isBroadcast: isBroadcast ?? true,
-            expectedSize: expectedSize, indoorOutdoor: indoorOutdoor, ageSuitability: ageSuitability,
+            expectedSize: expectedSize, indoorOutdoor: indoorOutdoor, ageSuitability: ageSuitability, endDate: endDate,
             minimumAge: minimumAge, maximumAge: maximumAge,
             accessibilityFeatures: accessibilityFeatures ?? [], publicVenue: publicVenue,
             recurring: recurring, virtual: virtual,

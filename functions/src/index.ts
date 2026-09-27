@@ -455,6 +455,10 @@ export { planAdventure } from "./adventure.js";
 // Notifications (sendEventReminders) and partner surfacing call recommendFor()
 // directly rather than re-implementing the ordering.
 export { recommendedEvents, recordEventFeedback } from "./ranking.js";
+export { manageInterestProfiles } from "./profiles.js";
+export { planEvents, refineEventPlan } from "./eventPlanner.js";
+export { recordFeedEvent, pruneFeedTelemetry } from "./feedTelemetry.js";
+export { manageGroupPlan } from "./groupPlans.js";
 
 // Partner surfacing. Separate from ranking.ts on purpose: that module has no
 // partner input and this one cannot reach into it, so a paid placement is

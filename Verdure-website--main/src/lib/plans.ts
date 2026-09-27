@@ -44,6 +44,7 @@ export let PLANS: Plan[] = [
       "Early access to local partner perks",
       "$5 and $10 cash gift cards",
       "Advanced stats for your last 30 days",
+      "Interest profiles and saved event filters",
     ],
     featured: true,
   },

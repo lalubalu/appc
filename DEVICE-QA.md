@@ -118,6 +118,11 @@ two numbers.
 | 4.20 | Discover and Plan with large Dynamic Type and VoiceOver | Both mode controls, plan options, feedback buttons and event actions remain reachable | ☐ |
 | 4.21 | Organizer posts an accessible outdoor event with age/size details | Details persist and display under Before you go; invalid minimum/maximum ages are refused | ☐ |
 | 4.22 | Create a student account and browse Opportunities | Student/school affect ordering without hiding events; private fields are absent from public profiles | ☐ |
+| 4.23 | Create and switch two Verdure+ interest profiles in Discover and Plan | Each name, distance preset, exclusion and saved filter persists; switching changes order; free account sees no Plus controls | ☐ |
+| 4.24 | Set youngest child age in Profile, then open a late or adult-only event | Suitable events rise in For You; an age or late-ending warning appears in details | ☐ |
+| 4.25 | Build a Plan from real events, swap, make it shorter/longer, then reopen | Cards and RSVP work; refinement stays in the same session and never invents a stop | ☐ |
+| 4.26 | Two accepted friends share a group plan | Invitee opts in, both shortlist, each independently RSVPs; an unaccepted user cannot find the plan | ☐ |
+| 4.27 | Scroll For You, tap, save, RSVP and dismiss a card | Server impression records position, score, signals and the strongest outcome only for displayed cards | ☐ |
 
 ## Reporting
 

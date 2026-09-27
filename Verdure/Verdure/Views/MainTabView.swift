@@ -1,6 +1,8 @@
 import SwiftUI
 import CoreLocation
 import CoreImage.CIFilterBuiltins
+@preconcurrency import FirebaseFunctions
+@preconcurrency import FirebaseAuth
 
 private enum AppTab: Int, CaseIterable {
     case discover, plan, friends, rewards, profile
@@ -268,15 +270,24 @@ private struct PlanTabView: View {
     @Environment(EventsAPIService.self) private var eventsService
     @Environment(LocationManager.self) private var locationManager
     @Environment(SocialService.self) private var social
+    @Environment(StoreService.self) private var store
     @State private var when = "This weekend"
     @State private var company = "Just me"
     @State private var distance = "Short drive"
     @State private var budget = "Free"
     @State private var note = ""
     @State private var selectedIDs: [String] = []
-    @State private var excludedIDs: Set<String> = []
+    @State private var sessionID: String?
+    @State private var planTitle = "Your plan"
+    @State private var planIntro = ""
+    @State private var planReasons: [String: String] = [:]
+    @State private var planError: String?
+    @State private var planning = false
+    @State private var showPaywall = false
+    @State private var showGroupPlans = false
     @State private var selectedEvent: Event?
     @State private var attempted = false
+    @State private var showProfiles = false
     private let eventDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "EEE, MMM d"
@@ -349,14 +360,24 @@ private struct PlanTabView: View {
                             .background(ClayBackground(style: .inset, radius: Radius.sm))
                             .submitLabel(.done)
                     }
-                    Button { makePlan() } label: {
-                        HStack { Text("Find real events"); Spacer(); Image(systemName: "arrow.right") }
+                    Button { Task { await makePlan() } } label: {
+                        HStack {
+                            Text(planning ? "Finding your plan…" : "Find real events")
+                            Spacer()
+                            if planning { ProgressView().tint(Palette.spruce.onColor) }
+                            else { Image(systemName: "arrow.right") }
+                        }
                             .font(VType.body(15, .semibold))
                             .foregroundStyle(Palette.spruce.onColor)
                             .padding(16)
                             .background(Palette.spruce.base, in: RoundedRectangle(cornerRadius: Radius.md))
                     }
                     .buttonStyle(.plain)
+                    .disabled(planning)
+
+                    if let planError {
+                        Text(planError).font(VType.body(13)).foregroundStyle(Palette.inkSoft)
+                    }
 
                     if company == "Friends" && social.friends.isEmpty {
                         Text("Add a friend in Friends to see who's going and plan together.")
@@ -365,15 +386,33 @@ private struct PlanTabView: View {
 
                     if !selectedIDs.isEmpty {
                         HStack {
-                            Text("Your plan").font(VType.display(28, .semibold)).foregroundStyle(Palette.ink)
+                            Text(planTitle).font(VType.display(28, .semibold)).foregroundStyle(Palette.ink)
                             Spacer()
-                            Button("Shorter") { if !selectedIDs.isEmpty { selectedIDs.removeLast() } }
+                            Button("Shorter") { Task { await refine("shorter") } }
                                 .font(VType.body(12, .semibold))
                                 .disabled(selectedIDs.count < 2)
+                        }
+                        if !planIntro.isEmpty {
+                            Text(planIntro).font(VType.body(13)).foregroundStyle(Palette.inkSoft)
                         }
                         ForEach(Array(plannedEvents.enumerated()), id: \.element.id) { index, event in
                             planCard(event, number: index + 1)
                         }
+                        if sessionID != nil {
+                            Button { showGroupPlans = true } label: {
+                                Label("Plan with friends", systemImage: "person.2.fill")
+                                    .font(VType.body(14, .semibold))
+                                    .frame(maxWidth: .infinity).padding(14)
+                                    .foregroundStyle(Palette.spruce.base)
+                                    .claySurface(.surface, radius: Radius.md)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        HStack(spacing: 20) {
+                            Button("Longer") { Task { await refine("longer") } }
+                            Button("Different vibe") { Task { await refine("different", targetID: selectedIDs.first) } }
+                        }
+                        .font(VType.body(13, .semibold)).foregroundStyle(Palette.spruce.base)
                     } else if attempted || eventsService.events.isEmpty {
                         EmptyStateCard(icon: "calendar.badge.exclamationmark",
                                        title: eventsService.events.isEmpty ? "The local calendar is still filling in" : "No events fit those choices yet",
@@ -402,6 +441,9 @@ private struct PlanTabView: View {
                 EventDetailSheet(event: event, dateFormatter: eventDateFormatter)
                     .presentationDetents([.large]).presentationDragIndicator(.visible)
             }
+            .sheet(isPresented: $showProfiles) { InterestProfilesSheet() }
+            .sheet(isPresented: $showPaywall) { PaywallView(source: "planner") }
+            .sheet(isPresented: $showGroupPlans) { GroupPlansSheet(sessionID: sessionID) }
         }
     }
 
@@ -411,6 +453,16 @@ private struct PlanTabView: View {
             Text("Make a plan.").font(VType.display(38, .semibold)).foregroundStyle(Palette.ink)
             Text("A few choices. Real things happening nearby.")
                 .font(VType.body(14)).foregroundStyle(Palette.inkSoft)
+            Button { showGroupPlans = true } label: {
+                Label("Your group plans", systemImage: "person.2.circle")
+                    .font(VType.body(13, .semibold)).foregroundStyle(Palette.spruce.base)
+            }.buttonStyle(.plain)
+            if store.isPlus {
+                Button { showProfiles = true } label: {
+                    Label("Switch interest profile", systemImage: "square.stack.3d.up")
+                        .font(VType.body(13, .semibold)).foregroundStyle(Palette.spruce.base)
+                }.buttonStyle(.plain)
+            }
         }
         .padding(.vertical, 10)
     }
@@ -437,11 +489,79 @@ private struct PlanTabView: View {
         }
     }
 
-    private func makePlan() {
+    private func makePlan() async {
         attempted = true
-        excludedIDs = []
-        selectedIDs = Array(candidates.prefix(2).map(\.id))
-        Haptics.soft()
+        planError = nil
+        guard Auth.auth().currentUser != nil, !QAData.offline else {
+            selectedIDs = Array(candidates.prefix(2).map(\.id))
+            sessionID = nil
+            planTitle = "A plan nearby"
+            planIntro = "Real events that fit your choices."
+            return
+        }
+        planning = true
+        defer { planning = false }
+        do {
+            let coord = locationManager.userCoordinate
+            let area = LaunchArea.nearest(to: coord, in: eventsService.launchAreas)?.id ?? "san-jose-ca"
+            let payload: [String: any Sendable] = [
+                "when": when, "who": company, "distance": distance,
+                "budget": budget, "note": note, "areaId": area,
+                "lat": coord.latitude, "lng": coord.longitude
+            ]
+            let response = try await Functions.functions().httpsCallable("planEvents").call(payload)
+            guard let data = response.data as? [String: Any],
+                  let id = data["sessionId"] as? String,
+                  let stops = data["stops"] as? [[String: Any]] else {
+                throw NSError(domain: "VerdurePlanner", code: 1,
+                              userInfo: [NSLocalizedDescriptionKey: "The plan could not be loaded."])
+            }
+            let ids = stops.compactMap { $0["eventId"] as? String }
+            await eventsService.ensureEvents(ids)
+            selectedIDs = ids.filter { selectedID in eventsService.events.contains { $0.id == selectedID } }
+            sessionID = id
+            planTitle = data["title"] as? String ?? "Your plan"
+            planIntro = data["intro"] as? String ?? ""
+            planReasons = Dictionary(uniqueKeysWithValues: stops.compactMap { row in
+                guard let id = row["eventId"] as? String else { return nil }
+                return (id, row["why"] as? String ?? "")
+            })
+            Haptics.soft()
+        } catch {
+            selectedIDs = []
+            let ns = error as NSError
+            if ns.localizedDescription.localizedCaseInsensitiveContains("monthly free plans") ||
+                ns.localizedDescription.localizedCaseInsensitiveContains("quota") {
+                showPaywall = true
+                planError = "Your monthly free plans are used. Verdure+ has unlimited plans."
+            } else {
+                planError = error.localizedDescription
+            }
+        }
+    }
+
+    private func refine(_ action: String, targetID: String? = nil) async {
+        guard let sessionID else {
+            if action == "shorter", selectedIDs.count > 1 { selectedIDs.removeLast() }
+            return
+        }
+        guard !planning else { return }
+        planning = true
+        defer { planning = false }
+        do {
+            let payload: [String: any Sendable] = [
+                "sessionId": sessionID, "action": action, "targetId": targetID ?? ""
+            ]
+            let response = try await Functions.functions().httpsCallable("refineEventPlan").call(payload)
+            guard let data = response.data as? [String: Any],
+                  let ids = data["selectedIDs"] as? [String] else { return }
+            await eventsService.ensureEvents(ids)
+            selectedIDs = ids.filter { id in eventsService.events.contains { $0.id == id } }
+            planError = nil
+            Haptics.soft()
+        } catch {
+            planError = error.localizedDescription
+        }
     }
 
     private func planCard(_ event: Event, number: Int) -> some View {
@@ -459,6 +579,9 @@ private struct PlanTabView: View {
                         Text("\(going.count) friend\(going.count == 1 ? "" : "s") going")
                             .font(VType.body(12, .semibold)).foregroundStyle(Palette.spruce.base)
                     }
+                    if let why = planReasons[event.id], !why.isEmpty {
+                        Text(why).font(VType.body(12)).foregroundStyle(Palette.inkSoft)
+                    }
                 }
                 Spacer(minLength: 0)
             }
@@ -466,18 +589,197 @@ private struct PlanTabView: View {
                 Button("Details") { selectedEvent = event }
                 GoingButton(event: event)
                 Spacer()
-                Button("Swap") {
-                    excludedIDs.insert(event.id)
-                    if let replacement = candidates.first(where: { !selectedIDs.contains($0.id) && !excludedIDs.contains($0.id) }),
-                       let index = selectedIDs.firstIndex(of: event.id) { selectedIDs[index] = replacement.id }
+                Menu("Refine") {
+                    ForEach(["Swap", "Earlier", "Later", "Cheaper", "Closer", "More like this", "Remove"], id: \.self) { label in
+                        Button(label) {
+                            let action = label == "More like this" ? "more" : label.lowercased()
+                            Task { await refine(action, targetID: event.id) }
+                        }
+                    }
                 }
-                Button("Remove") { selectedIDs.removeAll { $0 == event.id } }
             }
             .font(VType.body(12, .semibold)).foregroundStyle(Palette.spruce.base)
         }
         .padding(Spacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
         .claySurface(.surface, radius: Radius.md, elevation: 0.8)
+    }
+}
+
+// MARK: - Shared plans
+
+private struct GroupPlanSummary: Identifiable {
+    let id: String
+    let title: String
+    let ownerUID: String
+    let eventIDs: [String]
+    let memberCount: Int
+    let pendingCount: Int
+    let votes: [String: Int]
+    let myVotes: [String]
+    let invitation: Bool
+
+    init?(_ data: [String: Any]) {
+        guard let id = data["id"] as? String else { return nil }
+        self.id = id
+        title = data["title"] as? String ?? "A plan together"
+        ownerUID = data["ownerUid"] as? String ?? ""
+        eventIDs = data["eventIDs"] as? [String] ?? []
+        memberCount = data["memberCount"] as? Int ?? 1
+        pendingCount = data["pendingCount"] as? Int ?? 0
+        votes = data["votes"] as? [String: Int] ?? [:]
+        myVotes = data["myVotes"] as? [String] ?? []
+        invitation = data["invitation"] as? Bool ?? false
+    }
+}
+
+private struct GroupPlansSheet: View {
+    let sessionID: String?
+    @Environment(EventsAPIService.self) private var eventsService
+    @Environment(SocialService.self) private var social
+    @Environment(\.dismiss) private var dismiss
+    @State private var plans: [GroupPlanSummary] = []
+    @State private var selectedID: String?
+    @State private var error: String?
+    @State private var working = false
+    @State private var selectedEvent: Event?
+    private var selected: GroupPlanSummary? { plans.first { $0.id == selectedID } }
+    private let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter(); formatter.dateFormat = "EEE, MMM d"; return formatter
+    }()
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: Spacing.md) {
+                    Text("Make room for everyone.")
+                        .font(VType.display(28, .semibold)).foregroundStyle(Palette.ink)
+                    Text("Invite accepted friends, shortlist real events, then each person chooses their own RSVP.")
+                        .font(VType.body(13)).foregroundStyle(Palette.inkSoft)
+                    if let sessionID {
+                        Button { Task { await act("create", extra: ["sessionId": sessionID]) } } label: {
+                            Label("Share the current plan", systemImage: "person.2.badge.plus")
+                                .font(VType.body(14, .semibold)).foregroundStyle(Palette.spruce.onColor)
+                                .frame(maxWidth: .infinity).padding(14)
+                                .background(Palette.spruce.base, in: RoundedRectangle(cornerRadius: Radius.md))
+                        }
+                        .buttonStyle(.plain).disabled(working)
+                    }
+                    if let error { Text(error).font(VType.body(12)).foregroundStyle(Palette.danger) }
+                    ForEach(plans) { plan in
+                        Button { selectedID = plan.id; Task { await eventsService.ensureEvents(plan.eventIDs) } } label: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(plan.title).font(VType.body(15, .semibold)).foregroundStyle(Palette.ink)
+                                    Text(plan.invitation ? "Invitation · choose to join" : "\(plan.memberCount) planning · \(plan.eventIDs.count) events")
+                                        .font(VType.body(12)).foregroundStyle(Palette.inkSoft)
+                                }
+                                Spacer()
+                                Image(systemName: selectedID == plan.id ? "chevron.down" : "chevron.right")
+                                    .foregroundStyle(Palette.spruce.base)
+                            }
+                            .padding(Spacing.md).claySurface(.surface, radius: Radius.md)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    if let plan = selected { details(plan) }
+                }
+                .padding(Spacing.md)
+            }
+            .background(VerdureBackground())
+            .navigationTitle("Group plans")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
+            .sheet(item: $selectedEvent) { event in
+                EventDetailSheet(event: event, dateFormatter: dateFormatter)
+            }
+            .task { await load() }
+        }
+    }
+
+    @ViewBuilder
+    private func details(_ plan: GroupPlanSummary) -> some View {
+        if plan.invitation {
+            HStack {
+                Button("Decline") { Task { await act("respond", extra: ["planId": plan.id, "accept": false]) } }
+                Spacer()
+                Button("Join plan") { Task { await act("respond", extra: ["planId": plan.id, "accept": true]) } }
+            }
+            .font(VType.body(14, .semibold)).foregroundStyle(Palette.spruce.base)
+            .padding(Spacing.md).claySurface(.surface, radius: Radius.md)
+        } else {
+            if plan.ownerUID == Auth.auth().currentUser?.uid {
+                Menu {
+                    ForEach(social.friends) { friend in
+                        Button(friend.displayName) {
+                            Task { await act("invite", extra: ["planId": plan.id, "peerUid": friend.uid]) }
+                        }
+                    }
+                } label: {
+                    Label("Invite a friend", systemImage: "person.crop.circle.badge.plus")
+                        .font(VType.body(14, .semibold)).foregroundStyle(Palette.spruce.base)
+                }
+                if social.friends.isEmpty {
+                    Text("Add an accepted friend in Friends to invite them here.")
+                        .font(VType.body(12)).foregroundStyle(Palette.inkSoft)
+                }
+            }
+            ForEach(plan.eventIDs, id: \.self) { id in
+                if let event = eventsService.events.first(where: { $0.id == id }) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(event.title).font(VType.display(19, .semibold)).foregroundStyle(Palette.ink)
+                        Text("\(event.date.formatted(date: .abbreviated, time: .shortened)) · \(event.locationName)")
+                            .font(VType.body(12)).foregroundStyle(Palette.inkSoft)
+                        HStack {
+                            Button(plan.myVotes.contains(id) ? "Shortlisted · \(plan.votes[id] ?? 0)" : "Shortlist · \(plan.votes[id] ?? 0)") {
+                                Task { await act("vote", extra: ["planId": plan.id, "eventId": id]) }
+                            }
+                            Spacer()
+                            Button("Details") { selectedEvent = event }
+                            GoingButton(event: event, compact: true)
+                        }
+                        .font(VType.body(12, .semibold)).foregroundStyle(Palette.spruce.base)
+                    }
+                    .padding(Spacing.md).claySurface(.surface, radius: Radius.md)
+                }
+            }
+            if plan.ownerUID == Auth.auth().currentUser?.uid {
+                Button("Delete group plan") { Task { await act("delete", extra: ["planId": plan.id]) } }
+                    .font(VType.body(12)).foregroundStyle(Palette.danger)
+            }
+        }
+    }
+
+    private func load() async {
+        guard Auth.auth().currentUser != nil else {
+            error = "Sign in to plan with friends."; return
+        }
+        do {
+            let payload: [String: any Sendable] = ["action": "list"]
+            let response = try await Functions.functions().httpsCallable("manageGroupPlan").call(payload)
+            let rows = (response.data as? [String: Any])?["plans"] as? [[String: Any]] ?? []
+            plans = rows.compactMap(GroupPlanSummary.init)
+        } catch { self.error = error.localizedDescription }
+    }
+
+    private func act(_ action: String, extra: [String: any Sendable]) async {
+        guard !working else { return }
+        working = true
+        defer { working = false }
+        do {
+            var payload: [String: any Sendable] = ["action": action]
+            for (key, value) in extra { payload[key] = value }
+            let response = try await Functions.functions().httpsCallable("manageGroupPlan").call(payload)
+            if let row = (response.data as? [String: Any])?["plan"] as? [String: Any],
+               let plan = GroupPlanSummary(row) {
+                selectedID = plan.id
+                await eventsService.ensureEvents(plan.eventIDs)
+            } else if action == "delete" || action == "respond" {
+                selectedID = nil
+            }
+            await load()
+            error = nil
+        } catch { self.error = error.localizedDescription }
     }
 }
 
@@ -493,6 +795,7 @@ private struct FriendsTabView: View {
     @State private var showNotifications = false
     @State private var showAddFriend = false
     @State private var showLeaderboard = false
+    @State private var showGroupPlans = false
     @State private var showAuth = false
     @State private var selectedEvent: MainTabView.BoxedID?
     @State private var username = ""
@@ -556,6 +859,13 @@ private struct FriendsTabView: View {
                                     .frame(maxWidth: .infinity).padding(14)
                                     .background(Palette.spruce.base, in: RoundedRectangle(cornerRadius: Radius.sm))
                             }
+                            Button { showGroupPlans = true } label: {
+                                Label("Group plans and invitations", systemImage: "calendar.badge.clock")
+                                    .font(VType.body(14, .semibold)).foregroundStyle(Palette.spruce.base)
+                                    .frame(maxWidth: .infinity).padding(14)
+                                    .claySurface(.surface, radius: Radius.md)
+                            }
+                            .buttonStyle(.plain)
                             if !social.incomingFriendRequests.isEmpty { requestsSection }
                             goingSection
                             if !social.pendingInvites.isEmpty { invitesSection }
@@ -579,6 +889,7 @@ private struct FriendsTabView: View {
         .sheet(isPresented: $showAuth) { AuthView(onComplete: { showAuth = false }) }
         .sheet(isPresented: $showAddFriend) { addFriendSheet }
         .sheet(isPresented: $showLeaderboard) { StatsAndLeaderboardView() }
+        .sheet(isPresented: $showGroupPlans) { GroupPlansSheet(sessionID: nil) }
         .sheet(item: $selectedEvent) { EventDeepLinkSheet(eventId: $0.id) }
         .task {
             guard auth.currentUser != nil else { return }

@@ -166,8 +166,8 @@
 			</array>
 		</dict>
 
-		<!-- Birth year for age safeguards, optional student status and school for
-		     relevant events. These account fields do not fit a narrower type. -->
+		<!-- Birth year for age safeguards, optional student status, school and
+		     youngest household child age for relevant events and warnings. -->
 		<dict>
 			<key>NSPrivacyCollectedDataType</key>
 			<string>NSPrivacyCollectedDataTypeOtherDataTypes</string>
@@ -181,8 +181,9 @@
 			</array>
 		</dict>
 
-		<!-- Saved events and explicit recommendation feedback are linked to the
-		     account to personalize the next ranked feed. -->
+		<!-- Saved events and recommendation feedback personalize the ranked feed.
+		     Opt-in feed impressions and outcomes also evaluate recommendations;
+		     these rows are account-linked and stop when Product Analytics is off. -->
 		<dict>
 			<key>NSPrivacyCollectedDataType</key>
 			<string>NSPrivacyCollectedDataTypeOtherUsageData</string>
@@ -193,6 +194,7 @@
 			<key>NSPrivacyCollectedDataTypePurposes</key>
 			<array>
 				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+				<string>NSPrivacyCollectedDataTypePurposeAnalytics</string>
 			</array>
 		</dict>
 	</array>

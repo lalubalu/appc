@@ -23,6 +23,16 @@ and writes are not included in the scenario table below and must be measured
 before release. Up to 30 attended event documents may also be fetched per
 ranking request to build the behavioral context.
 
+Each signed-in For You request now writes one server-owned `feedSessions`
+document containing at most 100 scored IDs, positions and contributing terms.
+Only cards the client presents write a `feedImpressions` document; later taps,
+saves, RSVPs and dismissals update that row, with untouched rows marked
+`ignored`. This adds one write per ranked load and up to one write per visible
+card plus action updates. These writes are **not** included in the read-only
+scenario below; measure them with the populated corpus before rollout. The
+Product Analytics switch prevents new feed-session and impression writes.
+Server cleanup removes rows after 30 days in bounded daily batches.
+
 The table is a **scenario, not a measured production result**: 80 feed reads
 plus one 40-document Everything page, three times per user per day. It excludes
 server ranking context, candidate refreshes, other screens, minimum query

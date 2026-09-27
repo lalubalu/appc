@@ -146,6 +146,8 @@ struct PaywallView: View {
                     detail: "$5 and $10 cards, members only", kind: .gold),
         PlusFeature(icon: "chart.bar.fill", title: "Advanced Stats",
                     detail: "Where your points come from, and your last 30 days", kind: .spruce),
+        PlusFeature(icon: "square.stack.3d.up.fill", title: "Advanced Personalization",
+                    detail: "Switch interest profiles and save event filters", kind: .teal),
     ]
 
     /// The feature COPY, exposed for tests.

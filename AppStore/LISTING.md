@@ -74,6 +74,7 @@ feature ships or is pulled, update this file in the same commit.
 > • Early access to partner perks — see and claim new local offers first
 > • Cash gift cards — $5 and $10, members only
 > • Advanced stats — where your points come from and your last 30 days
+> • Advanced personalization — switch interest profiles and save event filters
 >
 > Verdure is free to use. A subscription is entirely optional and never required
 > to earn points or redeem partner perks.

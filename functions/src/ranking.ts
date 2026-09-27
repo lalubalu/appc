@@ -32,8 +32,10 @@
 
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { Timestamp, FieldValue } from "firebase-admin/firestore";
-import { db, requireUid, enforceRateLimit, safeText, blockedSetFor, utcMonthKey } from "./common.js";
+import { db, requireUid, enforceRateLimit, safeText, blockedSetFor, utcMonthKey, plusActiveFrom } from "./common.js";
+import type { InterestProfile } from "./profiles.js";
 import { friendIds } from "./friendships.js";
+import { createFeedSession } from "./feedTelemetry.js";
 
 export const WEIGHTS = {
   /** Does it match what they said they liked, or what they've actually attended? */
@@ -96,12 +98,20 @@ export interface RankableEvent {
   startMs: number;
   tags?: string[];
   qualityScore?: number;
+  ageSuitability?: string;
+  minimumAge?: number;
+  endMs?: number;
 }
 
 export interface RankingContext {
   interests: string[];
   studentStatus?: boolean;
   school?: string;
+  householdYoungestAge?: number;
+  preferredCategories?: string[];
+  excludedCategories?: string[];
+  radiusMiles?: number;
+  distancePreset?: "close" | "balanced" | "drive";
   /** Categories the user has actually attended — behaviour beats stated preference. */
   attendedCategories: Record<string, number>;
   /** eventId -> number of followed accounts going. */
@@ -143,13 +153,18 @@ export function interestScore(ev: RankableEvent, ctx: RankingContext): number {
   const opportunity = cat === "Workshop" || cat === "Volunteer" || (ev.tags ?? []).includes("Opportunity");
   const sameSchool = !!ctx.school && (ev.organizer ?? "").toLowerCase().includes(ctx.school.toLowerCase());
   const studentFloor = ctx.studentStatus && opportunity ? (sameSchool ? 0.9 : 0.75) : 0;
+  const childAge = ctx.householdYoungestAge;
+  const familyFloor = childAge !== undefined && childAge < 13 &&
+    (ev.ageSuitability === "children" || ev.ageSuitability === "all") &&
+    (ev.minimumAge === undefined || ev.minimumAge <= childAge) ? 0.85 : 0;
   const hasStated = ctx.interests.length > 0;
   const attendedTotal = Object.values(ctx.attendedCategories).reduce((a, b) => a + b, 0);
-  if (!hasStated && attendedTotal === 0) return Math.max(0.5, studentFloor);
+  if (!hasStated && attendedTotal === 0) return Math.max(0.5, studentFloor, familyFloor);
 
   let stated = 0;
   if (hasStated) {
-    const wanted = new Set(ctx.interests.flatMap((i) => INTEREST_TO_CATEGORY[i.toLowerCase()] ?? []));
+    const wanted = new Set([...ctx.interests.flatMap((i) => INTEREST_TO_CATEGORY[i.toLowerCase()] ?? []),
+      ...(ctx.preferredCategories ?? [])]);
     const text = ` ${[ev.title, ev.description, ...(ev.tags ?? [])].filter(Boolean).join(" ").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()} `;
     const semantic = ctx.interests.some((interest) =>
       (INTEREST_SYNONYMS[interest.toLowerCase()] ?? []).some((term) => text.includes(` ${term} `)));
@@ -161,9 +176,9 @@ export function interestScore(ev: RankableEvent, ctx: RankingContext): number {
     behavioural = Math.min(1, (ctx.attendedCategories[cat] ?? 0) / Math.max(1, attendedTotal / 2));
   }
 
-  if (!hasStated) return Math.max(behavioural, studentFloor);
-  if (attendedTotal === 0) return Math.max(stated, studentFloor);
-  return Math.max(0.4 * stated + 0.6 * behavioural, studentFloor);
+  if (!hasStated) return Math.max(behavioural, studentFloor, familyFloor);
+  if (attendedTotal === 0) return Math.max(stated, studentFloor, familyFloor);
+  return Math.max(0.4 * stated + 0.6 * behavioural, studentFloor, familyFloor);
 }
 
 /**
@@ -175,7 +190,9 @@ export function distanceScore(ev: RankableEvent, ctx: RankingContext): number {
   if (ctx.lat === undefined || ctx.lng === undefined) return 0.5;
   if (ev.latitude === undefined || ev.longitude === undefined) return 0.4;   // unknown, mildly penalised
   const miles = haversineMiles(ctx.lat, ctx.lng, ev.latitude, ev.longitude);
-  return 1 / (1 + miles / 5);
+  const radiusBase = ctx.radiusMiles ? Math.max(1, ctx.radiusMiles / 5) : 5;
+  const bias = ctx.distancePreset === "close" ? 0.6 : ctx.distancePreset === "drive" ? 1.8 : 1;
+  return 1 / (1 + miles / (radiusBase * bias));
 }
 
 /**
@@ -299,7 +316,8 @@ export function rankEvents(events: RankableEvent[], ctx: RankingContext): Scored
   // One quality-led exploration pick in a full ten-card page. The pick must
   // be outside declared categories; the slot is labelled for instrumentation.
   if (diversified.length >= 10 && ctx.interests.length > 0) {
-    const wanted = new Set(ctx.interests.flatMap((i) => INTEREST_TO_CATEGORY[i.toLowerCase()] ?? []));
+    const wanted = new Set([...ctx.interests.flatMap((i) => INTEREST_TO_CATEGORY[i.toLowerCase()] ?? []),
+      ...(ctx.preferredCategories ?? [])]);
     const pick = diversified.slice(9).filter((s) => {
       const ev = byId.get(s.id);
       return !!ev && !wanted.has(ev.category ?? "") && qualityScore(ev) >= 0.7;
@@ -332,6 +350,9 @@ function rankableFromDoc(d: FirebaseFirestore.DocumentSnapshot): RankableEvent |
     startMs: x.date instanceof Timestamp ? x.date.toMillis() : 0,
     tags: Array.isArray(x.tags) ? x.tags : [],
     qualityScore: typeof x.qualityScore === "number" ? x.qualityScore : undefined,
+    ageSuitability: safeText(x.ageSuitability, 20),
+    minimumAge: typeof x.minimumAge === "number" ? x.minimumAge : undefined,
+    endMs: x.endDate instanceof Timestamp ? x.endDate.toMillis() : undefined,
   };
 }
 
@@ -383,8 +404,12 @@ export async function loadContext(uid: string, lat?: number, lng?: number, nowMs
   ]);
   const u = userSnap.data() ?? {};
 
-  const interests: string[] = Array.isArray(u.interests)
+  const defaultInterests: string[] = Array.isArray(u.interests)
     ? u.interests.map((i: unknown) => safeText(i, 40)).filter(Boolean).slice(0, 20) : [];
+  const plus = plusActiveFrom(u, nowMs);
+  const active = plus && typeof u.interestProfiles === "object" && u.interestProfiles !== null
+    ? u.interestProfiles[safeText(u.activeProfileId, 64)] as InterestProfile | undefined : undefined;
+  const interests = active && Array.isArray(active.interests) ? active.interests : defaultInterests;
 
   // Behaviour: categories of events already attended.
   const attendedCategories: Record<string, number> = {};
@@ -429,6 +454,10 @@ export async function loadContext(uid: string, lat?: number, lng?: number, nowMs
 
   const feedback = typeof u.eventFeedback === "object" && u.eventFeedback !== null ? u.eventFeedback : {};
   return { interests, studentStatus: u.studentStatus === true, school: safeText(u.school, 100),
+    householdYoungestAge: Number.isInteger(u.householdYoungestAge) && u.householdYoungestAge >= 0 &&
+      u.householdYoungestAge <= 17 ? u.householdYoungestAge : undefined,
+    preferredCategories: active?.categories ?? [], excludedCategories: active?.exclusions ?? [],
+    radiusMiles: active?.radiusMiles, distancePreset: active?.distancePreset,
     attendedCategories, attendedOrganizers, weekendAttendanceRatio: totalAttended ? weekendAttended / totalAttended : undefined,
     savedEventIDs: Array.isArray(u.savedEventIDs) ? u.savedEventIDs.slice(-500) : [], eventFeedback: feedback,
     friendsGoing, recentOrganizers: {}, lat, lng, nowMs };
@@ -488,7 +517,8 @@ export async function recommendFor(
     const ev = rankableFromDoc(doc);
     if (ev && ev.startMs >= nowMs) candidates.set(ev.id, ev);
   }
-  return rankEvents(Array.from(candidates.values()), ctx).slice(0, limit);
+  const excluded = new Set(ctx.excludedCategories ?? []);
+  return rankEvents(Array.from(candidates.values()).filter((ev) => !excluded.has(ev.category ?? "")), ctx).slice(0, limit);
 }
 
 export const recommendedEvents = onCall(async (req) => {
@@ -505,8 +535,12 @@ export const recommendedEvents = onCall(async (req) => {
   const ranked = await recommendFor(uid, areaId, hasLoc ? lat : undefined, hasLoc ? lng : undefined, limit);
   if (!ranked.length) throw new HttpsError("not-found", "No upcoming events in this area yet.");
 
+  const feedSessionId = req.data?.telemetryEnabled === true
+    ? await createFeedSession(uid, areaId, ranked) : null;
+
   return {
     areaId,
+    feedSessionId,
     personalized: true,
     // `parts` ships so the client can explain a placement ("a friend is going")
     // and so a bad ranking is debuggable from a device instead of by guesswork.

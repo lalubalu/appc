@@ -343,7 +343,7 @@ export function pricingLd(): Record<string, unknown>
     url: SITE_URL,
     mainEntityOfPage: absoluteUrl("/pricing"),
     description:
-      "Verdure Free costs nothing forever. Verdure+ adds unlimited Adventure Planner use, early partner perks, cash gift cards, and advanced stats.",
+      "Verdure Free costs nothing forever. Verdure+ adds unlimited planning, early partner perks, cash gift cards, advanced stats and interest profiles.",
     applicationCategory: "LifestyleApplication",
     operatingSystem: "iOS",
     publisher: { "@id": ORGANIZATION_ID },

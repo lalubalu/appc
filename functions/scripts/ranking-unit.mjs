@@ -33,6 +33,11 @@ const ev = (id, o = {}) => ({
 console.log("── weights ──");
 ok("weights sum to exactly 1.0", Math.abs(WEIGHT_SUM - 1) < 1e-9, String(WEIGHT_SUM));
 ok("distance is the heaviest single term", WEIGHTS.distance === Math.max(...Object.values(WEIGHTS)));
+ok("a household with a four-year-old ranks a child-suitable event higher",
+  interestScore(ev("family", { ageSuitability: "children", minimumAge: 4 }),
+    { ...baseCtx, householdYoungestAge: 4 }) >
+  interestScore(ev("adult", { ageSuitability: "adults", minimumAge: 18 }),
+    { ...baseCtx, householdYoungestAge: 4 }));
 
 console.log("\n── rank, never filter (the load-bearing property) ──");
 {

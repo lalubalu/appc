@@ -54,7 +54,7 @@ final class AuthService {
 
     /// Sign up with email, password, and display name.
     func signUp(email: String, password: String, displayName: String, birthYear: Int,
-                studentStatus: Bool, school: String) async throws {
+                studentStatus: Bool, school: String, interests: [String] = []) async throws {
         isLoading = true
         errorMessage = nil
 
@@ -62,6 +62,8 @@ final class AuthService {
         let cleanEmail = Self.sanitize(email, maxLength: 320).lowercased()
         let cleanName = Self.sanitize(displayName, maxLength: 100)
         let cleanSchool = studentStatus ? Self.sanitize(school, maxLength: 100) : ""
+        let cleanInterests = Array(Set(interests.map { Self.sanitize($0, maxLength: 40) }
+            .filter { !$0.isEmpty })).sorted().prefix(20)
 
         // Validate email format
         guard !cleanEmail.isEmpty, Self.isValidEmail(cleanEmail) else {
@@ -121,6 +123,7 @@ final class AuthService {
                 "email": cleanEmail,
                 "studentStatus": studentStatus,
                 "school": cleanSchool,
+                "interests": Array(cleanInterests),
                 "createdAt": FieldValue.serverTimestamp(),
                 "lastUpdated": FieldValue.serverTimestamp(),
             ], merge: true)

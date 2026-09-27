@@ -10,6 +10,7 @@ struct GoingButton: View {
     let event: Event
     var compact = false
     @Environment(SocialService.self) private var social
+    @Environment(EventsAPIService.self) private var eventsService
     @Environment(AuthService.self) private var authService
     @State private var isWorking = false
     @State private var error: String?
@@ -27,6 +28,7 @@ struct GoingButton: View {
                     let ok = await social.setGoing(event.id, going: !going)
                     isWorking = false
                     if ok {
+                        if going { await eventsService.recordFeedEvent(for: event.id, action: "rsvp") }
                         Haptics.success()
                         AccessibilityNotification.Announcement(going ? "You're going." : "RSVP removed.").post()
                     } else {

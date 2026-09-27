@@ -1,5 +1,7 @@
 import SwiftUI
 import PhotosUI
+@preconcurrency import FirebaseFirestore
+@preconcurrency import FirebaseAuth
 
 struct ProfileView: View {
     /// Muted brick red for the destructive Sign Out action — reads on both cream + graphite.
@@ -31,6 +33,9 @@ struct ProfileView: View {
     @State private var showNotifSettings = false
     @State private var showSafety = false
     @State private var showLegal = false
+    @State private var showHousehold = false
+    @State private var youngestChildAge = -1
+    @State private var householdError: String?
     @State private var selectedBadge: Badge?
     @State private var selectedChallenge: Challenge?
     @State private var heroAppeared = false
@@ -72,6 +77,7 @@ struct ProfileView: View {
             }
             .sheet(isPresented: $showAbout) { AboutVerdureView() }
             .sheet(isPresented: $showNotifSettings) { NotificationSettingsView() }
+            .sheet(isPresented: $showHousehold) { householdSheet }
             .sheet(isPresented: $showStats) { StatsAndLeaderboardView().environment(gameState).environment(store) }
             .sheet(item: $selectedBadge) { BadgeDetailSheet(badge: $0) }
             .sheet(item: $selectedChallenge) { ChallengeDetailSheet(challenge: $0) }
@@ -346,6 +352,12 @@ struct ProfileView: View {
                 .accessibilityLabel("Stats and friends leaderboard")
                 .accessibilityHint("Your points breakdown and how you compare with people you follow.")
                 rowDivider
+                Button { Haptics.tap(); showHousehold = true } label: {
+                    settingsRow(icon: "figure.and.child.holdinghands", label: "Household", accent: .spruce) { chevron }
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Set the youngest child's age for family event recommendations.")
+                rowDivider
                 // The privacy policy promises this switch by name ("You can
                 // switch them off in Profile › Settings"), so it has to exist
                 // and it has to work. See Analytics.isEnabled.
@@ -357,7 +369,7 @@ struct ProfileView: View {
                 }
                 .accessibilityLabel("Product analytics")
                 .accessibilityValue(analyticsEnabled ? "On" : "Off")
-                .accessibilityHint("Anonymous usage data that helps us improve Verdure. No names or locations.")
+                .accessibilityHint("App-use and ranked-feed analytics. Feed actions are linked to your account; no precise location is recorded here.")
                 rowDivider
                 if let org = social.organizer {
                     Button { Haptics.tap(); showOrganizerVerify = true } label: {
@@ -435,6 +447,48 @@ struct ProfileView: View {
                     .presentationDetents([.large]).presentationDragIndicator(.visible)
             }
         }
+    }
+
+    private var householdSheet: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Picker("Youngest child's age", selection: $youngestChildAge) {
+                        Text("No children in my household").tag(-1)
+                        ForEach(0..<18, id: \.self) { age in Text("\(age)").tag(age) }
+                    }
+                } footer: {
+                    Text("Used privately to prioritize suitable events and show age warnings. Change it any time.")
+                }
+                if let householdError { Text(householdError).foregroundStyle(Palette.danger) }
+            }
+            .navigationTitle("Household")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Save") { Task { await saveHousehold() } }
+                }
+            }
+            .task { await loadHousehold() }
+        }
+    }
+
+    private func loadHousehold() async {
+        guard let uid = Auth.auth().currentUser?.uid else { return }
+        do {
+            let snapshot = try await Firestore.firestore().collection("users").document(uid).getDocument()
+            youngestChildAge = snapshot.data()?["householdYoungestAge"] as? Int ?? -1
+        } catch { householdError = error.localizedDescription }
+    }
+
+    private func saveHousehold() async {
+        guard let uid = Auth.auth().currentUser?.uid else { return }
+        do {
+            let value: Any = youngestChildAge < 0 ? FieldValue.delete() : youngestChildAge
+            try await Firestore.firestore().collection("users").document(uid)
+                .updateData(["householdYoungestAge": value])
+            showHousehold = false
+            householdError = nil
+        } catch { householdError = error.localizedDescription }
     }
 
     // MARK: - Delete account (App Review 5.1.1(v))

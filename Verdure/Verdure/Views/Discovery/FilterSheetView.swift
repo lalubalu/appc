@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreLocation
 
 // MARK: - Filter sheet (shared by Events / Explore / Map / Collection)
 //
@@ -10,6 +11,8 @@ struct FilterSheetView: View {
     enum Mode { case events, places }
     let mode: Mode
     @Environment(DiscoveryFilters.self) private var filters
+    @Environment(EventsAPIService.self) private var eventsService
+    @Environment(LocationManager.self) private var locationManager
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -73,12 +76,19 @@ struct FilterSheetView: View {
     }
 
     private var eventCategorySection: some View {
+        let enoughVolunteers = eventsService.events.filter { event in
+            guard event.category == .volunteer, event.date > Date(),
+                  let coordinate = event.coordinate, let origin = locationManager.userLocation else { return false }
+            return CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+                .distance(from: origin) <= filters.state.radiusMiles * 1609.344
+        }.count >= 30
+        let choices = EventCategory.allCases.filter { $0 != .volunteer || enoughVolunteers }
         return section("Category") {
-            FlowChips(items: EventCategory.allCases.map { ($0.displayName, $0.icon) },
+            FlowChips(items: choices.map { ($0.displayName, $0.icon) },
                       isSelected: { label in
-                          EventCategory.allCases.contains { $0.displayName == label && filters.state.eventCategories.contains($0) }
+                          choices.contains { $0.displayName == label && filters.state.eventCategories.contains($0) }
                       }) { label in
-                guard let cat = EventCategory.allCases.first(where: { $0.displayName == label }) else { return }
+                guard let cat = choices.first(where: { $0.displayName == label }) else { return }
                 if filters.state.eventCategories.contains(cat) { filters.state.eventCategories.remove(cat) }
                 else { filters.state.eventCategories.insert(cat) }
             }

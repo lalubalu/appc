@@ -1378,6 +1378,129 @@ async function main() {
   const grantPlus = (u) => db.doc(`users/${u.uid}`).set({ plusExpiresAt: new Date(Date.now() + 30 * 86400_000) }, { merge: true });
   const fund = (u, pts) => db.doc(`users/${u.uid}`).set({ pointsBalance: pts }, { merge: true });
 
+  // ── Verdure+ interest profiles: the entitlement lives on the server. ──
+  const profileUser = await mk("profileuser");
+  const profileArea = `e2e-profiles-${Date.now()}`;
+  for (const [id, category] of [["hack", "Hackathon"], ["clean", "Cleanup"]]) {
+    await db.doc(`events/${profileArea}-${id}`).set({
+      title: `${category} day`, description: "A public local activity", organizer: "Verdure QA",
+      date: new Date(Date.now() + 3 * 86_400_000), time: "10:00 AM", locationName: "San Jose",
+      attendeeCount: 0, category, pointValue: 100, creatorID: "system:ingest",
+      hidden: false, active: true, broadcast: true, areaId: profileArea,
+      qualityScore: 0.8, latitude: 37.3382, longitude: -121.8863,
+    });
+  }
+  const profileShape = (name, interests) => ({ name, interests, radiusMiles: 25,
+    categories: [], exclusions: [], distancePreset: "balanced" });
+  r = await call("manageInterestProfiles", { action: "save", profile: profileShape("Tech nights", ["tech"]) }, profileUser.idToken);
+  ok("profiles: free account cannot create a Plus profile", r.error?.status === "PERMISSION_DENIED");
+  await grantPlus(profileUser);
+  r = await call("manageInterestProfiles", { action: "save", profile: profileShape("Tech nights", ["tech"]) }, profileUser.idToken);
+  const techProfile = r.result?.id;
+  r = await call("manageInterestProfiles", { action: "save", profile: profileShape("Trail days", ["volunteering"]) }, profileUser.idToken);
+  const trailProfile = r.result?.id;
+  ok("profiles: member can create and name two profiles", !!techProfile && !!trailProfile && techProfile !== trailProfile);
+  r = await call("recommendedEvents", { areaId: profileArea, lat: 37.3382, lng: -121.8863 }, profileUser.idToken);
+  ok("profiles: tech profile ranks the hackathon first", r.result?.events?.[0]?.id === `${profileArea}-hack`, JSON.stringify(r.result?.events?.map((e) => e.id)));
+  await call("manageInterestProfiles", { action: "switch", id: trailProfile }, profileUser.idToken);
+  r = await call("recommendedEvents", { areaId: profileArea, lat: 37.3382, lng: -121.8863 }, profileUser.idToken);
+  ok("profiles: switching changes the ranked first event", r.result?.events?.[0]?.id === `${profileArea}-clean`, JSON.stringify(r.result?.events?.map((e) => e.id)));
+  r = await call("manageInterestProfiles", { action: "saveFilter", name: "Free weekends", categories: ["Cleanup"], cost: "free", radiusMiles: 15, dateRange: "weekend" }, profileUser.idToken);
+  const filterId = r.result?.id;
+  r = await call("manageInterestProfiles", { action: "list" }, profileUser.idToken);
+  ok("profiles: saved filter survives a later read", !!filterId && r.result?.savedFilters?.[filterId]?.name === "Free weekends");
+  code2 = await userWrite(`users/${profileUser.uid}`, { activeProfileId: techProfile });
+  ok("rules: client cannot switch Plus profile without server entitlement check", code2 === "permission-denied", `got ${code2}`);
+  await call("manageInterestProfiles", { action: "delete", id: trailProfile }, profileUser.idToken);
+  r = await call("manageInterestProfiles", { action: "list" }, profileUser.idToken);
+  ok("profiles: deleting active profile falls back to remaining profile", r.result?.activeProfileId === techProfile);
+
+  // The planner may narrate only verified /events IDs. Reuse tests also
+  // exercise the session quota and recent-history path without a model key.
+  const plannerArea = `e2e-plan-${Date.now()}`;
+  for (let i = 0; i < 8; i++) {
+    await db.doc(`events/${plannerArea}-${i}`).set({
+      title: i % 2 ? `Community cleanup ${i}` : `Tech workshop ${i}`,
+      description: "A public local activity", organizer: `Organizer ${i}`,
+      date: new Date(Date.now() + (i + 1) * 86_400_000), time: "10:00 AM",
+      locationName: `Venue ${i}`, isFree: true, attendeeCount: 0,
+      category: i % 2 ? "Cleanup" : "Hackathon", pointValue: 100,
+      creatorID: "system:ingest", hidden: false, active: true, broadcast: true,
+      areaId: plannerArea, qualityScore: 0.8, latitude: 37.3382, longitude: -121.8863,
+    });
+  }
+  const planInput = { areaId: plannerArea, when: "Any day", who: "Just me",
+    distance: "Anywhere nearby", budget: "Free", note: "", lat: 37.3382, lng: -121.8863 };
+  const firstPlan = await call("planEvents", planInput, profileUser.idToken);
+  const firstIDs = firstPlan.result?.stops?.map((stop) => stop.eventId) ?? [];
+  ok("planner: every stop resolves to a real event document",
+    firstIDs.length >= 2 && (await Promise.all(firstIDs.map((id) => db.doc(`events/${id}`).get()))).every((doc) => doc.exists));
+  const secondPlan = await call("planEvents", planInput, profileUser.idToken);
+  const secondIDs = secondPlan.result?.stops?.map((stop) => stop.eventId) ?? [];
+  ok("planner: returning user's next plan avoids recent stops",
+    secondIDs.length >= 2 && secondIDs.every((id) => !firstIDs.includes(id)), JSON.stringify({ firstIDs, secondIDs }));
+  const otherProfileUser = await mk("otherprofile");
+  await grantPlus(otherProfileUser);
+  await call("manageInterestProfiles", { action: "save", profile: profileShape("Cleanup days", ["volunteering"]) }, otherProfileUser.idToken);
+  const otherPlan = await call("planEvents", planInput, otherProfileUser.idToken);
+  ok("planner: different interest profiles change the first venue",
+    !!firstIDs[0] && !!otherPlan.result?.stops?.[0]?.eventId && firstIDs[0] !== otherPlan.result.stops[0].eventId,
+    JSON.stringify({ firstIDs, other: otherPlan.result?.stops }));
+  const refined = await call("refineEventPlan", { sessionId: firstPlan.result?.sessionId,
+    action: "swap", targetId: firstIDs[0] }, profileUser.idToken);
+  ok("planner: swap reuses session without a model call",
+    refined.result?.selectedIDs?.[0] !== firstIDs[0] && refined.result?.modelCalls === 0,
+    JSON.stringify(refined));
+  const stolen = await call("refineEventPlan", { sessionId: firstPlan.result?.sessionId,
+    action: "shorter" }, otherProfileUser.idToken);
+  ok("planner: another user cannot refine a session", stolen.error?.status === "NOT_FOUND");
+  code2 = await userWrite(`users/${profileUser.uid}`, { recentPlanEventIDs: [] });
+  ok("rules: client cannot erase planner repeat memory", code2 === "permission-denied", `got ${code2}`);
+
+  const telemetryFeed = await call("recommendedEvents", { areaId: plannerArea, lat: 37.3382, lng: -121.8863, telemetryEnabled: true }, profileUser.idToken);
+  const optedOutFeed = await call("recommendedEvents", { areaId: plannerArea, lat: 37.3382, lng: -121.8863, telemetryEnabled: false }, profileUser.idToken);
+  ok("telemetry: an opted-out feed creates no account-linked session", optedOutFeed.result?.feedSessionId === null);
+  const feedSessionId = telemetryFeed.result?.feedSessionId;
+  const firstFeedEvent = telemetryFeed.result?.events?.[0]?.id;
+  r = await call("recordFeedEvent", { sessionId: feedSessionId, eventId: firstFeedEvent, action: "impression" }, profileUser.idToken);
+  ok("telemetry: visible card records an ignored impression", r.result?.outcome === "ignored");
+  r = await call("recordFeedEvent", { sessionId: feedSessionId, eventId: firstFeedEvent, action: "tap" }, profileUser.idToken);
+  const impression = (await db.doc(`feedImpressions/${profileUser.uid}_${feedSessionId}_${firstFeedEvent}`).get()).data();
+  ok("telemetry: tap keeps server score, position and signal parts",
+    r.result?.outcome === "tap" && impression?.position === 0 && typeof impression?.score === "number" &&
+    typeof impression?.parts?.interest === "number");
+  r = await call("recordFeedEvent", { sessionId: feedSessionId, eventId: "invented-event", action: "impression" }, profileUser.idToken);
+  ok("telemetry: cannot fabricate an event outside the ranked slate", r.error?.status === "PERMISSION_DENIED");
+  r = await call("recordFeedEvent", { sessionId: feedSessionId, eventId: firstFeedEvent, action: "tap" }, otherProfileUser.idToken);
+  ok("telemetry: another member cannot write an impression", r.error?.status === "NOT_FOUND");
+
+  const group = await call("manageGroupPlan", { action: "create", sessionId: firstPlan.result?.sessionId }, profileUser.idToken);
+  const groupId = group.result?.plan?.id;
+  ok("group: a verified planner session becomes a private group plan", !!groupId && group.result?.plan?.eventIDs?.length >= 2);
+  r = await call("manageGroupPlan", { action: "invite", planId: groupId, peerUid: otherProfileUser.uid }, profileUser.idToken);
+  ok("group: cannot invite a non-friend", r.error?.status === "PERMISSION_DENIED");
+  const adultBirthYear = new Date().getUTCFullYear() - 25;
+  await call("registerAgeBand", { birthYear: adultBirthYear }, profileUser.idToken);
+  await call("registerAgeBand", { birthYear: adultBirthYear }, otherProfileUser.idToken);
+  await call("sendFriendRequest", { targetUid: otherProfileUser.uid }, profileUser.idToken);
+  await call("respondToFriendRequest", { fromUid: profileUser.uid, accept: true }, otherProfileUser.idToken);
+  r = await call("manageGroupPlan", { action: "invite", planId: groupId, peerUid: otherProfileUser.uid }, profileUser.idToken);
+  ok("group: accepted friend gets a private invitation", r.result?.plan?.pendingCount === 1);
+  r = await call("manageGroupPlan", { action: "list" }, otherProfileUser.idToken);
+  ok("group: invitee sees pending group plan", r.result?.plans?.some((plan) => plan.id === groupId && plan.invitation));
+  r = await call("manageGroupPlan", { action: "respond", planId: groupId, accept: true }, otherProfileUser.idToken);
+  ok("group: invitee explicitly joins", r.result?.plan?.memberCount === 2 && !r.result?.plan?.invitation);
+  const groupEventId = group.result?.plan?.eventIDs?.[0];
+  r = await call("manageGroupPlan", { action: "vote", planId: groupId, eventId: groupEventId }, otherProfileUser.idToken);
+  ok("group: member can shortlist a verified candidate", r.result?.plan?.votes?.[groupEventId] === 1);
+  r = await call("manageGroupPlan", { action: "add", planId: groupId, eventId: "invented-event" }, otherProfileUser.idToken);
+  ok("group: cannot add a nonexistent event", r.error?.status === "NOT_FOUND");
+  code2 = await userWrite(`groupPlans/${groupId}`, { eventIDs: ["invented-event"] });
+  ok("rules: direct group-plan writes are denied", code2 === "permission-denied", `got ${code2}`);
+  await call("removeFriend", { peerUid: otherProfileUser.uid }, profileUser.idToken);
+  r = await call("manageGroupPlan", { action: "get", planId: groupId }, otherProfileUser.idToken);
+  ok("group: former friend loses access immediately", r.error?.status === "NOT_FOUND");
+
   // Catalog as the app sees it — eligibility decided server-side.
   const freeMember = await mk("freemember");
   await fund(freeMember, 2000);
