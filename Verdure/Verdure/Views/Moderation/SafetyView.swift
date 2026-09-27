@@ -115,7 +115,7 @@ struct SafetyView: View {
                     ForEach(Array(blocked.enumerated()), id: \.element.uid) { i, entry in
                         HStack(spacing: Spacing.md) {
                             AvatarCircle(initials: String(entry.name.prefix(2)).uppercased(), size: 36,
-                                         accent: Palette.accentCycle[i % Palette.accentCycle.count])
+                                         accent: Palette.spruce)
                             Text(entry.name).font(VType.body(15, .medium)).foregroundStyle(Palette.ink)
                                 .lineLimit(1)
                             Spacer()

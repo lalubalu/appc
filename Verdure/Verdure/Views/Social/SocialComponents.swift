@@ -74,7 +74,7 @@ struct FriendsGoingStack: View {
                 HStack(spacing: -8) {
                     ForEach(Array(info.friends.prefix(compact ? 3 : 5).enumerated()), id: \.element.uid) { i, f in
                         AvatarCircle(initials: f.initials, size: compact ? 22 : 30,
-                                     accent: Palette.accentCycle[i % Palette.accentCycle.count])
+                                     accent: Palette.spruce)
                             .overlay(Circle().stroke(Palette.surface, lineWidth: 2))
                     }
                 }
@@ -173,7 +173,7 @@ struct InviteFriendsSheet: View {
                     if selected.contains(friend.uid) { selected.remove(friend.uid) } else { selected.insert(friend.uid) }
                 } label: {
                     HStack(spacing: Spacing.md) {
-                        AvatarCircle(initials: friend.initials, size: 38, accent: Palette.accentCycle[i % Palette.accentCycle.count])
+                        AvatarCircle(initials: friend.initials, size: 38, accent: Palette.spruce)
                         Text(friend.displayName).font(VType.body(15, .medium)).foregroundStyle(Palette.ink).lineLimit(1)
                         Spacer()
                         Image(systemName: selected.contains(friend.uid) ? "checkmark.circle.fill" : "circle")

@@ -30,10 +30,6 @@
 	<string>$(RECREATION_GOV_KEY)</string>
 	<key>UIAppFonts</key>
 	<array>
-		<string>Fredoka-Regular.ttf</string>
-		<string>Fredoka-Medium.ttf</string>
-		<string>Fredoka-SemiBold.ttf</string>
-		<string>Fredoka-Bold.ttf</string>
 		<string>Rubik-Light.ttf</string>
 		<string>Rubik-Regular.ttf</string>
 		<string>Rubik-Medium.ttf</string>

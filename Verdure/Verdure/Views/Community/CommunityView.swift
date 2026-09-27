@@ -123,7 +123,7 @@ struct CommunityView: View {
                     .accessibilityHint("Opens the new post composer.")
                     .accessibilityAddTraits(.isButton)
                 ForEach(Array(feedAuthors.enumerated()), id: \.offset) { i, author in
-                    let accent = Palette.accentCycle[i % Palette.accentCycle.count]
+                    let accent = Palette.spruce
                     StoryRing(initials: author.initials, name: author.name, accent: accent, isYou: false)
                         .onTapGesture {
                             Haptics.soft()
@@ -153,7 +153,7 @@ struct CommunityView: View {
                     ForEach(Array(trendingPlaces.enumerated()), id: \.offset) { i, t in
                         HStack(spacing: 6) {
                             Image(systemName: "flame.fill").font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(Palette.accentCycle[i % Palette.accentCycle.count].base)
+                                .foregroundStyle(Palette.spruce.base)
                             Text(t).font(VType.body(13, .semibold)).foregroundStyle(Palette.ink)
                         }
                         .padding(.horizontal, 14).padding(.vertical, 9)

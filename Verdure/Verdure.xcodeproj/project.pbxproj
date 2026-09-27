@@ -13,7 +13,6 @@
 		07526A4C6F0E4742B5C51163 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E052E70BACF86711D3588EC5 /* Assets.xcassets */; };
 		0C2D6D46C303E4085FB98D68 /* NotificationPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3839B31C15EF3A824DD5F394 /* NotificationPreferences.swift */; };
 		0CC32ACF6D62DA1CD17B34BC /* JourneyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03A7624DC05E120CBE8C96D2 /* JourneyTests.swift */; };
-		0FD1FF38CDD070F3F43072FE /* Fredoka-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 7340F1690374C2D0E14E775C /* Fredoka-Regular.ttf */; };
 		134A901222649DD16925161B /* DeepLinkRouterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B811F8AFEF216B2FC6F95561 /* DeepLinkRouterTests.swift */; };
 		15F1D2FBA27BA06AF8AC5B74 /* StoreService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 786310F264DB5643723C30F3 /* StoreService.swift */; };
 		1880A39FB396F2170D37D781 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 90080ED01EE002D32C04C263 /* FirebaseFirestore */; };
@@ -25,7 +24,6 @@
 		2A71FB3F93084CDDB5EBAF41 /* CollectionCelebrationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BE41FA8845AD7982EB6F010 /* CollectionCelebrationView.swift */; };
 		2A8B5A090F01593B1C2021C2 /* PushService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5583DC243B8AB0C4BBF1590 /* PushService.swift */; };
 		2B3ADA409FC954403B28A947 /* RewardCatalogParityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CB37DD05B2559698C6E6BAB /* RewardCatalogParityTests.swift */; };
-		3004DA463A48EBF50CD59439 /* Fredoka-SemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = C32C7EFF31CF1C6970BB7876 /* Fredoka-SemiBold.ttf */; };
 		303F0CA473AA2ADD463B4C32 /* FirestoreService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC6765B53003FF95283C4E70 /* FirestoreService.swift */; };
 		33D33531905F5270B96D2943 /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB8F363A9957A893687367F5 /* AuthService.swift */; };
 		39578ECFE7FFB1588E325F16 /* ClayKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09A77B898877DEEFE5C437CB /* ClayKit.swift */; };
@@ -35,7 +33,6 @@
 		4359A74858D6B6475B481CE8 /* SocialComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE3D3ECDE381B6EF187A84F6 /* SocialComponents.swift */; };
 		45220275CC8F9FAF7BD74110 /* ModerationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E10E34D1B087CEF64F3BC5B /* ModerationService.swift */; };
 		453783882CF79E54F5C84926 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = E158D05D5E48685B178E12B5 /* FirebaseAuth */; };
-		498CD196CF0BAB44D3AD6C2C /* Fredoka-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 8A0D8B53DB8BA4B8BB311A64 /* Fredoka-Medium.ttf */; };
 		4E2DA6C00098E371236E4BC5 /* SampleData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 968ADEA7FBB0AB7976384091 /* SampleData.swift */; };
 		504C05F04D8E14A64ED1DD1D /* kickbacks.vsix in Resources */ = {isa = PBXBuildFile; fileRef = 09050697323C833D9BB2C280 /* kickbacks.vsix */; };
 		558A56E80AD3C17D8F4234F6 /* ClayMotion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29157D7AF46A04CCA52AE9DB /* ClayMotion.swift */; };
@@ -63,7 +60,6 @@
 		89D687423521880D5FDF845A /* GameStateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A24A71EC76E347E6E0D77601 /* GameStateManager.swift */; };
 		8AD0116FB14C40E39BB45880 /* RewardsStoreView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24B8F0F1602E59034C79FC39 /* RewardsStoreView.swift */; };
 		8AEB525E8D3833FDE48B338E /* Rubik-Light.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 2D7249F69C54A8490C112737 /* Rubik-Light.ttf */; };
-		8B811669201216C09673CB2B /* Fredoka-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = C5A6185EF7288A49DD96C4E8 /* Fredoka-Bold.ttf */; };
 		8BDC1A2E17553BE0B2B42763 /* EventsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91A91F77E549D1CF8E3998DF /* EventsView.swift */; };
 		8D5F0CD09318506A019F6528 /* TestFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DC2357FAED1484C72866889 /* TestFixtures.swift */; };
 		9501A4C36841643845B4A090 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = B580BB04E8635D042DDC2A14 /* Models.swift */; };
@@ -173,7 +169,6 @@
 		6CFEA8513D425DCA88B19D39 /* DailyGemView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyGemView.swift; sourceTree = "<group>"; };
 		7009DBDF066E6A4E973BD540 /* VerdureTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerdureTheme.swift; sourceTree = "<group>"; };
 		719DCF94E40C512549A1CADC /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
-		7340F1690374C2D0E14E775C /* Fredoka-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Fredoka-Regular.ttf"; sourceTree = "<group>"; };
 		786310F264DB5643723C30F3 /* StoreService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreService.swift; sourceTree = "<group>"; };
 		7A5B78787E70FB7634F58374 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
 		7F91EB7C7709DEBD9167F2DC /* ExploreView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExploreView.swift; sourceTree = "<group>"; };
@@ -182,7 +177,6 @@
 		8628F2F6B8B8168D599B7772 /* Rubik-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Rubik-Bold.ttf"; sourceTree = "<group>"; };
 		87F07F03961C7624432B9C95 /* Rubik-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Rubik-Regular.ttf"; sourceTree = "<group>"; };
 		89F3F94B1DC77849E053033C /* GamificationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GamificationTests.swift; sourceTree = "<group>"; };
-		8A0D8B53DB8BA4B8BB311A64 /* Fredoka-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Fredoka-Medium.ttf"; sourceTree = "<group>"; };
 		8A6DB81CD3B804ACDD083CF8 /* DeepLinkRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepLinkRouter.swift; sourceTree = "<group>"; };
 		8B79380560DB9D61F2161CD8 /* DailyGemStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyGemStore.swift; sourceTree = "<group>"; };
 		91A91F77E549D1CF8E3998DF /* EventsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventsView.swift; sourceTree = "<group>"; };
@@ -207,8 +201,6 @@
 		B8519A30F108AACEC233804A /* AccessibilityAuditTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityAuditTests.swift; sourceTree = "<group>"; };
 		BA6A0F79585FF85230ACA757 /* AdventurePlannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdventurePlannerView.swift; sourceTree = "<group>"; };
 		BC6765B53003FF95283C4E70 /* FirestoreService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirestoreService.swift; sourceTree = "<group>"; };
-		C32C7EFF31CF1C6970BB7876 /* Fredoka-SemiBold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Fredoka-SemiBold.ttf"; sourceTree = "<group>"; };
-		C5A6185EF7288A49DD96C4E8 /* Fredoka-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Fredoka-Bold.ttf"; sourceTree = "<group>"; };
 		C846363829E4EED4A0B09A21 /* AnalyticsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyticsTests.swift; sourceTree = "<group>"; };
 		CD9F31EA3280E44A96A10CE8 /* NotificationPreferencesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationPreferencesTests.swift; sourceTree = "<group>"; };
 		D5EB68A5D8435A5909D0E134 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -401,10 +393,6 @@
 		6AAEDB2024A3988475AA4688 /* Fonts */ = {
 			isa = PBXGroup;
 			children = (
-				C5A6185EF7288A49DD96C4E8 /* Fredoka-Bold.ttf */,
-				8A0D8B53DB8BA4B8BB311A64 /* Fredoka-Medium.ttf */,
-				7340F1690374C2D0E14E775C /* Fredoka-Regular.ttf */,
-				C32C7EFF31CF1C6970BB7876 /* Fredoka-SemiBold.ttf */,
 				8628F2F6B8B8168D599B7772 /* Rubik-Bold.ttf */,
 				2D7249F69C54A8490C112737 /* Rubik-Light.ttf */,
 				63CF83506D67AB715494A196 /* Rubik-Medium.ttf */,
@@ -662,10 +650,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				07526A4C6F0E4742B5C51163 /* Assets.xcassets in Resources */,
-				8B811669201216C09673CB2B /* Fredoka-Bold.ttf in Resources */,
-				498CD196CF0BAB44D3AD6C2C /* Fredoka-Medium.ttf in Resources */,
-				0FD1FF38CDD070F3F43072FE /* Fredoka-Regular.ttf in Resources */,
-				3004DA463A48EBF50CD59439 /* Fredoka-SemiBold.ttf in Resources */,
 				78DCF9627935F77ECFA04501 /* GoogleService-Info.plist in Resources */,
 				423A662A981968C6F2C46921 /* GoogleService-Info.plist.template in Resources */,
 				D1FDF825E59771F0108E99F2 /* PrivacyInfo.xcprivacy in Resources */,

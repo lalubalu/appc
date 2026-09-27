@@ -1,12 +1,11 @@
 import SwiftUI
 
 // =====================================================================
-//  Verdure — "Warm Forest" Claymorphism Design System
+//  Verdure — Warm Forest Design System
 //
 //  One light source, TOP-LEFT, everywhere. Highlights live top-left,
-//  depth lives bottom-right, on every clay element. Sage-cream is the
-//  dominant surface in light mode; a deep-evergreen clay world in dark
-//  mode. Teal, gold and spruce are the sculpted clay accents. Body text
+//  depth lives bottom-right. Sage-cream is the dominant surface in light
+//  mode; deep evergreen grounds dark mode. Body text
 //  is evergreen ink — never a bright accent.
 //
 //  Light palette : E6E8D4 sage cream · 16BFA5 teal · 14532D spruce ·
@@ -137,28 +136,32 @@ enum Palette {
         onColor: Color(hex: 0x0B2530)
     )
 
-    /// All four primary clay accents, for cycling/identity assignment.
-    static let accentCycle: [ClayAccent] = [teal, gold, spruce, evergreen]
 }
 
 // MARK: - Clay shadow metrics (top-left light source)
 
 enum ClayMetric {
     /// Outer float offset / blur for the standard clay surface.
-    static let outerOffset: CGFloat = 10
-    static let outerBlur: CGFloat = 24
-    /// Inner sculpt offsets.
-    static let innerOffset: CGFloat = 6
-    static let innerBlur: CGFloat = 14
+    static let outerOffset: CGFloat = 3
+    static let outerBlur: CGFloat = 10
+    /// Used only for inset controls.
+    static let innerOffset: CGFloat = 2
+    static let innerBlur: CGFloat = 4
 }
 
-// MARK: - Typography — Fredoka (display) + Rubik (body)
+// MARK: - Typography — system serif (display) + Rubik (body)
 
-enum FredokaWeight: String {
-    case regular  = "Fredoka-Regular"
-    case medium   = "Fredoka-Medium"
-    case semibold = "Fredoka-SemiBold"
-    case bold     = "Fredoka-Bold"
+enum DisplayWeight {
+    case regular, medium, semibold, bold
+
+    var uiWeight: UIFont.Weight {
+        switch self {
+        case .regular: return .regular
+        case .medium: return .medium
+        case .semibold: return .semibold
+        case .bold: return .bold
+        }
+    }
 }
 
 enum RubikWeight: String {
@@ -169,7 +172,7 @@ enum RubikWeight: String {
     case bold     = "Rubik-Bold"
 }
 
-/// Verdure type ramp. Display = Fredoka (chunky rounded, headers only).
+/// Verdure type ramp. Display uses the native editorial serif for headers.
 /// Everything else = Rubik (legible at small sizes).
 ///
 /// DYNAMIC TYPE: every variant scales with the user's text-size setting
@@ -178,9 +181,16 @@ enum RubikWeight: String {
 /// .body. Existing lineLimit/minimumScaleFactor guards keep tight layouts
 /// usable at the largest sizes.
 enum VType {
-    // Display — Fredoka. Hero + short section headers ONLY.
-    static func display(_ size: CGFloat = 40, _ w: FredokaWeight = .semibold) -> Font {
-        .custom(w.rawValue, size: size, relativeTo: .title2)
+    private static func serif(_ size: CGFloat, _ w: DisplayWeight, relativeTo style: UIFont.TextStyle) -> Font {
+        let base = UIFont.systemFont(ofSize: size, weight: w.uiWeight)
+        let descriptor = base.fontDescriptor.withDesign(.serif) ?? base.fontDescriptor
+        let face = UIFont(descriptor: descriptor, size: size)
+        return Font(UIFontMetrics(forTextStyle: style).scaledFont(for: face))
+    }
+
+    // Display — New York via the iOS system serif; metrics honor Dynamic Type.
+    static func display(_ size: CGFloat = 40, _ w: DisplayWeight = .semibold) -> Font {
+        serif(size, w, relativeTo: .title2)
     }
     // Body / UI — Rubik.
     static func body(_ size: CGFloat = 16, _ w: RubikWeight = .regular) -> Font {
@@ -192,9 +202,16 @@ enum VType {
     }
 
     // Explicit-relative variants (same faces; pick the text style yourself).
-    static func scaledDisplay(_ size: CGFloat, _ w: FredokaWeight = .semibold,
+    static func scaledDisplay(_ size: CGFloat, _ w: DisplayWeight = .semibold,
                               relativeTo style: Font.TextStyle = .title3) -> Font {
-        .custom(w.rawValue, size: size, relativeTo: style)
+        let uiStyle: UIFont.TextStyle
+        switch style {
+        case .headline: uiStyle = .headline
+        case .subheadline: uiStyle = .subheadline
+        case .title2: uiStyle = .title2
+        default: uiStyle = .title3
+        }
+        return serif(size, w, relativeTo: uiStyle)
     }
     static func scaledBody(_ size: CGFloat = 16, _ w: RubikWeight = .regular,
                            relativeTo style: Font.TextStyle = .body) -> Font {
@@ -207,7 +224,7 @@ enum VType {
 }
 
 /// Back-compat façade for the old `CFont` call sites — rerouted to Verdure
-/// fonts so legacy views adopt Fredoka/Rubik until they're rebuilt.
+/// fonts so legacy views adopt the current type ramp.
 struct CFont {
     static func display(_ size: CGFloat = 34) -> Font { VType.display(size, .bold) }
     static func title(_ size: CGFloat = 24) -> Font { VType.display(size, .semibold) }
@@ -229,15 +246,15 @@ enum Spacing {
     static let xxl: CGFloat = 48
 }
 
-// MARK: - Corner radius (chunky, inflated clay)
+// MARK: - Corner radius
 
 enum Radius {
-    static let chip: CGFloat = 16
-    static let sm: CGFloat = 18
-    static let md: CGFloat = 26
-    static let lg: CGFloat = 32
-    static let xl: CGFloat = 40
-    static let xxl: CGFloat = 46
+    static let chip: CGFloat = 10
+    static let sm: CGFloat = 12
+    static let md: CGFloat = 16
+    static let lg: CGFloat = 20
+    static let xl: CGFloat = 24
+    static let xxl: CGFloat = 28
     static let pill: CGFloat = 999
 }
 

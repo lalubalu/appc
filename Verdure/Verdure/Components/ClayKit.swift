@@ -1,14 +1,10 @@
 import SwiftUI
 
 // =====================================================================
-//  ClayKit — the Verdure claymorphism primitive layer.
+//  ClayKit — the Verdure surface primitive layer.
 //
-//  Every clay element is sculpted by a single TOP-LEFT light source:
-//    • inner gloss highlight offset toward top-left
-//    • inner depth shadow offset toward bottom-right
-//    • a soft outer float (dark drop bottom-right + light lift top-left)
-//  On press the clay sinks IN: inner shadows invert, the outer float
-//  collapses. This is the whole feel of the style.
+//  Cards and tiles have one restrained outer shadow. Only inset controls
+//  carry an inner shadow, where depth communicates an actual well.
 // =====================================================================
 
 // MARK: - Clay style
@@ -97,41 +93,26 @@ struct ClayBackground: View {
     var elevation: CGFloat = 1
 
     var body: some View {
-        let io = ClayMetric.innerOffset
-        let ib = ClayMetric.innerBlur
         let oo = ClayMetric.outerOffset * elevation
         let ob = ClayMetric.outerBlur * elevation
         let isInset = style == .inset
 
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
-
-        // Inner sculpt — gloss top-left, depth bottom-right (inverted on press / inset).
-        let sink = pressed || isInset
+        let face: AnyShapeStyle = isInset
+            ? AnyShapeStyle(style.faceStyle
+                .shadow(.inner(color: style.gloss, radius: ClayMetric.innerBlur,
+                               x: -ClayMetric.innerOffset, y: -ClayMetric.innerOffset))
+                .shadow(.inner(color: style.depth, radius: ClayMetric.innerBlur,
+                               x: ClayMetric.innerOffset, y: ClayMetric.innerOffset)))
+            : style.faceStyle
         shape
-            .fill(
-                style.faceStyle
-                    .shadow(.inner(color: style.gloss,
-                                   radius: ib,
-                                   x: sink ? -io : io,
-                                   y: sink ? -io : io))
-                    .shadow(.inner(color: style.depth,
-                                   radius: ib + (sink ? 4 : 0),
-                                   x: sink ? io : -io,
-                                   y: sink ? io : -io))
-            )
-            .compositingGroup()
-            // Clip the filled + inner-shadowed layer to the exact rounded shape so
-            // the inner shadows can't bleed past the corners (keeps corners clean).
+            .fill(face)
             .clipShape(shape)
-            // Outer float — collapses on press.
+            // One quiet outer shadow; it settles when pressed.
             .shadow(color: style.outerDark.opacity(pressed ? 0.4 : 1),
                     radius: pressed ? ob * 0.4 : ob,
                     x: pressed ? oo * 0.3 : oo,
                     y: pressed ? oo * 0.3 : oo)
-            .shadow(color: style.outerLight.opacity(pressed ? 0.4 : 1),
-                    radius: pressed ? ob * 0.4 : ob,
-                    x: pressed ? -oo * 0.3 : -oo,
-                    y: pressed ? -oo * 0.3 : -oo)
     }
 }
 
