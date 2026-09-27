@@ -36,7 +36,7 @@ import {
   docIdFrom, isBlockedEitherWay,
 } from "./common.js";
 
-export const MODERATION_CONTACT = "support@verdure.app";
+export const MODERATION_CONTACT = "support@verdure-app.com";
 
 /** Distinct reporters needed before content is hidden automatically. */
 export const AUTO_HIDE_REPORT_THRESHOLD = 3;

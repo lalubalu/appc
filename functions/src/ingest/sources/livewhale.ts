@@ -101,7 +101,7 @@ export async function fetchLiveWhale(area: LaunchArea, host: string, name: strin
   for (let page = 1; page <= expectedPages; page++) {
     if (page > MAX_PAGES) throw new Error(`${name} (LiveWhale) exceeded ${MAX_PAGES} pages`);
     const res = await fetchImpl(`https://${host}${path}?page=${page}`, {
-      headers: { Accept: "application/json", "User-Agent": "Verdure-ingest/1.0 (+https://verdure.app)" },
+      headers: { Accept: "application/json", "User-Agent": "Verdure-ingest/1.0 (+https://verdure-app.com)" },
       signal: AbortSignal.timeout(20_000),
     });
     if (!res.ok) throw new Error(`${name} (LiveWhale) HTTP ${res.status}`);

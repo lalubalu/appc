@@ -68,7 +68,7 @@ export async function fetchLegistar(
     "$top": "500",
   });
   const res = await fetchImpl(`https://webapi.legistar.com/v1/${client}/events?${q}`, {
-    headers: { Accept: "application/json", "User-Agent": "Verdure-ingest/1.0 (+https://verdure.app)" },
+    headers: { Accept: "application/json", "User-Agent": "Verdure-ingest/1.0 (+https://verdure-app.com)" },
     signal: AbortSignal.timeout(20_000),
   });
   if (!res.ok) throw new Error(`${name} Legistar HTTP ${res.status}`);

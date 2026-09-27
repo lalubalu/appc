@@ -7,7 +7,7 @@ import LegalContent from "@/components/layout/LegalContent";
  * to be a reachable page with a way to contact us. Answers are limited to
  * behaviour that actually exists in the shipping app.
  */
-const CONTACT_EMAIL = "support@verdure.app";
+const CONTACT_EMAIL = "support@verdure-app.com";
 
 export default function SupportContent() {
   return (

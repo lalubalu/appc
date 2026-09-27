@@ -34,7 +34,7 @@ export async function fetchLocalist(area: LaunchArea, host: string, name: string
       near: `${area.center.lat},${area.center.lng}`, within: String(area.radiusMiles), units: "mi",
     });
     const res = await fetchImpl(`https://${host}/api/2/events?${q}`, {
-      headers: { Accept: "application/json", "User-Agent": "Verdure-ingest/1.0 (+https://verdure.app)" },
+      headers: { Accept: "application/json", "User-Agent": "Verdure-ingest/1.0 (+https://verdure-app.com)" },
       signal: AbortSignal.timeout(20_000),
     });
     if (!res.ok) throw new Error(`${name} (Localist) HTTP ${res.status}`);

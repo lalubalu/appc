@@ -31,6 +31,8 @@ SeatGeek, Bandsintown and Songkick lack project access or terms suitable for
 unapproved bulk ingestion; see `NATIONAL-API-EVALUATION.md`. Sunnyvale's
 BiblioCommons gateway returned 403, so the public site alone is insufficient
 for that adapter.
+On 2026-09-27 Rishit explicitly dropped Bandsintown and Songkick from this
+sprint; no adapters or access requests for them are planned.
 
 ## Measurement limits
 

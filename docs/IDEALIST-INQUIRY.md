@@ -10,8 +10,7 @@ requires approved access and attribution.
 - Verdure organization or legal entity name
 - Contact person's name
 - Business email address
-- Preferred website/domain (`verdure-app.com` is active in the repository,
-  while app listing/legal copy still refers to `verdure.app`)
+- Preferred website/domain: `verdure-app.com` (confirmed canonical)
 
 ## Proposed inquiry text
 

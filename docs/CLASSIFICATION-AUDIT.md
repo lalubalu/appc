@@ -2,11 +2,11 @@
 
 ## Status
 
-**Review pending.** The 200-event stratified sample exists at
+**Review pending; John is assigned.** The 200-event stratified sample exists at
 [`audits/classification-sample-2026-09-27.csv`](audits/classification-sample-2026-09-27.csv).
 The `reviewerCategory`, `reviewerLabels`, `labelCorrect`, and `reviewerNotes`
 columns are intentionally blank. No accuracy percentage or 85% pass is claimed
-until a named reviewer checks every row. The sample was generated from public
+until John checks every row. The sample was generated from public
 source feeds after the source-list freeze commit `462c0a1`; it is not a sample
 from a populated production `/events` collection, which currently has zero
 documents.
@@ -55,6 +55,27 @@ sample was regenerated after these changes. Its reviewer fields remain blank;
 the named reviewer must still judge every row and calculate category accuracy.
 
 ## Reviewer rubric
+
+### How John fills the CSV
+
+Work on a copy of the committed CSV, preserving all 200 rows, column names,
+source IDs, predictions and source URLs. Only fill the four `reviewer*` and
+`labelCorrect` columns. Open the `sourceURL` when the title and description are
+ambiguous. For each row:
+
+1. Set `reviewerCategory` to the primary activity category a user would expect.
+2. Set `reviewerLabels` to the primary category plus any supported secondary
+   labels, separated by ` | ` like `Workshop | Family | Indoor | Free`. Do not
+   infer a free price, age eligibility or accessibility from missing data.
+3. Set `labelCorrect` to `TRUE` only when `predictedCategory` and all material
+   `predictedLabels` agree with John's judgment; otherwise set `FALSE`.
+4. In `reviewerNotes`, explain every `FALSE` and any source ambiguity. The
+   `confidence` column is the model's confidence, not John's score.
+
+Return the completed CSV to Rishit. The audit result must report reviewed
+count, overall accuracy and per-predicted-category accuracy with denominators;
+low-confidence count alone cannot establish accuracy. [John's full handoff](JOHN-REVIEW-HANDOFF.md)
+lists the next ranking task and frozen files.
 
 Choose the primary category by the activity the attendee would do. Use
 `Workshop` for teaching, storytime and hands-on practice; `Volunteer` for work

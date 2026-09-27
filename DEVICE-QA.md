@@ -2,9 +2,27 @@
 
 **Status: NOT RUN. This is the script, not a result.**
 
-Everything in this file needs two real phones outdoors. It has been on the
-checklist for three weeks and cannot be closed from a simulator, because the
-three things it covers are exactly the three the simulator fakes:
+## Free Apple Account first pass
+
+Rishit chose to start with owned iPhones and free Apple Account signing. In
+Xcode, add the Apple Account under Settings → Accounts, connect and unlock an
+iPhone, trust this Mac, enable Developer Mode if prompted, select the personal
+team for the `Verdure` target, and attempt a Debug build to that device.
+Record the signing/build result and device model before claiming any run.
+Personal-team provisioning expires and some app capabilities may require paid
+membership or different entitlements; capture the actual Xcode error rather
+than changing the paid account status or weakening production signing.
+
+As of 2026-09-27, `xcrun devicectl list devices` sees Vaiybhav's iPhone 16
+Pro Max as **unavailable**, so no physical-device build or QA result exists.
+Once the phone is connected, the first free pass can cover launch, visual
+layout, Dynamic Type, VoiceOver, permissions, foreground/background behavior,
+Map battery use and local location UI. The backend-dependent parts below
+remain blocked by the empty/guest-denied live event index and undeployed
+Functions/Storage. A signed build alone does not pass any checklist item.
+
+The complete field script needs two real phones outdoors. It cannot be closed
+from a simulator, because the three core paths are affected by real hardware:
 
 | What | Why the simulator can't prove it |
 |---|---|
@@ -13,8 +31,10 @@ three things it covers are exactly the three the simulator fakes:
 | Queue replay | Simulator airplane mode isn't the radio going away; app lifecycle and backgrounding behave differently. |
 
 > **Blocked on backend.** Runs 2 and 3 need Cloud Functions and Storage live.
-> As of 2026-08-09 neither is deployed (billing is still Spark). Run 1 works
-> today. See the DEPLOY STATUS table in CLAUDE.md.
+> Run 1 also needs a reachable event with real coordinates and the relevant
+> server path before its server-enforcement check can pass. The live guest feed
+> currently fails, so do not mark Run 1 complete from an offline/demo event.
+> See the DEPLOY STATUS table in CLAUDE.md.
 
 ## Before you leave
 

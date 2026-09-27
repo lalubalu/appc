@@ -24,7 +24,7 @@ function validHost(host) {
 async function read(url, maxBytes = 200_000) {
   try {
     const res = await fetch(url, {
-      headers: { "User-Agent": "Verdure-source-survey/1.0 (+https://verdure.app)" },
+      headers: { "User-Agent": "Verdure-source-survey/1.0 (+https://verdure-app.com)" },
       signal: AbortSignal.timeout(12_000),
       redirect: "follow",
     });

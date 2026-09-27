@@ -82,7 +82,7 @@ export function parseLibCalRss(xml: string): LibCalItem[] {
 
 export async function fetchLibCal(area: LaunchArea, feed: LibCalFeed, fetchImpl: typeof fetch = fetch): Promise<NormalizedEvent[]> {
   const res = await fetchImpl(feed.rssUrl, {
-    headers: { "User-Agent": "Verdure-ingest/1.0 (+https://verdure.app)", Accept: "application/rss+xml, application/xml" },
+    headers: { "User-Agent": "Verdure-ingest/1.0 (+https://verdure-app.com)", Accept: "application/rss+xml, application/xml" },
     signal: AbortSignal.timeout(30_000),
   });
   if (!res.ok) throw new Error(`${feed.name} HTTP ${res.status}`);

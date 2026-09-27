@@ -167,14 +167,14 @@ populated-production-corpus evaluation.
 | Scope | Still needed |
 | --- | --- |
 | A/B | Populate live events; re-run coverage and record the delta; assess County Parks/volunteer structured access; verify duplicate rate under 5% against live cycles. The required City and County path probes are recorded, and six new sources are configured. |
-| C0/P2 | Named human reviewer for all 200 sampled classifications, category accuracy and fixes; review a populated-corpus backfill dry run before writing it live. |
+| C0/P2 | John reviews all 200 sampled classifications; calculate category accuracy and fix misses; review a populated-corpus backfill dry run before writing it live. |
 | P3/C1 | Measure full Firestore reads against a populated index, including user context, client reads and index entries, before enabling the feed at scale. |
-| C3/C10/C11 | Full radius and filter behavior against a dense corpus; named reviewer and 20-profile golden set; live measurement of impression/outcome coverage and cost. |
+| C3/C10/C11 | Full radius and filter behavior against a dense corpus; John labels the 20-profile golden set after classification; live measurement of impression/outcome coverage and cost. |
 | D/E | Populated **production** event screens, full VoiceOver reading order, broader dark-mode and physical-device QA; real installed-app invite round trip. The local-emulator Discover and detail screens are captured. The shared-past-event friend path is implemented and emulator-tested. Structural audits and targeted XL Simulator captures pass. The website invite page needs deployment before public links work. |
 | F | Configure and exercise the actual model secret; review sequencing, sponsor trust and session spend against a populated index. Emulator tests prove the verified-ID fallback and session mechanics. |
 | G | At least 30 live local volunteer listings before surfacing that subtype; the Volunteer chip is hidden below this threshold. Partner/API access and Idealist application remain; any post-freeze source addition requires a renewed classification audit. |
 | I/H | Profile and group-plan controls need device QA and a real two-phone invite test. Offline packs and AR stay deferred and are no longer advertised. |
-| Legal/web alignment | Have the owner review the active website's legacy policy, which still lists phone, billing and shipping data and under-16 language was locally corrected to under-13. The app and listing now use the confirmed `verdure-app.com` domain; `/terms`, `/support`, and the receiving support/privacy inbox remain unavailable. The owner declined email setup for now and said no deployment yet. |
+| Legal/web alignment | Have the owner review the active website's legacy policy, which still lists phone, billing and shipping data and under-16 language was locally corrected to under-13. The app and listing now use the confirmed `verdure-app.com` domain; `/terms`, `/support`, and the receiving support/privacy inbox remain unavailable. Rishit plans free forwarding, pending a delivery test, and said no deployment yet. |
 
 The sprint is **not complete**. The table separates engineering still to do
 from the required live corpus, named human review, device QA and external
@@ -183,3 +183,31 @@ release pass.
 
 The account, budget, email, and owner request list for Rishit is in
 [RISHIT-ACCOUNTS-AND-BUDGET-2026-09-27.md](RISHIT-ACCOUNTS-AND-BUDGET-2026-09-27.md).
+
+## Rishit's September 27 handoff decisions
+
+- `verdure-app.com` is the sole public and email domain. Local iOS legal and
+  safety contact strings, backend responses and both website trees now use
+  `support@verdure-app.com`. Rishit plans free forwarding for support and
+  privacy; neither address is considered working until delivery is tested.
+- John owns the [200-row classification audit](CLASSIFICATION-AUDIT.md), then
+  the [20-profile ranking set](RANKING-EVAL.md). A
+  [forwardable packet](JOHN-REVIEW-HANDOFF.md) and frozen source files are
+  prepared. No human labels or evaluation scores have been claimed.
+- Rishit approves privacy, terms and App Store copy. Advaith owns the 24-hour
+  safety response; Adithya needs queue access and the
+  [moderation handoff](MODERATION-HANDOFF.md). They are different people.
+  No live staff access exists while Functions remain undeployed.
+- Rishit will create a free Verdure GitHub organization. The repository still
+  lives at `github.com/vaiybhav/verdure-app`; transfer and admin verification
+  wait for the organization's slug and Rishit's GitHub identity.
+- The live website uses Vercel, but its owning account/team and plan could not
+  be verified: the local CLI is logged out and the dashboard requires sign-in.
+  Rishit needs to provide the project/team or an invitation before its Hobby
+  versus Pro status can be confirmed.
+- Free Apple Account device QA is the next hardware step. Xcode currently
+  reports the discovered iPhone as unavailable, so no real-device check has
+  passed. See [DEVICE-QA.md](../DEVICE-QA.md).
+- No purchases, Blaze upgrade, Apple membership, Anthropic or Tremendous
+  activation, production deployment, or website publication is authorized.
+  Bandsintown and Songkick were dropped from active scope.

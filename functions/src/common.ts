@@ -224,7 +224,7 @@ export async function assertNotSuspended(uid: string): Promise<void> {
   const snap = await db.collection("users").doc(uid).get();
   if (snap.data()?.suspended === true) {
     throw new HttpsError("permission-denied",
-      "This account has been suspended. Contact support@verdure.app to appeal.");
+      "This account has been suspended. Contact support@verdure-app.com to appeal.");
   }
 }
 

@@ -214,7 +214,7 @@ export async function fetchMidpen(
 
   for (let page = 0; page < MAX_PAGES; page++) {
     const res = await fetchImpl(`https://www.openspace.org/events?page=${page}`, {
-      headers: { "user-agent": "Verdure/1.0 (events ingest; support@verdure.app)" },
+      headers: { "user-agent": "Verdure/1.0 (events ingest; support@verdure-app.com)" },
     });
     if (!res.ok) {
       if (page === 0) throw new Error(`${feed.name} returned ${res.status}`);

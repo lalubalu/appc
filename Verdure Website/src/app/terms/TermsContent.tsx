@@ -85,7 +85,7 @@ export default function TermsContent() {
         immediately, and unreviewed reports lead to removal at the 24-hour mark.
         You can block any member. We may remove content or suspend accounts that
         break these rules. Questions about a moderation decision:{" "}
-        <a href="mailto:support@verdure.app">support@verdure.app</a>.
+        <a href="mailto:support@verdure-app.com">support@verdure-app.com</a>.
       </p>
 
       <h2>Events and safety</h2>
@@ -124,7 +124,7 @@ export default function TermsContent() {
 
       <h2>Contact</h2>
       <p>
-        Verdure &mdash; <a href="mailto:support@verdure.app">support@verdure.app</a>.
+        Verdure &mdash; <a href="mailto:support@verdure-app.com">support@verdure-app.com</a>.
         See also the <a href="/support">Support page</a> and the{" "}
         <a href="/privacy">Privacy Policy</a>.
       </p>

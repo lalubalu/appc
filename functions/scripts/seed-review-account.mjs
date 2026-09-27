@@ -20,7 +20,7 @@
 const uid = process.argv[2];
 if (!uid) {
   console.error("Usage: node scripts/seed-review-account.mjs <uid>");
-  console.error("The uid comes from registering appreview@verdure.app in the app first.");
+  console.error("The uid comes from registering appreview@verdure-app.com in the app first.");
   process.exit(1);
 }
 

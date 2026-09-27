@@ -21,7 +21,7 @@ export async function fetchIcsFeed(
   area: LaunchArea, feed: IcsFeed, source: SourceId, fetchImpl: typeof fetch = fetch,
 ): Promise<NormalizedEvent[]> {
   const res = await fetchImpl(feed.url, {
-    headers: { "User-Agent": "Verdure-ingest/1.0 (+https://verdure.app)" },
+    headers: { "User-Agent": "Verdure-ingest/1.0 (+https://verdure-app.com)" },
     signal: AbortSignal.timeout(30_000),
   });
   if (!res.ok) throw new Error(`${feed.name} HTTP ${res.status}`);

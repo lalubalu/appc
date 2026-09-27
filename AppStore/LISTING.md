@@ -95,10 +95,11 @@ outdoors,parks,trails,hiking,walk,nature,community,events,local,explore,rewards,
 ## Support / marketing URLs
 
 **Pre-submission blocker:** Verdure does not yet have a receiving support or
-privacy inbox. Neither `verdure.app` nor `verdure-app.com` currently publishes
-MX records. The active website's `/support` and `/terms` routes return 404.
-Set up and test an inbox, then align the in-app, website and App Store contact
-copy before submitting. The bundled in-app legal text remains available.
+privacy inbox. Rishit will configure free forwarding for
+`support@verdure-app.com` and `privacy@verdure-app.com`, but delivery has not
+been tested. The active website's `/support` and `/terms` routes return 404.
+Set up and test forwarding, then publish the locally aligned website copy
+before submitting. The bundled in-app legal text remains available.
 
 | Field | Value |
 |---|---|
