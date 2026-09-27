@@ -264,14 +264,15 @@ private struct TabItemButton: View {
 
 // MARK: - Plan from real listings
 
-/// A useful local planning surface while the server-ranked conversational
-/// planner is still being built. Every result is an Event from the live index.
+/// Plans use server-ranked, verified event IDs; the local path supports QA
+/// when authentication or the live index is unavailable.
 private struct PlanTabView: View {
     @Environment(EventsAPIService.self) private var eventsService
     @Environment(LocationManager.self) private var locationManager
     @Environment(SocialService.self) private var social
     @Environment(StoreService.self) private var store
     @State private var when = "This weekend"
+    @State private var pickedDate = Date()
     @State private var company = "Just me"
     @State private var distance = "Short drive"
     @State private var budget = "Free"
@@ -294,6 +295,12 @@ private struct PlanTabView: View {
         return formatter
     }()
 
+    private var pickedDateString: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: pickedDate)
+    }
+
     private var candidates: [Event] {
         let calendar = Calendar.current
         let now = Date()
@@ -305,6 +312,7 @@ private struct PlanTabView: View {
             case "Tonight": fitsWhen = calendar.isDateInToday(event.date)
             case "Tomorrow": fitsWhen = calendar.isDateInTomorrow(event.date)
             case "This weekend": fitsWhen = day == 1 || day == 7
+            case "Pick a date": fitsWhen = calendar.isDate(event.date, inSameDayAs: pickedDate)
             default: fitsWhen = true
             }
             let fitsBudget = budget != "Free" || event.isFree == true
@@ -348,7 +356,12 @@ private struct PlanTabView: View {
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: Spacing.lg) {
                     header
-                    optionsSection("When", choices: ["Tonight", "Tomorrow", "This weekend", "Any day"], selection: $when)
+                    optionsSection("When", choices: ["Tonight", "Tomorrow", "This weekend", "Pick a date"], selection: $when)
+                    if when == "Pick a date" {
+                        DatePicker("Choose a day", selection: $pickedDate, in: Date()..., displayedComponents: .date)
+                            .font(VType.body(14, .semibold))
+                            .tint(Palette.spruce.base)
+                    }
                     optionsSection("Who with", choices: ["Just me", "Friends", "With kids"], selection: $company)
                     optionsSection("How far", choices: ["Walking", "Short drive", "Anywhere nearby"], selection: $distance)
                     optionsSection("Budget", choices: ["Free", "Under $20", "Doesn't matter"], selection: $budget)
@@ -505,7 +518,8 @@ private struct PlanTabView: View {
             let coord = locationManager.userCoordinate
             let area = LaunchArea.nearest(to: coord, in: eventsService.launchAreas)?.id ?? "san-jose-ca"
             let payload: [String: any Sendable] = [
-                "when": when, "who": company, "distance": distance,
+                "when": when, "targetDate": when == "Pick a date" ? pickedDateString : "",
+                "who": company, "distance": distance,
                 "budget": budget, "note": note, "areaId": area,
                 "lat": coord.latitude, "lng": coord.longitude
             ]

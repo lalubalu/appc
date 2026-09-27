@@ -21,12 +21,19 @@ export interface EventPlanCandidate {
 
 export interface EventPlanRequest {
   when: string; who: string; distance: string; budget: string; note: string;
-  lat?: number; lng?: number; nowMs: number;
+  targetDate?: string; lat?: number; lng?: number; nowMs: number;
 }
 
 function datePart(ms: number, kind: "day" | "weekday"): string {
   return new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles",
     ...(kind === "day" ? { year: "numeric", month: "2-digit", day: "2-digit" } : { weekday: "short" }) }).format(ms);
+}
+
+function localISODate(ms: number): string {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles",
+    year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(ms);
+  const value = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
+  return `${value("year")}-${value("month")}-${value("day")}`;
 }
 
 /** Pure eligibility and ordering. A sparse result is honest and prompts widening. */
@@ -40,6 +47,7 @@ export function selectPlanCandidates(rows: EventPlanCandidate[], req: EventPlanR
     const weekday = datePart(e.startMs, "weekday");
     if (req.when === "Tonight" && day !== nowDay) return false;
     if (req.when === "Tomorrow" && day !== tomorrowDay) return false;
+    if (req.when === "Pick a date" && localISODate(e.startMs) !== req.targetDate) return false;
     if (req.when === "This weekend" &&
         (!["Sat", "Sun"].includes(weekday) || e.startMs - req.nowMs > 7 * 86_400_000)) return false;
     if (req.who === "With kids" && e.ageSuitability === "adults") return false;
@@ -158,9 +166,15 @@ export const planEvents = onCall({ secrets: [ANTHROPIC_API_KEY] }, async (req) =
   const input: EventPlanRequest = {
     when: safeText(req.data?.when, 20), who: safeText(req.data?.who, 20),
     distance: safeText(req.data?.distance, 20), budget: safeText(req.data?.budget, 20),
-    note: safeText(req.data?.note, 120), lat: hasLoc ? lat : undefined, lng: hasLoc ? lng : undefined,
+    note: safeText(req.data?.note, 120), targetDate: safeText(req.data?.targetDate, 10),
+    lat: hasLoc ? lat : undefined, lng: hasLoc ? lng : undefined,
     nowMs: Date.now(),
   };
+  if (input.when === "Pick a date" &&
+      (!/^\d{4}-\d{2}-\d{2}$/.test(input.targetDate ?? "") ||
+       Number.isNaN(Date.parse(`${input.targetDate}T12:00:00Z`)))) {
+    throw new HttpsError("invalid-argument", "Choose a valid date.");
+  }
   const areaId = safeText(req.data?.areaId, 60) || "san-jose-ca";
   if (areaId.includes("/")) throw new HttpsError("invalid-argument", "Invalid area.");
   const ranked = await recommendFor(uid, areaId, input.lat, input.lng, 60, input.nowMs);

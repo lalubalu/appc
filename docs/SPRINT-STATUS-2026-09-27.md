@@ -36,6 +36,8 @@ environment switch has been performed. `CLAUDE.md` deploy status is untouched.
   selects real candidate documents; the model can only sequence verified IDs,
   and a deterministic fallback serves the same verified IDs when the model key
   is unavailable. Refinements stay in the same session without a model call.
+  The date option now opens a calendar picker and filters verified candidates
+  to that local day, as the brief specifies.
   Monthly free-plan quota is transactional; model cost is counted in treasury.
   Emulator acceptance checks cover profile difference, no invention and
   repeat avoidance. The actual model path still needs a configured key and
@@ -68,18 +70,20 @@ environment switch has been performed. `CLAUDE.md` deploy status is untouched.
 ## Verification
 
 - iOS Simulator Debug build: passed after the current iOS changes. The iOS
-  unit suite passed after updating its paywall-benefit count from four to five;
-  the separate simulator UI suite is still running.
+  unit suite passed after updating its paywall-benefit count from four to five.
+  The separate simulator UI suite stalled before any UI test result appeared;
+  it was interrupted after roughly three minutes, so UI automation is unverified.
 - Functions TypeScript build: passed.
-- Ranking units: **49 passed, 0 failed**; planner units: **7 passed, 0 failed**.
+- Ranking units: **49 passed, 0 failed**; planner units: **8 passed, 0 failed**.
 - Backend emulator E2E: **328 passed, 0 failed**, including group invitations,
   shortlist votes, telemetry opt-out and access revocation.
 - Red team: **49 attacks blocked, 0 vulnerable** after the feedback addition.
 - All Functions unit suites passed; active website tests and production build
   passed after the invite and pricing changes.
-- Computer inspected the Discover For You screen on iPhone 16 Plus. The
-  remaining interactive visual sweep was interrupted by Simulator window
-  timeouts. Existing screenshots are in `DESIGN-REFRESH.md`.
+- Computer inspected Discover For You and reopened Verdure to its Daily Gem
+  screen on iPhone 16 Plus. Further taps returned `noWindowsAvailable`, so
+  the full interactive visual sweep remains unverified. The saved Plan capture
+  in `DESIGN-REFRESH.md` predates the new date picker and server results.
 
 ## Open completion gates
 

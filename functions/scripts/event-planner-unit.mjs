@@ -17,6 +17,9 @@ const rows = [
 const req = { when: "Any day", who: "Just me", distance: "Anywhere nearby", budget: "Doesn't matter", note: "", nowMs };
 ok("free only excludes paid stops", selectPlanCandidates(rows, { ...req, budget: "Free" }).map((r) => r.id).join() === "a,d");
 ok("search note narrows to real matching stops", selectPlanCandidates(rows, { ...req, note: "workshop" }).map((r) => r.id).join() === "b,d");
+ok("picked calendar date keeps only events on that local day",
+  selectPlanCandidates(rows, { ...req, when: "Pick a date", targetDate: "2026-09-29" })
+    .map((r) => r.id).join() === "a");
 ok("model IDs are verified and de-duplicated", validateModelStops([
   { eventId: "invented", why: "x" }, { eventId: "a", why: "real" }, { eventId: "a", why: "again" }, { eventId: "b", why: "real" },
 ], rows).map((r) => r.eventId).join() === "a,b");
