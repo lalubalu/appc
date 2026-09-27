@@ -1,4 +1,4 @@
-# Verdure: boss decisions, accounts, and budget
+# Verdure: Rishit's decisions, accounts, and budget
 
 Prepared 2026-09-27 for an owner handoff. This is a request list, **not** an
 instruction to buy or deploy anything now. The current sprint brief explicitly
@@ -8,7 +8,7 @@ The items below are needed to turn that work into a real, supportable launch.
 Prices are public US list prices checked on this date; account terms, region,
 taxes, and actual usage can change.
 
-## The short version to send the boss
+## The short version to send Rishit
 
 1. **Confirm the publishing entity and brand.** Who legally owns Verdure, what
    seller name should appear in the App Store, and should
@@ -34,7 +34,7 @@ taxes, and actual usage can change.
 
 ## Money: required, conditional, and optional
 
-| Item | Public price / exposure | Boss decision | Current Verdure state |
+| Item | Public price / exposure | Rishit's decision | Current Verdure state |
 | --- | --- | --- | --- |
 | **Apple Developer Program** | **$99/year** in the US for an individual or organization. Apple may grant eligible nonprofits, schools, or government bodies a waiver. [Apple enrollment](https://developer.apple.com/programs/enroll/) | Choose organization versus individual enrollment, an authorized Account Holder, and who pays. Organization enrollment needs a legal entity, domain-associated work email, public website, and D-U-N-S number; the D-U-N-S request itself is free. [Apple D-U-N-S](https://developer.apple.com/help/account/membership/D-U-N-S) | Needed for TestFlight, App Store distribution, subscription setup, and production APNs. **Basic testing on a personally owned iPhone can be done with a free Apple Account in Xcode**, with short-lived provisioning; it is not a substitute for launch. [Apple personal-team limits](https://developer.apple.com/help/account/basics/about-your-developer-account) |
 | **Firebase / Google Cloud Blaze** | **$0 fixed plan fee; pay as used.** A Cloud Billing account/payment method is required. Firestore, Functions, Storage, network, build artifacts, and secrets can create charges. Budget alerts are warnings, not a hard cap. [Firebase pricing](https://firebase.google.com/pricing), [billing guidance](https://firebase.google.com/docs/projects/billing/firebase-pricing-plans) | Approve a monthly test and launch budget, link company billing to project `connectify-19dd8`, enable Storage, and designate who watches charges. | Project was last verified on Spark, with no deployed Functions or composite indexes. Live guest event reads are denied by old rules. No upgrade or deploy has been made. The [read budget](READ-BUDGET.md) is a floor, not a production invoice. |
@@ -55,7 +55,7 @@ purchases. [Apple IAP setup](https://developer.apple.com/help/app-store-connect/
 
 ## Accounts and information the company must create or grant
 
-| Priority | Ask the boss for | Why and exact handoff |
+| Priority | Ask Rishit for | Why and exact handoff |
 | --- | --- | --- |
 | 1 | **Legal entity name, publishing choice, authorized contact, business phone/address, and D-U-N-S status.** | Apple organization enrollment displays the legal entity as the seller. A DBA/brand alone is insufficient. The Account Holder needs an Apple Account with two-factor authentication. Also settle whether `verdure-app.com` is canonical. |
 | 1 | **Domain registrar and Vercel project ownership.** | Identify the domain/DNS admin, current Vercel team/plan, and a role-based developer invitation. The site must eventually publish working `/invite`, `/support`, and `/terms` routes and the approved privacy text. No website deployment has been authorized. |
