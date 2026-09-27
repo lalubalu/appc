@@ -72,7 +72,7 @@ struct EventsView: View {
                 VStack(alignment: .leading, spacing: Spacing.xl) {
                     kineticHero.dramaticRise(index: 0)
                     if let notice = eventsService.coverageNotice { coverageBanner(notice) }
-                    forYouSection.dramaticRise(index: 1)
+                    if !sourceEvents.isEmpty { forYouSection.dramaticRise(index: 1) }
                     posterDeck.dramaticRise(index: 2)
                     upcomingTimeline.dramaticRise(index: 3)
                 }
@@ -282,32 +282,6 @@ struct EventsView: View {
                 }
             }
 
-            // Attended summary — card layout (per feedback)
-            HStack(alignment: .center, spacing: Spacing.md) {
-                VStack(alignment: .leading, spacing: 3) {
-                    CountUp(value: gameState.totalEventsAttended)
-                        .font(VType.num(54, .bold)).monospacedDigit()
-                        .foregroundStyle(Palette.evergreen.onColor)
-                        .breathing(scale: 1.03, duration: 3)
-                    Text("events attended").font(VType.body(14, .semibold))
-                        .foregroundStyle(Palette.evergreen.onColor.opacity(0.85))
-                    HStack(spacing: 5) {
-                        Image(systemName: "star.fill").font(.system(size: 12, weight: .bold))
-                        Text("\(gameState.pointsBalance) pts").font(VType.num(14, .bold))
-                    }
-                    .foregroundStyle(Palette.gold.base).padding(.top, 4)
-                }
-                Spacer()
-                Image(systemName: "calendar.badge.checkmark")
-                    .font(.system(size: 42, weight: .semibold))
-                    .foregroundStyle(Palette.evergreen.onColor.opacity(0.55))
-                    .accessibilityHidden(true)   // decorative glyph
-            }
-            .padding(Spacing.lg)
-            .frame(maxWidth: .infinity)
-            .background(ClayBackground(style: .accent(.evergreen), radius: Radius.lg, elevation: 1.1))
-            .accessibilityElement(children: .combine)
-
             // Recent searches (local only) + filter/sort entry + live result count.
             RecentSearchesRow { q in search.text = q; search.commit(into: filters) }
                 .padding(.horizontal, -Spacing.md)
@@ -344,7 +318,7 @@ struct EventsView: View {
     private var posterDeck: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
             HStack(spacing: 6) {
-                KickerLabel(text: "Featured events", color: Palette.teal.base)
+                KickerLabel(text: "Events near you", color: Palette.spruce.base)
                 Spacer()
                 Image(systemName: "bookmark").font(.system(size: 12, weight: .bold))
                     .foregroundStyle(Palette.inkFaint)

@@ -83,7 +83,7 @@ struct CommunityView: View {
     }
 
     private func kind(for index: Int) -> ClayStyle.ClayAccentKind {
-        [.teal, .gold, .spruce, .terracotta][index % 4]
+        .spruce
     }
 
     // MARK: - Header

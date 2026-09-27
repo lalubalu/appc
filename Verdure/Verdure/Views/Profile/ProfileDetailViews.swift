@@ -6,7 +6,7 @@ import SwiftUI
 // MARK: - Badge accent helper
 
 private func badgeKind(_ index: Int) -> ClayStyle.ClayAccentKind {
-    [.teal, .gold, .spruce, .terracotta][index % 4]
+    .spruce
 }
 
 // MARK: - All Badges

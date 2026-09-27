@@ -91,105 +91,71 @@ struct ProfileView: View {
         }
     }
 
-    // MARK: - Player card (full-bleed 3D trading card)
+    // MARK: - Profile summary
 
     private var playerCard: some View {
         let avatarInitials = initials
-        return ZStack {
-            // ambient depth behind the medallion
-            FloatingBlob(color: Palette.teal.base.opacity(0.45), size: 150, delay: 0).offset(x: -80, y: -60)
-            FloatingBlob(color: Palette.gold.base.opacity(0.4), size: 120, delay: 0.7).offset(x: 90, y: 10)
-
-            VStack(spacing: Spacing.md) {
-                HStack(alignment: .top, spacing: Spacing.md) {
-                    PhotosPicker(selection: $photoItem, matching: .images) {
-                        ZStack(alignment: .bottomTrailing) {
-                            UserAvatar(initials: avatarInitials, size: 52, accent: Palette.teal)
-                            Image(systemName: "camera.fill").font(.system(size: 9, weight: .bold))
-                                .foregroundStyle(Palette.spruce.onColor)
-                                .padding(5).background(Circle().fill(Palette.spruce.base))
-                                .overlay(Circle().strokeBorder(Palette.evergreen.base, lineWidth: 1.5))
-                                .offset(x: 3, y: 3)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("PLAYER CARD").font(VType.body(12, .bold)).tracking(2.5)
-                            .foregroundStyle(Palette.gold.base)
-                            .shadow(color: .black.opacity(0.35), radius: 3, x: 0, y: 1)
-                        HStack(spacing: 7) {
-                            Text(displayName).font(VType.display(26, .bold))
-                                .foregroundStyle(Palette.evergreen.onColor).lineLimit(1).minimumScaleFactor(0.7)
-                            if store.isPlus {
-                                // Verdure+ member badge — a live subscriber perk.
-                                HStack(spacing: 3) {
-                                    Image(systemName: "medal.fill").font(.system(size: 9, weight: .bold))
-                                    Text("PLUS").font(VType.body(9, .bold)).tracking(0.8)
-                                }
-                                .foregroundStyle(Palette.gold.onColor)
-                                .padding(.horizontal, 7).padding(.vertical, 4)
-                                .background(ClayBackground(style: .accent(.gold), radius: Radius.chip, elevation: 0.35))
-                                .accessibilityLabel("Verdure Plus member")
-                            }
-                        }
-                        Text("Member since \(joinDate)")
-                            .font(VType.body(12, .medium))
-                            .foregroundStyle(Palette.evergreen.onColor.opacity(0.6))
-                    }
-                    Spacer()
-                    rewardsButton
-                }
-
-                ZStack {
-                    PulseHalo(color: Palette.teal.base.opacity(0.7), size: 130, lineWidth: 2)
-                    PulseHalo(color: Palette.gold.base.opacity(0.5), size: 160, lineWidth: 1.5)
-                    MedallionHero(size: 150, interactive: true).breathing(scale: 1.05, duration: 3)
-                }
-                .frame(height: 150)
-
-                // Oversized level number that bleeds to the corner
-                HStack(alignment: .bottom) {
-                    VStack(alignment: .leading, spacing: -10) {
-                        Text("LEVEL").font(VType.body(11, .bold)).tracking(2.5)
-                            .foregroundStyle(Palette.evergreen.onColor.opacity(0.7))
-                        CountUp(value: level)
-                            .font(VType.num(72, .bold)).monospacedDigit()
-                            .foregroundStyle(
-                                LinearGradient(colors: [Palette.gold.gloss, Palette.gold.base],
-                                               startPoint: .top, endPoint: .bottom))
-                    }
-                    Spacer()
-                    VStack(alignment: .trailing, spacing: 2) {
-                        CountUp(value: gameState.pointsBalance)
-                            .font(VType.num(30, .bold)).monospacedDigit()
-                            .foregroundStyle(Palette.evergreen.onColor)
-                        Text("points").font(VType.body(11, .medium))
-                            .foregroundStyle(Palette.evergreen.onColor.opacity(0.6))
+        return VStack(alignment: .leading, spacing: Spacing.lg) {
+            HStack(spacing: Spacing.md) {
+                PhotosPicker(selection: $photoItem, matching: .images) {
+                    ZStack(alignment: .bottomTrailing) {
+                        UserAvatar(initials: avatarInitials, size: 64, accent: Palette.spruce)
+                        Image(systemName: "camera.fill")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(Palette.spruce.onColor)
+                            .padding(5).background(Circle().fill(Palette.spruce.base))
+                            .offset(x: 3, y: 3)
                     }
                 }
-
-                VStack(spacing: 6) {
-                    HStack {
-                        Text("\(totalXP) XP").font(VType.num(11, .bold))
-                            .foregroundStyle(Palette.evergreen.onColor.opacity(0.8))
-                        Spacer()
-                        Text("\(level * 500) XP → level \(level + 1)")
-                            .font(VType.num(11, .medium))
-                            .foregroundStyle(Palette.evergreen.onColor.opacity(0.55))
-                    }
-                    ClayProgressBar(value: heroAppeared ? levelProgress : 0,
-                                    gradient: [Palette.teal.base, Palette.teal.gloss, Palette.gold.base],
-                                    height: 14)
+                .buttonStyle(.plain)
+                .accessibilityLabel("Change profile photo")
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("YOUR PROFILE")
+                        .font(VType.body(10, .bold)).tracking(1.8)
+                        .foregroundStyle(Palette.spruce.base)
+                    Text(displayName)
+                        .font(VType.display(28, .bold))
+                        .foregroundStyle(Palette.ink)
+                        .lineLimit(1).minimumScaleFactor(0.7)
+                    Text("Member since \(joinDate)")
+                        .font(VType.body(12, .medium))
+                        .foregroundStyle(Palette.inkSoft)
+                }
+                Spacer(minLength: 0)
+                if store.isPlus {
+                    Label("PLUS", systemImage: "leaf.fill")
+                        .font(VType.body(10, .bold))
+                        .foregroundStyle(Palette.spruce.base)
+                        .accessibilityLabel("Verdure Plus member")
                 }
             }
-            .padding(Spacing.lg)
+
+            Rectangle().fill(Palette.spruce.base.opacity(0.16)).frame(height: 1)
+
+            HStack(alignment: .firstTextBaseline) {
+                Label("Level \(level)", systemImage: "leaf")
+                    .font(VType.body(16, .semibold))
+                    .foregroundStyle(Palette.ink)
+                Spacer()
+                Text("\(gameState.pointsBalance) points")
+                    .font(VType.num(15, .semibold))
+                    .foregroundStyle(Palette.spruce.base)
+            }
+            VStack(spacing: 6) {
+                ClayProgressBar(value: heroAppeared ? levelProgress : 0,
+                                gradient: [Palette.spruce.base, Palette.spruce.gloss], height: 8)
+                HStack {
+                    Text("\(totalXP) XP")
+                    Spacer()
+                    Text("Next level at \(level * 500) XP")
+                }
+                .font(VType.body(11, .medium))
+                .foregroundStyle(Palette.inkSoft)
+            }
         }
-        .frame(maxWidth: .infinity)
-        // Clip the content (floating blobs) to the card shape, THEN draw the clay
-        // background behind it so its outer float shadow isn't clipped away.
-        .clipShape(RoundedRectangle(cornerRadius: Radius.xl, style: .continuous))
-        .background(ClayBackground(style: .accent(.evergreen), radius: Radius.xl, elevation: 1.3))
-        .parallaxTilt(magnitude: 6, shadow: false)
+        .padding(Spacing.lg)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .claySurface(.surface, radius: Radius.lg, elevation: 0.8)
     }
 
     private var rewardsButton: some View {
@@ -211,9 +177,9 @@ struct ProfileView: View {
     private var statsOrbit: some View {
         HStack(spacing: 10) {
             statTile(gameState.totalEventsAttended, "Events", "calendar.badge.checkmark", .spruce, dy: 0)
-            statTile(gameState.totalCollected, "Places", "leaf.fill", .teal, dy: 14)
-            statTile(gameState.currentStreak, "Streak", "flame.fill", .terracotta, dy: 0)
-            statTile(gameState.lifetimePoints, "Lifetime", "sparkles", .gold, dy: 14)
+            statTile(gameState.totalCollected, "Places", "leaf.fill", .spruce, dy: 0)
+            statTile(gameState.currentStreak, "Streak", "flame.fill", .spruce, dy: 0)
+            statTile(gameState.lifetimePoints, "Lifetime", "sparkles", .spruce, dy: 0)
         }
     }
 
@@ -257,7 +223,7 @@ struct ProfileView: View {
         VStack(spacing: 9) {
             ZStack {
                 if badge.earned {
-                    let bk: ClayStyle.ClayAccentKind = [.teal, .gold, .spruce, .terracotta][index % 4]
+                    let bk: ClayStyle.ClayAccentKind = .spruce
                     PulseHalo(color: bk.accent.base.opacity(0.6), size: 64, lineWidth: 1.5)
                     ClayIconTile(systemImage: badge.icon, kind: bk, size: 58, radius: Radius.chip)
                         .idleFloat(distance: 3, duration: 2.8 + Double(index % 3) * 0.4)
@@ -287,7 +253,7 @@ struct ProfileView: View {
                 HStack(spacing: 12) {
                     ForEach(Array(challenges.enumerated()), id: \.element.id) { i, c in
                         Button { Haptics.soft(); selectedChallenge = c } label: {
-                            challengeCard(c, kind: [.teal, .gold, .spruce, .terracotta][i % 4])
+                            challengeCard(c, kind: .spruce)
                         }
                         .buttonStyle(.plain)
                     }

@@ -106,6 +106,10 @@ two numbers.
 | 4.8 | Open an SCU or library event whose feed has no coordinates | Check-in never presents a false venue pin or awards proximity points from a guessed location | ☐ |
 | 4.9 | Open a Mountain View Library programme and a San José public meeting | Both display the right local time and official source link; a closed session never appears | ☐ |
 | 4.10 | Browse after two feeds publish the same event | One card appears, rich image/description survive, and source attribution includes both feeds | ☐ |
+| 4.11 | Open a library teen workshop, a volunteer trail day, and a concert | Category, age, cost and indoor/outdoor labels agree with the source details | ☐ |
+| 4.12 | Browse Discover with zero events, then a populated feed | The empty state is readable above the tab bar; events appear ahead of personal stats | ☐ |
+| 4.13 | Increase Dynamic Type through accessibility sizes on every tab | Headings, chips, card actions and tab labels remain readable without clipping | ☐ |
+| 4.14 | Turn on Reduce Motion, then browse every tab | Essential transitions remain clear; decorative movement does not obscure controls | ☐ |
 
 ## Reporting
 

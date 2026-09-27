@@ -45,12 +45,9 @@ struct ExploreView: View {
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: Spacing.lg) {
                     header.riseIn(index: 0)
-                    heroBento.riseIn(index: 1)
-                    dailyGemTile.riseIn(index: 2)
-                    plannerTile.riseIn(index: 3)
-                    statsStrip.riseIn(index: 4)
-                    questsSection.riseIn(index: 5)
-                    nearbySection.riseIn(index: 6)
+                    nearbySection.riseIn(index: 1)
+                    plannerTile.riseIn(index: 2)
+                    dailyGemTile.riseIn(index: 3)
                 }
                 .padding(.horizontal, Spacing.md)
                 .padding(.top, Spacing.sm)
@@ -323,7 +320,7 @@ struct ExploreView: View {
                 // truncating or ending up ragged.
                 HStack(alignment: .top, spacing: 14) {
                     ForEach(Array(GamificationEngine.challenges(for: gameState).enumerated()), id: \.element.id) { i, c in
-                        QuestCard(challenge: c, kind: [.teal, .gold, .spruce, .terracotta][i % 4])
+                        QuestCard(challenge: c, kind: .spruce)
                     }
                 }
                 .fixedSize(horizontal: false, vertical: true)

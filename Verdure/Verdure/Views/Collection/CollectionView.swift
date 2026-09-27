@@ -47,54 +47,33 @@ struct CollectionView: View {
         }
     }
 
-    // MARK: - Vault hero (oversized count-up + 3D core + pulse)
+    // MARK: - Collection summary
 
     private var vaultHero: some View {
-        VStack(spacing: Spacing.md) {
-            KickerLabel(text: "The Vault", color: Palette.gold.base, dot: Palette.gold.base)
-
-            ZStack {
-                PulseHalo(color: Palette.teal.base.opacity(0.6), size: 210, lineWidth: 2)
-                PulseHalo(color: Palette.gold.base.opacity(0.4), size: 150, lineWidth: 2)
-                FloatingBlob(color: Palette.teal.base.opacity(0.35), size: 130, delay: 0).offset(x: -90, y: -10)
-                FloatingBlob(color: Palette.gold.base.opacity(0.3), size: 100, delay: 0.7).offset(x: 95, y: 20)
-                MedallionHero(size: 150, interactive: false)
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            KickerLabel(text: "YOUR COLLECTION", color: Palette.spruce.base, dot: Palette.spruce.base)
+            Text("Places collected")
+                .font(VType.display(34, .bold))
+                .foregroundStyle(Palette.ink)
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("\(gameState.totalCollected)")
+                    .font(VType.num(42, .bold)).foregroundStyle(Palette.spruce.base)
+                Text("of \(allCollectibles.count) nearby places")
+                    .font(VType.body(14, .medium)).foregroundStyle(Palette.inkSoft)
             }
-            .frame(height: 180)
-
-            VStack(spacing: 2) {
-                Text("POINT BALANCE").font(VType.body(11, .bold)).tracking(2)
-                    .foregroundStyle(Palette.inkSoft)
-                CountUp(value: gameState.pointsBalance)
-                    .font(VType.num(72, .bold)).monospacedDigit()
-                    .foregroundStyle(Palette.ink)
-                    .breathing(scale: 1.03, duration: 3)
-                Text("Lifetime · \(gameState.lifetimePoints) pts earned")
-                    .font(VType.num(12, .medium)).foregroundStyle(Palette.inkFaint)
+            ClayProgressBar(value: progress,
+                            gradient: [Palette.spruce.base, Palette.spruce.gloss], height: 8)
+            Button { showRewardsStore = true } label: {
+                Label("See rewards", systemImage: "gift")
+                    .font(VType.body(14, .semibold))
+                    .foregroundStyle(Palette.spruce.base)
             }
-
-            HStack(spacing: Spacing.md) {
-                NeonProgressRing(progress: progress, size: 78, lineWidth: 6, showLabel: false)
-                    .overlay {
-                        VStack(spacing: 0) {
-                            Text("\(gameState.totalCollected)").font(VType.num(22, .bold)).foregroundStyle(Palette.ink)
-                            Text("of \(allCollectibles.count)").font(VType.body(9, .medium)).foregroundStyle(Palette.inkSoft)
-                        }
-                    }
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("\(Int(progress * 100))% collected")
-                        .font(VType.display(17, .semibold)).foregroundStyle(Palette.ink)
-                    ClayButton("Redeem rewards", systemImage: "gift.fill", kind: .gold) {
-                        showRewardsStore = true
-                    }
-                    .breathing(scale: 1.02, duration: 2.4)
-                }
-            }
-            .padding(Spacing.lg)
-            .frame(maxWidth: .infinity)
-            .claySurface(.surface, radius: Radius.lg, elevation: 1.1)
-            .padding(.horizontal, Spacing.md)
+            .buttonStyle(.plain)
         }
+        .padding(Spacing.lg)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .claySurface(.surface, radius: Radius.lg, elevation: 0.8)
+        .padding(.horizontal, Spacing.md)
     }
 
     // MARK: - Rarity filters
