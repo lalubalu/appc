@@ -132,6 +132,11 @@ and the iOS Simulator build passed after switching the in-app website base to
 `verdure-app.com` and removing the dead public Terms button. The registered
 Firebase Verdure iOS app matches the local bundle ID and plist. No production
 write or deploy occurred.
+An additional read-only source snapshot now gives the ranking reviewer 233
+source-linked, geocoded events and a 20-profile unlabeled template; see
+`RANKING-EVAL.md`. The evaluator requires a named reviewer and matching corpus
+hash before it will calculate precision. This does not replace the later
+populated-production-corpus evaluation.
 
 | Scope | Still needed |
 | --- | --- |

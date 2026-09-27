@@ -152,6 +152,10 @@ The registered Firebase Verdure iOS app matches this project's bundle ID and
 plist. The active website's `/terms` and `/support` routes return 404, and
 Verdure has no receiving email yet. The owner requested no deployment and no
 email setup at this time. None of these preview counts pass a live gate.
+For the ranking reviewer, a separate read-only export froze 233 source-linked
+events and 20 unlabeled profile contexts with a matching snapshot hash;
+[RANKING-EVAL.md](RANKING-EVAL.md) gives the handoff. No human relevance
+judgments or precision score were fabricated.
 
 1. Populate the event index through an authorized ingest path; re-run the
    baseline/end coverage measurement, by-source delta, duplicate rate,

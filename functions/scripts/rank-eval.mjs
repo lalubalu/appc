@@ -4,6 +4,7 @@
  * supply the twenty profile -> relevant event ID pairs.
  */
 import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { rankEvents } from "../lib/ranking.js";
 
 const [corpusPath, goldenPath] = process.argv.slice(2);
@@ -16,6 +17,15 @@ const corpus = JSON.parse(readFileSync(corpusPath, "utf8"));
 const golden = JSON.parse(readFileSync(goldenPath, "utf8"));
 if (!Array.isArray(corpus.events) || !Array.isArray(golden.profiles) || golden.profiles.length !== 20) {
   throw new Error("Corpus must have events[] and golden set must have exactly 20 profiles[].");
+}
+if (!golden.reviewerName?.trim() || !golden.reviewedAt?.trim()) {
+  throw new Error("Golden set needs a named human reviewer and review date.");
+}
+if (corpus.corpusHash && golden.corpusHash !== corpus.corpusHash) {
+  throw new Error("Golden labels were made for a different frozen corpus.");
+}
+if (corpus.corpusHash && corpus.corpusHash !== createHash("sha256").update(JSON.stringify(corpus.events)).digest("hex")) {
+  throw new Error("The frozen corpus changed after it was exported.");
 }
 const eventIds = new Set(corpus.events.map((e) => e.id));
 const nowMs = Number(corpus.snapshotAtMs);
