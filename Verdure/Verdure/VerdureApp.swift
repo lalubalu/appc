@@ -52,6 +52,7 @@ struct VerdureApp: App {
         CrashReporting.configure(unitTestHost: false, localEmulator: false)
         PushService.shared.start()
         #endif
+        if !unitTestHost { LivePartnerAlerts.shared.start() }
     }
 
     var body: some Scene {
@@ -136,7 +137,7 @@ struct RootView: View {
                     }
                     .onChange(of: scenePhase) { _, phase in
                         guard phase == .active else { return }
-                        LivePartnerAlerts.shared.connect(authService.currentUser?.uid)
+                        if authService.isAuthStateResolved { LivePartnerAlerts.shared.connect(authService.currentUser?.uid) }
                         gameState.recordActiveDay()   // streak counts foregrounds across days
                         // First foreground of a new day → show the Daily Gem.
                         checkDailyGem()

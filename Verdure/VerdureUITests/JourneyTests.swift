@@ -28,9 +28,26 @@ final class JourneyTests: XCTestCase {
         app.buttons["Done"].tap()
         let program = app.buttons["event-category:Program"]
         let categories = app.scrollViews["eventCategories"]
-        for _ in 0..<10 where !categories.isHittable { app.swipeUp() }
         QA.waitFor(categories, "category shortcuts", timeout: 30)
-        for _ in 0..<4 { categories.swipeLeft() }
+        // AX can expose a horizontal ScrollView before it has a visible frame.
+        // Reach the actual row, then drag inside its clipped on-screen bounds.
+        let usableScreen = app.frame.insetBy(dx: 0, dy: 160)
+        for _ in 0..<10 {
+            let row = categories.frame.intersection(usableScreen)
+            if !row.isNull && row.width > 40 && row.height > 10 { break }
+            if categories.frame.height > 0 && categories.frame.maxY < usableScreen.minY { app.swipeDown() } else { app.swipeUp() }
+        }
+        for _ in 0..<6 where !program.exists || program.frame.isEmpty || !usableScreen.contains(program.frame) {
+            let row = categories.frame.intersection(usableScreen)
+            guard !row.isNull, row.width > 40, row.height > 10 else {
+                let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "Program category row offscreen"; shot.lifetime = .keepAlways; add(shot)
+                XCTFail("Category row must be on screen before a horizontal gesture")
+                return
+            }
+            let start = app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: row.minX + row.width * 0.85, dy: row.midY))
+            let end = app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: row.minX + row.width * 0.15, dy: row.midY))
+            start.press(forDuration: 0.05, thenDragTo: end)
+        }
         let visible = program.waitForExistence(timeout: 30)
         if !visible {
             let failure = XCTAttachment(screenshot: app.screenshot()); failure.name = "Program chip failure"; failure.lifetime = .keepAlways; add(failure)
@@ -38,7 +55,10 @@ final class JourneyTests: XCTestCase {
         }
         XCTAssertTrue(visible, "ten current Programs enable the chip")
         guard visible else { return }
-        program.tap()
+        XCTAssertFalse(program.frame.isEmpty, "Program chip needs a rendered frame")
+        XCTAssertTrue(usableScreen.contains(program.frame), "Program chip must be fully on screen")
+        guard !program.frame.isEmpty, usableScreen.contains(program.frame) else { return }
+        program.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         let card = app.buttons.matching(identifier: "event-poster").matching(NSPredicate(format: "label BEGINSWITH %@", "Fictional native program 0, Program")).firstMatch
         QA.waitFor(card, "actual curated Program poster", timeout: 30)
         // Bring the poster above the persistent tab bar before tapping it.

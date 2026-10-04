@@ -59,11 +59,6 @@ import CoreLocation
         func set(_ path: String, _ values: [String: Any]) async throws {
             try await request("/\(path)", method: "PATCH", body: ["fields": fields(values)])
         }
-        func until(_ stage: String, _ condition: () -> Bool) async throws {
-            let end = Date().addingTimeInterval(10)
-            while !condition() && Date() < end { try await Task.sleep(for: .milliseconds(40)) }
-            XCTAssertTrue(condition(), "Actual partner service did not receive \(stage).")
-        }
         // A missing service is an explicit skip, never physical-device proof.
         do { try await set("qaPartnerListener/\(suffix)", ["local": true]) }
         catch let error as URLError where error.code == .cannotConnectToHost {
@@ -71,6 +66,11 @@ import CoreLocation
         }
         let user = try await Auth.auth().signInAnonymously().user
         let service = PartnerDiscoveryService()
+        func until(_ stage: String, _ condition: () -> Bool) async throws {
+            let end = Date().addingTimeInterval(10)
+            while !condition() && Date() < end { try await Task.sleep(for: .milliseconds(40)) }
+            XCTAssertTrue(condition(), "Actual partner service did not receive \(stage); offers=\(service.offers.map(\.id)), near=\(service.nearYou?.id ?? "nil"), error=\(service.error ?? "none"), auth=\(Auth.auth().currentUser?.uid ?? "guest").")
+        }
         let origin = CLLocation(latitude: 33.2, longitude: -114.1)
         let partner: [String: Any] = ["active": true, "name": "Fictional iOS live fixture", "category": "retail",
             "latitude": origin.coordinate.latitude, "longitude": origin.coordinate.longitude,

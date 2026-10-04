@@ -420,3 +420,66 @@ final class CoreLogicTests: XCTestCase {
         XCTAssertTrue(PlaceCategory.community.relatedEventCategories.contains(.social))
     }
 }
+
+
+final class LivePartnerWakeTests: XCTestCase {
+    @MainActor func testAuthRestorationConnectsWithoutForegroundViewAndSignOutClearsEligibility() async throws {
+        XCTAssertEqual(Firestore.firestore().settings.host, "127.0.0.1:8899")
+        try Auth.auth().signOut()
+        let service = LivePartnerAlerts()
+        service.start()
+        _ = try await Auth.auth().signIn(withEmail: "program-native-adult@example.test", password: "local-program-native-only")
+        let readyBy = Date().addingTimeInterval(15)
+        while !service.eligible, Date() < readyBy { try await Task.sleep(for: .milliseconds(40)) }
+        XCTAssertTrue(service.eligible, "Restored Auth and server profile must connect independently of RootView callbacks")
+        XCTAssertFalse(service.enabled, "An adult account without explicit consent stays off")
+        XCTAssertEqual(service.monitoredCount, 0)
+        try Auth.auth().signOut()
+        let clearedBy = Date().addingTimeInterval(15)
+        while service.eligible, Date() < clearedBy { try await Task.sleep(for: .milliseconds(40)) }
+        XCTAssertFalse(service.eligible)
+        XCTAssertFalse(service.enabled)
+        XCTAssertEqual(service.monitoredCount, 0)
+    }
+    func testColdEntryWaitsForSameAccountAndCurrentCatalog() {
+        let now = Date(timeIntervalSince1970: 1000), id = "verdure-live:fictional-a"
+        var wake = LivePartnerWakeBuffer(owner: "account-a")
+        wake.record(id, monitoredIDs: [id], now: now)
+        XCTAssertTrue(wake.belongs(to: "account-a"))
+        wake.bind("account-a")
+        XCTAssertEqual(wake.drain(currentIDs: [id], now: now.addingTimeInterval(5)), [id])
+        XCTAssertEqual(wake.drain(currentIDs: [id], now: now.addingTimeInterval(6)), [], "An entry is evaluated only once")
+    }
+    func testColdEntryCannotCrossAccountOrSignOut() {
+        let now = Date(timeIntervalSince1970: 1000), id = "verdure-live:fictional-a"
+        var wake = LivePartnerWakeBuffer(owner: "account-a")
+        wake.record(id, monitoredIDs: [id], now: now)
+        XCTAssertFalse(wake.belongs(to: "account-b"))
+        XCTAssertFalse(wake.belongs(to: nil))
+        wake.bind("account-b")
+        XCTAssertEqual(wake.drain(currentIDs: [id], now: now), [])
+        wake.record(id, monitoredIDs: [id], now: now)
+        wake.clear()
+        XCTAssertEqual(wake.drain(currentIDs: [id], now: now), [])
+    }
+    func testExpiredWithdrawnAndUnregisteredWakeEntriesDoNotDeliver() {
+        let now = Date(timeIntervalSince1970: 1000), id = "verdure-live:fictional-a"
+        var wake = LivePartnerWakeBuffer(owner: "account-a")
+        wake.record(id, monitoredIDs: [], now: now)
+        XCTAssertEqual(wake.drain(currentIDs: [id], now: now), [])
+        wake.record(id, monitoredIDs: [id], now: now)
+        XCTAssertEqual(wake.drain(currentIDs: [], now: now), [], "Fresh catalog withdrawal wins over the saved OS region")
+        wake.record(id, monitoredIDs: [id], now: now)
+        XCTAssertEqual(wake.drain(currentIDs: [id], now: now.addingTimeInterval(61)), [])
+        wake.record(id, monitoredIDs: [id], now: now.addingTimeInterval(1))
+        XCTAssertEqual(wake.drain(currentIDs: [id], now: now), [], "Future timestamps are not fresh")
+    }
+    func testWakeBufferIsBoundedAndRejectsOtherLocationFeatures() {
+        let now = Date(timeIntervalSince1970: 1000)
+        let ids = Set((0..<25).map { "verdure-live:fictional-\($0)" })
+        var wake = LivePartnerWakeBuffer(owner: "account-a")
+        for id in ids.sorted() { wake.record(id, monitoredIDs: ids, now: now) }
+        wake.record("other-feature:region", monitoredIDs: ["other-feature:region"], now: now)
+        XCTAssertEqual(wake.drain(currentIDs: ids, now: now).count, 20)
+    }
+}

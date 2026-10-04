@@ -82,3 +82,14 @@ follow-up gate closes. The same follow-up compiled the account/opt-out guard
 added across suspended permission awaits. Physical background delivery,
 including an OS location wake/account restoration, remains an explicit device
 case rather than being inferred from consent UI or server payloads.
+
+
+### Cold process restoration correction
+
+Apple documents that monitored regions persist across process launches and that location handling must be configured again after relaunch. The first A6 implementation cleared those regions on initial Auth connection and discarded the initial entry before online consent arrived. The correction starts Auth observation after Firebase/emulator setup independently of RootView; a foreground phase cannot treat unresolved Auth as sign-out. Only a first restore to the same locally recorded monitor-owner UID preserves OS registrations. Explicit opt-out, sign-out and account changes clear monitoring and buffered entries.
+
+An in-memory buffer keeps at most 20 registered `verdure-live:` identifiers for at most 60 seconds. After current server consent/age eligibility and Always authorization are confirmed, a fresh location/catalog resolves the still-current perk before the existing cap/quiet-hour/consent callable is used. There is no persisted GPS sample, prose or region catalog; the owner UID alone is stored locally to prevent cross-account restoration. Async consent and notification-settings completion recheck the account before further action. Permission requests remain inside the explicit flow.
+
+Five fresh regressions passed, including actual Firebase SDK Auth restoration and sign-out without a foreground view. The same focused attempt passed stationary partner invalidation, promotional consent and optional Explore (8 passes, 1 Program gesture failure); that independent Program gesture then passed its fresh one-test rerun. Receipts: `live-partner-wake-focused-attempt-2026-10-04.json` and `native-program-visible-chip-2026-10-04.json`. Physical OS wake/delivery remains UNTESTED; a broad native rerun of the new source is still required.
+
+References: [Apple monitored regions](https://developer.apple.com/documentation/corelocation/cllocationmanager/monitoredregions) and [significant-change restoration](https://developer.apple.com/documentation/corelocation/cllocationmanager/startmonitoringsignificantlocationchanges()).
