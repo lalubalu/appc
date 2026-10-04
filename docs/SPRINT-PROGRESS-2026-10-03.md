@@ -23,7 +23,7 @@ synonym map remain untouched; `CLAUDE.md` deploy status remains untouched.
 | B3 | Geocoded partners; activation requires recorded agreement; perks 500–2,000; CSV duplicate checks/counts; stock <10; immediate deactivation with reason | Implemented locally: 47 management checks and browser geocoded partner/perk/CSV/deactivation/map proof. Agreement and price/stock constraints enforced server-side. Stationary map/card invalidation verified; Rewards and other sponsored caches remain to audit. No real business activated. |
 | B4 | Support/organizer/merchant submissions; handled status/note | Implemented locally: 43 browser/server/database checks, canonical Firebase authorization for all 3 actions, Supabase immutable read/mutation audits and rollback proof. See WEBSITE-SUBMISSIONS-2026-10-04.md. |
 | B5 | Per-source ingestion failures/last success/count; duplicate rate; queue age; organizer count; treasury/planner/SerpApi spend | Implemented locally: persistent source failures/history, full current supply/duplicate heuristic, aggregated queues, recorded spend estimates. 14 server checks and actual adapter failure visible in browser; invoice reconciliation is not claimed. |
-| C1 | Separate weekly official place pipeline; licenses recorded before ingestion; geometry joins; loud console-visible failures | Source permissions recorded before ingestion: City CKAN CC BY and actual Hub-linked County policies/owned GIS items. Pipeline, field mapping, geometry joins and console failure workflow remain pending. See PARK-SOURCE-LICENSES-2026-10-04.md. |
+| C1 | Separate weekly official place pipeline; licenses recorded before ingestion; geometry joins; loud console-visible failures | Backend implemented locally: five permission-checked sources, Tuesday schedule, complete atomic catalog, exact geometry/hole joins, source health and actual browser outage/recovery. 59 new units + 33 pipeline/browser checks; 5,507 real usable features read back with every geometry checksum. Native place/event integration remains pending with C2. See PARK-PIPELINE-2026-10-04.md. |
 | C2 | Free parks: confirmed amenities/ages/events/trails/story/hours/access/status; filters; required attribution | Pending |
 | C3 | Free source-backed trail attributes/overlays/location; official closure link/notice; no navigation | Pending; optional, no cut decision yet |
 | C4 | Plus server entitlement; park/set/area packs; events/thumbnails/places/saves/plans/view-only perks; size preview/hard cap; storage/delete/age; Wi-Fi refresh/7-day expiry; offline overlays/location; no offline writes/check-in/base imagery caching | Pending |
@@ -66,7 +66,7 @@ are in STAFF-CONSOLE-2026-10-04.md. A reused working-emulator broad run failed
 16 fixture-collision checks; the isolated runner resolves that test setup issue.
 
 Remaining software work includes Rewards/other sponsored cache correctness and A6;
-all C park/offline work; D2/D3 curation/supply; F stories/optional explore;
+C1 native integration and C2–C5 park/offline work; D2/D3 curation/supply; F stories/optional explore;
 H1 inventory and H2 Crashlytics. No optional feature has been silently cut.
 Physical two-phone and outdoor offline GPS/crash gates remain required.
 The full sprint and final gate are still incomplete.
@@ -90,3 +90,26 @@ The full sprint and final gate are still incomplete.
 
 No physical-device, outdoor GPS, production index, push delivery, purchase or
 crash-report proof is implied by these local results.
+
+## October 4 park-pipeline checkpoint
+
+- Permission was recorded before capture. Five official sources returned
+  5,510 public features; 5,507 have usable geometry. Three null trail geometries
+  are surfaced in source health. One City zero-area component is explicitly
+  normalized, with its valid polygon retained and the change recorded.
+- The complete catalog was published only to the local Firestore emulator and
+  fully read back with all geometry checksums verified. Atomic publication
+  prevents incomplete downloads from replacing the catalog. Old concurrent
+  runs cannot erase newer failures or results.
+- New park checks: 59 units and 33 pipeline/browser checks passed, including
+  actual staff-screen outage/prior-success/recovery, direct SDK rules and
+  multi-chunk lossless geometry. The browser's mobile layout was inspected.
+- Fresh isolated backend gates: 345 units, 337 end-to-end checks, 49 attacks
+  blocked. Website production build and lint passed.
+- C1 backend scheduling, normalization, source-health and geometry helpers are
+  implemented. Native geometry connection, C2–C5 and all other pending rows
+  above remain part of the full sprint. No scope has been cut or redefined.
+
+See PARK-PIPELINE-2026-10-04.md for exact reruns, source/permission limits,
+counts and evidence. Neither native/device park behavior nor deployment has
+been claimed.

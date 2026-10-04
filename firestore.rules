@@ -77,6 +77,12 @@ service cloud.firestore {
     match /sourceHealth/{sourceId} {
       allow read, write: if false;
     }
+    // Official place data is published atomically and served through the park
+    // API. Clients cannot select an incomplete generation or mutate sources.
+    match /placeSourceHealth/{sourceId} { allow read, write: if false; }
+    match /placeIngestRuns/{runId} { allow read, write: if false; }
+    match /parkCatalog/{docId} { allow read, write: if false; }
+    match /parkGenerations/{generation}/{document=**} { allow read, write: if false; }
     // Ingestion telemetry. Run logs and coverage reports are operational data
     // written by the scheduled jobs; the treasury holds spend + quota counters.
     match /ingestRuns/{docId} {

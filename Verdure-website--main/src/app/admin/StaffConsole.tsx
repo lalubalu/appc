@@ -21,6 +21,10 @@ type OperationsData = {
   area: { id: string; name: string }; areas: { id: string; name: string }[]; computedAtMs: number; month: string;
   sources: { source: string; lastRunAtMs: number | null; lastSuccessfulRunAtMs: number | null; lastSuccessfulEvents: number | null;
     lastRunEvents: number | null; lastOutcome: string; currentErrors: string[]; lastError: string | null; lastErrorAtMs: number | null; activeEvents: number }[];
+  placeSources: { source: string; name: string; lastRunAtMs: number | null; lastSuccessfulRunAtMs: number | null;
+    lastSuccessfulFeatures: number | null; lastRunFeatures: number | null; normalized: number | null; skippedNullGeometry: number;
+    normalizedGeometryFeatures: number; lastOutcome: string; currentErrors: string[]; lastError: string | null; lastErrorAtMs: number | null; datasetURL: string }[];
+  placeCatalog: { generation: string | null; publishedAtMs: number | null; count: number; latestOutcome: string; latestError: string | null };
   activeEvents: { total: number; bySource: Record<string, number> };
   duplicates: { active: number; suspected: number; rate: number; method: string };
   queues: { pendingReports: number; oldestReportHours: number | null; pendingOrganizers: number };
@@ -192,6 +196,23 @@ function Operations({ onAccessLost }: { onAccessLost: () => void }) {
             {!s.currentErrors.length && s.lastError && <details><summary>Previous error</summary><p>{s.lastError}</p><p>{date(s.lastErrorAtMs)}</p></details>}</td>
         </tr>)}</tbody></table></div>
       <details><summary>All primary source counts</summary><ul>{Object.entries(data.activeEvents.bySource).map(([source, count]) => <li key={source}>{source}: {count}</li>)}</ul></details>
+      <h3>Park and trail data</h3>
+      <p>Separate weekly pipeline, refreshed Tuesday mornings. Last complete catalog: {date(data.placeCatalog.publishedAtMs)}
+        {data.placeCatalog.generation ? ` · ${data.placeCatalog.count.toLocaleString()} source features` : " · no catalog published"}.</p>
+      {data.placeCatalog.latestError && <p role="alert" className="staff-overdue">Latest catalog update failed: {data.placeCatalog.latestError}
+        {data.placeCatalog.generation ? " The previous complete catalog remains available." : " Park data is unavailable until a complete update succeeds."}</p>}
+      <div className="staff-table-scroll" role="region" aria-label="Park data source health" tabIndex={0}><table className="staff-table">
+        <thead><tr>{["Source", "Latest run", "Last successful run", "Features returned", "Usable geometry", "Errors"].map((x) => <th key={x} scope="col">{x}</th>)}</tr></thead>
+        <tbody>{data.placeSources.map((s) => <tr key={s.source}>
+          <th scope="row"><a href={s.datasetURL} target="_blank" rel="noopener noreferrer">{s.name}</a>
+            <span className={s.lastOutcome === "failed" ? "staff-overdue" : ""}>{s.lastOutcome === "never-run" ? "No recorded run" : s.lastOutcome}</span></th>
+          <td>{date(s.lastRunAtMs)}</td><td>{date(s.lastSuccessfulRunAtMs)}</td>
+          <td>{s.lastRunFeatures ?? "Not recorded"}<span>Last success: {s.lastSuccessfulFeatures ?? "not recorded"}</span></td>
+          <td>{s.normalized ?? "Not recorded"}{s.skippedNullGeometry > 0 && <span>{s.skippedNullGeometry} source features lack geometry and cannot be joined.</span>}
+            {s.normalizedGeometryFeatures > 0 && <span>{s.normalizedGeometryFeatures} features had empty polygon components omitted; valid geometry retained.</span>}</td>
+          <td>{s.currentErrors.length ? <ul>{s.currentErrors.map((error, i) => <li key={i}>{error}</li>)}</ul> : "No current error"}
+            {!s.currentErrors.length && s.lastError && <details><summary>Previous error</summary><p>{s.lastError}</p><p>{date(s.lastErrorAtMs)}</p></details>}</td>
+        </tr>)}</tbody></table></div>
       <h3>Spend and limits</h3><div className="staff-metrics">
         <article><h3>Reward commitments</h3><strong>{dollars(data.spend.rewardCommittedUsd)} / {dollars(data.spend.rewardCapUsd)}</strong>
           <p>{dollars(data.spend.rewardFulfilledUsd)} fulfilled. {data.spend.rewardPaused ? "Cash rewards are paused by the treasury kill switch." : "Treasury kill switch is off."}</p></article>

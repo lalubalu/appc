@@ -1,8 +1,9 @@
 # Park source terms, checked before feature ingestion
 
-C1 is in progress. This records permission and source discovery, not a working
-pipeline, park guide, offline pack or device result. No feature data has yet been
-ingested by the new pipeline. Source metadata is captured in
+C1 is in progress. This permission review was committed before any feature
+ingestion. The separate backend pipeline has since been implemented and checked
+locally; see `PARK-PIPELINE-2026-10-04.md`. Native guides/offline packs and device
+results are still pending. Source metadata is captured in
 `evidence/park-source-metadata-2026-10-04.json` with exact endpoint URLs and time.
 
 ## City of San José
@@ -52,10 +53,10 @@ metadata/terms changes and fail visibly if permission or source access changes.
 
 ## Next implementation gates
 
-Inspect actual fields and coded values before mapping amenities/status or age
-suitability. Use geometry to join existing places and events, retain source IDs
-and licenses, and expose unknown values as unknown. Weekly ingestion remains a
-separate place pipeline with per-source errors visible in the staff console.
+Actual fields/coded values were inspected before mapping. The weekly backend
+pipeline retains source IDs/licenses, uses geometry rather than names, leaves
+unknown values unknown and exposes failures in the staff console. Native
+place/event consumption of those geometry joins remains pending with C2.
 Server pack entitlement, size/expiry and offline-action restrictions, app park
 filters/guides/trail overlays, matching copy and physical offline GPS testing
 remain outstanding requirements.

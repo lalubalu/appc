@@ -8,17 +8,19 @@ import { loadSourceHealth } from "./ingest/health.js";
 import { auditSuspectedDuplicates } from "./ingest/store.js";
 import { GLOBAL_MONTHLY_TREASURY_CAP_USD } from "./economy.js";
 import { SERPAPI_MONTHLY_CAP } from "./ingest/sources/serpapi.js";
+import { loadPlaceSourceHealth, placeCatalogState } from "./parks/store.js";
 
 export async function operationsSnapshot(areaId: string, now = Date.now()) {
   const area = areaById(areaId);
   if (!area) throw new HttpsError("invalid-argument", "Unknown launch area.");
   const month = utcMonthKey(new Date(now));
   const openReports = db.collection("moderationQueue").where("status", "==", "open");
-  const [sources, treasury, reportCount, oldest, organizerCount] = await Promise.all([
+  const [sources, treasury, reportCount, oldest, organizerCount, placeSources, placeCatalog] = await Promise.all([
     Promise.all(SOURCES.map((source) => loadSourceHealth(source, areaId))),
     db.doc(`treasury/${month}`).get(), openReports.count().get(),
     openReports.orderBy("firstReportedAt").limit(1).get(),
     db.collection("organizers").where("status", "==", "pending").count().get(),
+    loadPlaceSourceHealth(), placeCatalogState(),
   ]);
   // Read the complete active/upcoming corpus, in pages with field projection.
   // The duplicate heuristic is the same venue/time/title audit as ingestion.
@@ -41,6 +43,7 @@ export async function operationsSnapshot(areaId: string, now = Date.now()) {
   const age = oldest.docs[0]?.data().firstReportedAt?.toMillis?.();
   return { area: { id: area.id, name: area.name }, areas: LAUNCH_AREAS.map((a) => ({ id: a.id, name: a.name })),
     computedAtMs: now, month, sources: sources.map((row) => ({ ...row, activeEvents: counts[row.source] ?? 0 })),
+    placeSources, placeCatalog,
     activeEvents: { total: events.length, bySource: counts },
     duplicates: { ...duplicates, method: "Suspected duplicates: similar titles, within 2 hours, same venue or within 300 m. This is a heuristic, not a human accuracy measure." },
     queues: { pendingReports: reportCount.data().count, oldestReportHours: age === undefined ? null : Math.max(0, (now - age) / 3_600_000),
