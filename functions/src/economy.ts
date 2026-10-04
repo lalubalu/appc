@@ -43,7 +43,8 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { appendStaffAudit, auditedStaffJob, staffReason } from "./staff-audit.js";
-import { loadSurfacablePerks, partnerHasAgreement } from "./partners.js";
+import { loadSurfacablePerks, loadActivePartnerPerks, partnerHasAgreement } from "./partners.js";
+import { writePerkStatus } from "./partner-status.js";
 import { PERK_MIN_COST, PERK_MAX_COST } from "./staff-partners.js";
 export { PERK_MIN_COST, PERK_MAX_COST, upsertPartnerPerk, seedPartnerPerks, SEED_PERKS } from "./staff-partners.js";
 import {
@@ -331,6 +332,7 @@ export const redeemReward = onCall(async (req) => {
 
     tx.set(codeDoc.ref, { claimedBy: uid, claimedAt: Timestamp.now() }, { merge: true });
     tx.set(perkRef, { redeemedCount: FieldValue.increment(1), codePoolCount: FieldValue.increment(-1) }, { merge: true });
+    writePerkStatus(tx, rewardId, { ...perk, codePoolCount: (Number(perk.codePoolCount) || 0) - 1 });
     tx.set(userRef, {
       redeemedRewardIDs: FieldValue.arrayUnion(rewardId),
       pointsBalance: balance - cost,
@@ -366,7 +368,7 @@ export const listRewardsCatalog = onCall(async (req) => {
   const now = Date.now();
   const [userSnap, perksSnap, tSnap] = await Promise.all([
     db.collection("users").doc(uid).get(),
-    db.collection("partnerPerks").where("active", "==", true).limit(100).get(),
+    loadActivePartnerPerks(),
     treasuryRef().get(),
   ]);
   const user = userSnap.data() ?? {};

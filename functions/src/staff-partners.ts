@@ -3,7 +3,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { Timestamp, FieldPath } from "firebase-admin/firestore";
 import { createHash } from "node:crypto";
 import { db, requireAdmin, safeString, docIdFrom } from "./common.js";
-import { partnerHasAgreement } from "./partners.js";
+import { partnerHasAgreement, writePartnerStatus, writePerkStatus } from "./partner-status.js";
 import { appendStaffAudit, auditStaffRead, staffReason } from "./staff-audit.js";
 
 export const PERK_MIN_COST = 500, PERK_MAX_COST = 2000;
@@ -94,6 +94,7 @@ export const savePartner = onCall({ timeoutSeconds: 30 }, async (req) => {
     const after = { ...before, name, category, address, contactName, contactEmail, contactPhone, ...location,
       agreement: nextAgreement, active, hidden: false, createdAt: before?.createdAt ?? now, updatedAt: now };
     tx.set(ref, after);
+    writePartnerStatus(tx, partnerId, after);
     appendStaffAudit(tx, staff, "partner:save", ref.path, before, after, reason);
     return { partnerId, active, latitude: after.latitude, longitude: after.longitude, matchedAddress: after.matchedAddress };
   });
@@ -180,6 +181,7 @@ export const upsertPartnerPerk = onCall(async (req) => {
       codePoolCount: unused + codes.length, redeemedCount: Number(before?.redeemedCount) || 0, hidden: false,
       createdAt: before?.createdAt ?? now, updatedAt: now };
     tx.set(ref, after); addCodes(tx, ref, codes, now);
+    writePerkStatus(tx, perkId, after);
     appendStaffAudit(tx, staff, "perk:save", ref.path, before, { ...after, codesAdded: codes.length }, reason);
     return { perkId, codesAdded: codes.length, codesLeft: after.codePoolCount, lowStock: after.codePoolCount < 10 };
   });
@@ -193,6 +195,7 @@ export const importPartnerCodes = onCall(async (req) => {
     if (!snap.exists) throw new HttpsError("not-found", "Create the perk first.");
     const unused = await checkExistingCodes(tx, ref, codes), now = Timestamp.now(), after = { codePoolCount: unused + codes.length, updatedAt: now };
     addCodes(tx, ref, codes, now); tx.update(ref, after);
+    writePerkStatus(tx, perkId, { ...snap.data(), ...after });
     appendStaffAudit(tx, staff, "perk:import-codes", ref.path, { codePoolCount: snap.data()!.codePoolCount ?? 0 },
       { ...after, codesAdded: codes.length }, reason);
     return { perkId, codesAdded: codes.length, codesLeft: after.codePoolCount, lowStock: after.codePoolCount < 10 };
@@ -209,6 +212,8 @@ export const deactivatePartnerOffer = onCall(async (req) => {
     if (!snap.exists) throw new HttpsError("not-found", "No such partner or perk.");
     const change = { active: false, deactivatedAt: Timestamp.now(), deactivatedBy: staff, deactivationReason: reason };
     tx.update(ref, change);
+    if (kind === "partner") writePartnerStatus(tx, targetId, { ...snap.data(), ...change });
+    else writePerkStatus(tx, targetId, { ...snap.data(), ...change });
     appendStaffAudit(tx, staff, `${kind}:deactivate`, ref.path, snap.data(), { ...snap.data(), ...change }, reason);
     return { targetId, active: false };
   });
@@ -256,6 +261,7 @@ export const seedPartnerPerks = onCall(async (req) => {
       const after = { ...p, partnerId, active: true, description: "Local fixture offer", terms: "Placeholder partner — replace before launch.",
         earlyAccessUntil: null, expiresAt: Timestamp.fromMillis(Date.now() + 30 * 86400000), codePoolCount: 5, redeemedCount: 0, hidden: false, updatedAt: now };
       tx.set(partnerRef, partner); tx.create(ref, after);
+      writePartnerStatus(tx, partnerId, partner); writePerkStatus(tx, p.perkId, after);
       addCodes(tx, ref, Array.from({ length: 5 }, (_, i) => `${p.perkId.toUpperCase().slice(0, 8)}-${String(i + 1).padStart(3, "0")}`), now);
       appendStaffAudit(tx, staff, "partner:seed-local", partnerRef.path, oldPartner.data(), partner, "Seed fictional local fixture");
       appendStaffAudit(tx, staff, "perk:seed-local", ref.path, null, after, "Seed fictional local fixture");

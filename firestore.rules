@@ -106,6 +106,17 @@ service cloud.firestore {
         allow read, write: if false;
       }
     }
+    // Minimal live invalidation metadata for already-displayed offers. No
+    // agreement, business contact, offer text or code values are copied here.
+    // Clients can listen to known IDs, but cannot enumerate or mutate them.
+    match /partnerStatus/{partnerId} {
+      allow get: if request.auth != null;
+      allow list, write: if false;
+    }
+    match /perkStatus/{perkId} {
+      allow get: if request.auth != null;
+      allow list, write: if false;
+    }
 
     // ──────────────────────────────────────────────
     // ANALYTICS: /analytics/{yyyy-mm-dd}/events/{id}

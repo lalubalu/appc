@@ -60,3 +60,17 @@
 .staff-table ul { list-style:disc; padding-left:18px; }
 @media(max-width:800px) { .staff-workspace { grid-template-columns:1fr; } .staff-shell { padding:24px 18px; } .staff-header h1 { font-size:34px; } .staff-form-grid { grid-template-columns:1fr; } .staff-detail { padding:18px; } }
 @media(prefers-reduced-motion:reduce) { .staff-shell * { scroll-behavior:auto; transition:none!important; } }
+.staff-submissions { display: grid; gap: 1.5rem; margin: 1.5rem 0; }
+.staff-submission { background: #fffdf6; border: 1px solid #c5cdbd; border-radius: 1rem; padding: 1.4rem; overflow-wrap: anywhere; }
+.staff-submission header { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: space-between; align-items: baseline; }
+.staff-submission h3 { font-size: 1.4rem; }
+.staff-submission dl { display: grid; gap: .8rem; margin: 1rem 0; }
+.staff-submission dt { font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; font-weight: 700; }
+.staff-submission dd { white-space: pre-wrap; line-height: 1.6; }
+.staff-submission dd small { display: block; }
+.staff-submission form { display: grid; gap: .8rem; }
+.staff-submission a { text-decoration: underline; }
+.staff-resolution { border-left: 3px solid #467652; padding: 1rem; background: #edf0e7; }
+.staff-audit-history { margin-top: .8rem; }
+.staff-audit-history details { margin: .5rem 0; padding: .8rem; border: 1px solid #c5cdbd; border-radius: .5rem; }
+.staff-audit-history pre { white-space: pre-wrap; font-size: .8rem; }

@@ -12,16 +12,16 @@ synonym map remain untouched; `CLAUDE.md` deploy status remains untouched.
 | --- | --- | --- |
 | D1 | Internship → Program; source-metadata mappings; fixed-input before/after confidence overall/per source/reason; regenerated 200-row sample; finishing commit and classifier freeze | Complete at `d4b7150`: 12,165 fixed inputs; 32.77% → 11.68%; 200 rows with blank human labels. 274 Functions units and 103 iOS units passed. Hash guard records frozen classifier/source mappings. See CLASSIFICATION-AUDIT.md. |
 | A1 | No partners in organic For You/Everything; allowed map/near_you surfaces; regression | Implemented locally; allowed surfaces and organic-feed regression: 16 focused checks. See PARTNER-SURFACES-2026-10-04.md. |
-| A2 | Distinct partner map pins; per-user persistent default-on toggle; detail/distance/dismissal | Implemented locally; default-on per-user toggle, distinct pins/detail, dismissal; scoped simulator control/audit checked. Remaining: full discovery beyond 100 perks and immediate invalidation of stationary caches. |
-| A3 | One walking-distance/time-appropriate Discover card; When-In-Use only; persistent dismissal; no far fallback | Implemented locally; 800 m, server local-time rules, one session slot, dismissal and hour expiry; focused checks. Same catalog/cache follow-ups as A2; physical venue QA pending. |
-| A4 | Nearby default rewards sort with location; existing fallback | Implemented locally; 107 iOS units include distance/fallback/tie behavior; scoped Rewards UI checked. Complete catalog beyond 100 perks remains to fix. |
+| A2 | Distinct partner map pins; per-user persistent default-on toggle; detail/distance/dismissal | Implemented locally; default-on per-user toggle, distinct pins/detail, dismissal; scoped simulator control/audit checked. Full active catalog now paged beyond 500 and stationary pins invalidated by safe public metadata. 25 connected catalog/listener checks and an actual iOS SDK invalidation/expiry test passed. |
+| A3 | One walking-distance/time-appropriate Discover card; When-In-Use only; persistent dismissal; no far fallback | Implemented locally; 800 m, server local-time rules, one session slot, dismissal and hour expiry; focused checks. Stationary card invalidation, real timed expiry and account clearing tested with SDK listeners. Physical venue QA pending. |
+| A4 | Nearby default rewards sort with location; existing fallback | Implemented locally; 107 iOS units include distance/fallback/tie behavior; scoped Rewards UI checked. 502-fixture Rewards catalog returned in full. Rewards cache invalidation remains to audit; server redemption rechecks availability. |
 | A5 | One partner alert per RSVP; event venue proximity; shared weekly cap/quiet hours/preference; emulator proof | Implemented and locally checked: 19 RSVP-job checks, atomic shared budget and once-only notice; device push explicitly untested/excluded. |
 | A6 | Opt-in adult-only live promotional alerts; consent/Always toggle; nearest 20 regions; shared cap/privacy | Pending; optional, no cut decision yet |
 | B0 | Firebase admin claim CLI only; every endpoint server-gated; immutable admin-only before/after audit; red-team per path | Implemented locally: claim CLI, canonical Auth server checks, immutable audits for reads/mutations and intent/outcome for long jobs. 29 access checks and 12 legacy-job checks; see STAFF-CONSOLE-2026-10-04.md. |
 | B1 | Contextual moderation queue/history/filters/age, >20h highlight; reason-required remove/restore/warn/suspend | Implemented locally: 19 server workflow checks, 14 pagination/601-report checks, browser removal/restoration and >100 rows. Detailed reports show a bounded preview plus all reasons/count. |
 | B2 | Organizer approval/rejection reasons, 50-cap used/remaining | Implemented locally: 20 server checks including concurrent final-slot approvals; browser approval/cap and >100 application rows. |
-| B3 | Geocoded partners; activation requires recorded agreement; perks 500–2,000; CSV duplicate checks/counts; stock <10; immediate deactivation with reason | Implemented locally: 47 management checks and browser geocoded partner/perk/CSV/deactivation/map proof. Agreement and price/stock constraints enforced server-side. Stationary iOS cache invalidation remains; no real business activated. |
-| B4 | Support/organizer/merchant submissions; handled status/note | Pending |
+| B3 | Geocoded partners; activation requires recorded agreement; perks 500–2,000; CSV duplicate checks/counts; stock <10; immediate deactivation with reason | Implemented locally: 47 management checks and browser geocoded partner/perk/CSV/deactivation/map proof. Agreement and price/stock constraints enforced server-side. Stationary map/card invalidation verified; Rewards and other sponsored caches remain to audit. No real business activated. |
+| B4 | Support/organizer/merchant submissions; handled status/note | Implemented locally: 43 browser/server/database checks, canonical Firebase authorization for all 3 actions, Supabase immutable read/mutation audits and rollback proof. See WEBSITE-SUBMISSIONS-2026-10-04.md. |
 | B5 | Per-source ingestion failures/last success/count; duplicate rate; queue age; organizer count; treasury/planner/SerpApi spend | Implemented locally: persistent source failures/history, full current supply/duplicate heuristic, aggregated queues, recorded spend estimates. 14 server checks and actual adapter failure visible in browser; invoice reconciliation is not claimed. |
 | C1 | Separate weekly official place pipeline; licenses recorded before ingestion; geometry joins; loud console-visible failures | Pending |
 | C2 | Free parks: confirmed amenities/ages/events/trails/story/hours/access/status; filters; required attribution | Pending |
@@ -30,9 +30,9 @@ synonym map remain untouched; `CLAUDE.md` deploy status remains untouched.
 | C5 | Working-feature paywall/listing/website copy: offline park and place packs | Pending |
 | D2 | Existing supply audit; nine volunteer source fingerprints/terms; deduplicated in-radius count >=30; document exclusions | Pending |
 | D3 | Program taxonomy/client; staff curation with required age/cost/location/deadline/official link; >=10 radius threshold; age eligibility and deadline expiry; link-out only | Pending |
-| E1 | Neutral signup age gate; under-13 exits without retaining personal data; preserve 13–17 protections | Pending |
-| E2 | Local terms/support pages and restored app link; Supabase support → console; accurate privacy | Pending |
-| E3 | Organizer/calendar and merchant interest forms; Supabase → console | Pending |
+| E1 | Neutral signup age gate; under-13 exits without retaining personal data; preserve 13–17 protections | Implemented locally: neutral blank birth year before account fields, under-13 ends/clears volatile draft, signup age guard precedes credential processing, existing registerAgeBand unchanged. Two actual signup UI flows plus age boundary/persistence units passed. |
+| E2 | Local terms/support pages and restored app link; Supabase support → console; accurate privacy | Implemented locally: build plus 15 production-page/parity checks, 43 submission checks, Swift Terms URL resolves HTTP 200 against explicit local website. Public publication remains outside this sprint. |
+| E3 | Organizer/calendar and merchant interest forms; Supabase → console | Implemented locally: both native browser forms save exact fields in real local Supabase and appear in staff inbox; no partner activation from interest. 43 checks passed. |
 | F1 | Approved place-owner-only <=400-char stories; report/moderation; shown/read engagement | Pending; optional, no cut decision yet |
 | F2 | Optional free beta camera/GPS/compass view; permission only on open; no frames saved/transmitted; matching privacy; no pricing claim | Pending; optional, no cut decision yet |
 | G1 | Free-team installs on two real iPhones; local populated emulator via DEBUG opt-in | Pending; no hardware evidence collected |
@@ -65,8 +65,28 @@ typecheck/lint and existing IP/security checks passed. Evidence and exact reruns
 are in STAFF-CONSOLE-2026-10-04.md. A reused working-emulator broad run failed
 16 fixture-collision checks; the isolated runner resolves that test setup issue.
 
-Remaining software work includes partner catalog/cache correctness and A6;
-B4 with E forms; all C park/offline work; D2/D3 curation/supply; E age/privacy;
-F stories/optional explore; H1 inventory and H2 Crashlytics. No optional feature
-has been silently cut. Physical two-phone and outdoor offline GPS/crash gates
-remain required. The full sprint and final gate are still incomplete.
+Remaining software work includes Rewards/other sponsored cache correctness and A6;
+all C park/offline work; D2/D3 curation/supply; F stories/optional explore;
+H1 inventory and H2 Crashlytics. No optional feature has been silently cut.
+Physical two-phone and outdoor offline GPS/crash gates remain required.
+The full sprint and final gate are still incomplete.
+
+## October 4 continuation checkpoint
+
+- Partner catalogue and invalidation: Functions fresh build and 286 units;
+  25 catalogue/live-listener checks; 47 partner-management regressions;
+  108 iOS units including real SDK invalidation/expiry before the age changes.
+- Submissions: 43 actual browser/server/Supabase checks; fresh pending migration
+  replay in a rollback transaction, NULL accountability rejection and zero local
+  security-advisor findings. Data and secrets stay local/server-side.
+- Website: fresh production build, lint, 39 IP and 47 existing security checks;
+  15 legal/production-page checks, including cold production hydration and
+  exact app/website document parity. Development cold hydration stalls observed
+  earlier remain unexplained; a clean warmed development run passed.
+- iOS: fresh 112 passed / 0 failed / 0 skipped (110 units plus two signup UI
+  paths) at `Test-Verdure-2026.10.04_02-52-52--0700.xcresult`; subsequent
+  13 focused core/UI checks included the connected local Terms link, followed
+  by a fresh focused rerun of that link. See the website evidence document.
+
+No physical-device, outdoor GPS, production index, push delivery, purchase or
+crash-report proof is implied by these local results.

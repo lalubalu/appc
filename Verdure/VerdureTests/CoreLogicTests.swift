@@ -6,6 +6,62 @@ import XCTest
 @MainActor
 final class CoreLogicTests: XCTestCase {
 
+    func testSignupAgeAllowsNeutralAnswersAndKeepsMinorBoundary() {
+        XCTAssertEqual(AuthService.signupAgeDecision(birthYear: nil, currentYear: 2026), .invalid)
+        XCTAssertEqual(AuthService.signupAgeDecision(birthYear: 2027, currentYear: 2026), .invalid)
+        XCTAssertEqual(AuthService.signupAgeDecision(birthYear: 1915, currentYear: 2026), .invalid)
+        XCTAssertEqual(AuthService.signupAgeDecision(birthYear: 2026, currentYear: 2026), .under13)
+        XCTAssertEqual(AuthService.signupAgeDecision(birthYear: 2014, currentYear: 2026), .under13)
+        XCTAssertEqual(AuthService.signupAgeDecision(birthYear: 2013, currentYear: 2026), .eligible(2013))
+        XCTAssertEqual(AuthService.signupAgeDecision(birthYear: 2009, currentYear: 2026), .eligible(2009))
+        XCTAssertEqual(AuthService.signupAgeDecision(birthYear: 2008, currentYear: 2026), .eligible(2008))
+    }
+
+    func testRestoredTermsLinkResolvesAgainstExplicitLocalWebsite() async throws {
+        let defaults = UserDefaults.standard
+        let keys = ["QAUseFirestoreEmulator", "QAWebsiteBaseURL"]
+        let before = keys.map { defaults.object(forKey: $0) }
+        defer {
+            for (key, value) in zip(keys, before) {
+                if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) }
+            }
+        }
+        defaults.set(true, forKey: "QAUseFirestoreEmulator")
+        defaults.set("http://127.0.0.1:3105", forKey: "QAWebsiteBaseURL")
+        XCTAssertEqual(Legal.termsOfServiceURL.absoluteString, "http://127.0.0.1:3105/terms")
+        var request = URLRequest(url: Legal.termsOfServiceURL)
+        request.timeoutInterval = 10
+        let data: Data, response: URLResponse
+        do { (data, response) = try await URLSession.shared.data(for: request) }
+        catch { throw XCTSkip("Start the local website on port 3105 to verify the restored web Terms link: \(error.localizedDescription)") }
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
+        XCTAssertTrue(String(decoding: data, as: UTF8.self).contains("Terms of Service"))
+        defaults.set("https://evil.example", forKey: "QAWebsiteBaseURL")
+        XCTAssertEqual(Legal.termsOfServiceURL.absoluteString, "https://verdure-app.com/terms")
+        defaults.set("http://evil.127.0.0.1:3105", forKey: "QAWebsiteBaseURL")
+        XCTAssertEqual(Legal.termsOfServiceURL.absoluteString, "https://verdure-app.com/terms")
+        defaults.set("http://127.0.0.1:3105", forKey: "QAWebsiteBaseURL")
+        defaults.set(false, forKey: "QAUseFirestoreEmulator")
+        XCTAssertEqual(Legal.termsOfServiceURL.absoluteString, "https://verdure-app.com/terms")
+    }
+
+    func testUnder13SignupEndsBeforeCredentialProcessingOrPersistence() async {
+        let auth = AuthService()
+        let originalUser = auth.currentUser
+        let keys = ["accountType", "interestCategories", "verdureUser"]
+        let before = keys.map { UserDefaults.standard.object(forKey: $0) as? NSObject }
+        do {
+            try await auth.signUp(email: "invalid-before-age-check", password: "", displayName: "", birthYear: Calendar.current.component(.year, from: Date()) - 12,
+                                  studentStatus: true, school: "Under13 fixture", interests: ["Under13 fixture"])
+            XCTFail("An under-13 answer must never reach account creation")
+        } catch {
+            XCTAssertEqual(auth.errorMessage, "Sign-up is unavailable for this birth year.")
+        }
+        XCTAssertEqual(auth.currentUser?.uid, originalUser?.uid)
+        XCTAssertFalse(auth.isLoading)
+        XCTAssertEqual(keys.map { UserDefaults.standard.object(forKey: $0) as? NSObject }, before)
+    }
+
     private let gemKeys = ["dailyGem.splashDay", "dailyGem.indexDay", "dailyGem.todayIndex", "dailyGem.seenIndices"]
 
     override func setUp() async throws {

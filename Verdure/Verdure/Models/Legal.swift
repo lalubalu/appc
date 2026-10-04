@@ -6,24 +6,47 @@ import Foundation
 // of Use (EULA) and Privacy Policy INSIDE the app, and 5.1.1 requires the policy
 // to be reachable from the app. Both documents ship in the binary so the links
 // remain available even when a website route is unavailable. The active
-// website is Verdure-website--main; its privacy copy needs owner review before
-// publication, and its Terms and Support routes have not been published.
+// website is Verdure-website--main. Terms, support and corrected privacy are
+// built locally; this change does not publish the website.
 
 enum Legal {
-    /// Confirmed public domain. Only /privacy is live; /terms and /support
-    /// remain pre-submission blockers in AppStore/LISTING.md.
+    /// Canonical website domain. New local routes still require publication
+    /// before release; bundled documents remain available offline.
     static let siteBase = "https://verdure-app.com"
 
     /// Apple's standard Licensed Application End User License Agreement — the
     /// EULA declared for the app in App Store Connect, and always reachable.
     static let appleStandardEULAURL = URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!
-    static let privacyPolicyURL = URL(string: "\(siteBase)/privacy")!
+    static var termsOfServiceURL: URL { websiteURL(path: "terms") }
+    static var supportURL: URL { websiteURL(path: "support") }
+    static var privacyPolicyURL: URL { websiteURL(path: "privacy") }
+
+    private static func websiteURL(path: String) -> URL {
+        #if DEBUG
+        // Explicit local QA only. Release always uses the canonical domain.
+        // This lets the restored app link resolve against the unpublished
+        // local website without a deploy or changing production configuration.
+        if UserDefaults.standard.bool(forKey: "QAUseFirestoreEmulator"),
+           let value = UserDefaults.standard.string(forKey: "QAWebsiteBaseURL"),
+           let base = URL(string: value), let host = base.host,
+           base.scheme == "http", base.user == nil, base.password == nil,
+           base.query == nil, base.fragment == nil, base.path.isEmpty || base.path == "/" {
+            let labels = host.split(separator: ".", omittingEmptySubsequences: false)
+            let parts = labels.compactMap { Int($0) }
+            let privateIPv4 = labels.count == 4 && parts.count == 4 && parts.allSatisfy { (0...255).contains($0) } &&
+                (parts[0] == 10 || parts[0] == 127 || (parts[0] == 192 && parts[1] == 168) ||
+                 (parts[0] == 172 && (16...31).contains(parts[1])))
+            if host == "localhost" || host == "::1" || privateIPv4 { return base.appendingPathComponent(path) }
+        }
+        #endif
+        return URL(string: siteBase)!.appendingPathComponent(path)
+    }
 
     /// The single source of truth for the support address. Declared HERE rather
     /// than on ModerationService: that type is @MainActor, so a nonisolated
     /// static like this one cannot read from it (it did not compile).
     static let contactEmail = "support@verdure-app.com"
-    static let lastUpdated = "September 27, 2026"
+    static let lastUpdated = "October 4, 2026"
 
     /// Subscription facts, stated once so the paywall, the terms and the store
     /// listing cannot disagree. Prices shown to the user come from StoreKit.
@@ -49,43 +72,47 @@ enum Legal {
         Section(title: "Who can use Verdure",
                 body: "You must be at least 13 years old to create an account. If you are under 18, use Verdure with a parent or guardian's permission. You are responsible for keeping your sign-in details private and for everything done through your account."),
         Section(title: "Verdure+ subscription",
-                body: "Verdure+ is an optional auto-renewable subscription available as a \(Subscription.monthlyLength) plan or a \(Subscription.yearlyLength) plan. The price and subscription length are shown in the app before you buy and are charged to your Apple ID at confirmation of purchase. The subscription renews automatically at the same price and length unless you turn off auto-renew at least 24 hours before the current period ends. You can manage or cancel it in your Apple ID account settings; cancelling stops future renewals but does not refund the current period, and refund requests are handled by Apple. Member benefits are those listed on the paywall in the version of the app you are using — nothing else is promised. If a benefit is withdrawn we will say so in the app before your next renewal."),
+                body: "Verdure+ is an optional auto-renewable subscription available as a 1 month plan or a 1 year plan. The price and subscription length are shown in the app before you buy and are charged to your Apple ID at confirmation of purchase. The subscription renews automatically at the same price and length unless you turn off auto-renew at least 24 hours before the current period ends. You can manage or cancel it in your Apple ID account settings; cancelling stops future renewals but does not refund the current period, and refund requests are handled by Apple. Member benefits are those listed on the paywall in the version of the app you are using — nothing else is promised. If a benefit is withdrawn we will say so in the app before your next renewal."),
         Section(title: "Points and rewards",
                 body: "Points are earned by verified activity in Verdure — checking in at events with your location and a proof photo, and collecting places you physically visit. Points have no cash value, cannot be bought, sold or transferred, and are not your property. Daily earning is capped, and cash gift-card redemptions are limited to a rolling twelve-month value per member and a monthly programme-wide budget; when either limit is reached the app tells you and redemption pauses. Partner perks are fulfilled by the partner on the partner's terms. We may withhold, reverse or cancel points and redemptions obtained through fraud, misrepresentation, automation or abuse, and may close accounts that do so. Rewards are delivered by email to the address on your account and may take several business days."),
         Section(title: "Your content and conduct",
-                body: "You own what you post. By posting you give us a licence to show it to other Verdure users as part of the service. Don't post anything unlawful, harassing, hateful, sexually explicit, dangerous, deceptive, or that you don't have the right to share. Every post, event and profile can be reported; reports are reviewed by a person within 24 hours, content reported by several people is hidden immediately, and unreviewed reports lead to removal at the 24-hour mark. You can block any member. We may remove content or suspend accounts that break these rules. Questions about a moderation decision: \(Legal.contactEmail)."),
+                body: "You own what you post. By posting you give us a licence to show it to other Verdure users as part of the service. Don't post anything unlawful, harassing, hateful, sexually explicit, dangerous, deceptive, or that you don't have the right to share. Every post, event and profile can be reported; reports are reviewed by a person within 24 hours, content reported by several people is hidden immediately, and unreviewed reports lead to removal at the 24-hour mark. You can block any member. We may remove content or suspend accounts that break these rules. Questions about a moderation decision: use the support form at https://verdure-app.com/support."),
         Section(title: "Events and safety",
                 body: "Events are published by community organizers or gathered from public calendars and ticketing feeds. We don't run them and can't guarantee they take place as listed. Use your own judgement about where you go and who you meet, especially outdoors. Never trespass, and follow the rules of the venue or park."),
         Section(title: "Your account",
-                body: "You can delete your account at any time from Profile › Settings › Delete Account. Deletion permanently removes your profile, points, collection, posts, events, RSVPs, photos and any gift cards not yet sent; delivered gift cards are unaffected. We may close inactive or abusive accounts."),
+                body: "Delete your app account from Profile › Settings › Delete Account. Account-owned data is removed by a server-side process; a failed request can be retried. Sent gift cards are unaffected and financial records are anonymized for accounting. Website requests and staff audit records are separate and follow the Privacy Policy. We may suspend or close accounts for abuse."),
         Section(title: "Disclaimers and liability",
                 body: "Verdure is provided \"as is\". To the fullest extent permitted by law we disclaim warranties of any kind and are not liable for indirect, incidental or consequential damages, or for any loss arising from events, places or people you encounter through the app. Nothing here limits rights you have under consumer law that cannot be excluded."),
         Section(title: "Changes",
                 body: "We may update these Terms. If a change is material we will tell you in the app before it takes effect, and continuing to use Verdure afterwards means you accept it. The date at the top is the current version."),
         Section(title: "Contact",
-                body: "Verdure — \(Legal.contactEmail). Support: \(Legal.siteBase)/support."),
+                body: "Verdure — support requests: https://verdure-app.com/support."),
+        Section(title: "Website requests and partnerships",
+                body: "Support and partnership interest forms send a request to our team for review. Submission does not approve an organizer, activate a merchant offer or create a business agreement. A merchant offer requires a recorded written confirmation before activation. Do not submit information you are not authorized to share."),
     ]
 
-    // MARK: - Privacy Policy (mirrors the website; both change together)
+    // MARK: - Privacy Policy (mirrors src/lib/legal.ts on the website)
 
     static let privacySections: [Section] = [
         Section(title: "The short version",
-                body: "We collect your account details, your location when you check in, and the photos you choose to attach as proof of attendance. We use them to run the app — points, collections, rewards and events. Nothing is sold and nothing is used to target you across other apps or websites. Verdure does show offers from local partners, always labelled; partners are never given your personal information, and a partner offer never changes the order of what we recommend."),
-        Section(title: "What we collect",
-                body: "Account: your email address, display name, and birth year to apply age safeguards (passwords are handled by Firebase Authentication and never stored by us). If you choose to identify as a student, we store that status and any school you provide to recommend relevant activities. You can optionally save children's ages, accessibility preferences, usual transport and typical distance for event recommendations and warnings. These household choices are stored privately with your account and can be changed or cleared in Profile. Location: with your permission, your precise location to show what's nearby, to check you're close enough to collect a place, and to verify event check-ins; the coordinates at check-in are kept as an attendance record. Photos: only the images you explicitly pick as proof of attendance. Posts, events and RSVPs you create are shown to other users with your display name. Private group plans, invitations and shortlist votes are visible to accepted friends in that plan. Subscription status, so member benefits unlock; Apple handles payment and we never see card details. Game state: points, places, events, streak and badges. Interests, saved events, viewed events, your more/less feedback, and ranked-feed impressions and actions are stored with your account to order and evaluate recommendations."),
-        Section(title: "What we do not do",
-                body: "No tracking across other apps or websites, and no third-party advertising or analytics SDKs. No selling or sharing your personal information with data brokers. No background location — it is read only while you use the app. No contacts, health or browsing data. We keep first-party app-use analytics tied to a random per-install identifier, with no names, post content or precise location in those records. When enabled, ranked-feed impressions and actions are linked to your account so we can evaluate recommendations; they include event IDs, position and score signals. Switch off Product Analytics in Profile › Settings to stop both kinds of new analytics records."),
-        Section(title: "Who processes data for us",
-                body: "Google Firebase (Authentication, Firestore, Cloud Functions, Cloud Storage) runs accounts, game state and proof photos. Apple processes subscription payments. Gift cards are delivered by our fulfilment partner using the email on your account. Local partners whose offers you redeem receive only the fact that a code was claimed — never your name, email, location or activity. Public place and event information comes from open sources such as OpenStreetMap, the National Park Service, public library and civic calendars and ticketing feeds — those are content lookups; your personal data is not sent to them."),
-        Section(title: "How long we keep it",
-                body: "Account and game data is kept while your account exists. Attendance records and proof photos are kept while they may need to be verified and are deleted with the account. Deleting your account in Profile › Settings removes everything above immediately; records of gift cards already delivered are kept in anonymised form for accounting."),
-        Section(title: "Your choices and rights",
-                body: "Grant or revoke location in iOS Settings › Privacy & Security › Location Services › Verdure. Turn notifications off in the app or in iOS Settings. Delete your account from Profile › Settings. Depending on where you live (for example the EEA/UK under GDPR or California under the CCPA) you may have additional rights to access, correct, port or delete your information; we honour these requests wherever you are — email \(Legal.contactEmail)."),
+                body: "Verdure uses your account, activity and optional location information to help you discover places and events, make plans, earn points and claim rewards. We do not sell personal information or track you across other apps or websites. Local partner offers are labelled and do not change organic recommendation order."),
+        Section(title: "Accounts and preferences",
+                body: "In the app we store your email address, display name and birth year for age safeguards. Firebase Authentication handles passwords. Optional information includes student status, school, interests, children’s ages, accessibility needs, usual transport and preferred distance. We store points, badges, streaks, collections, saved and viewed events, recommendation feedback and subscription status. Apple handles subscription payments; we receive transaction identifiers and entitlement information, not payment card details or billing or shipping addresses."),
+        Section(title: "Location, photos and social activity",
+                body: "With your permission, we use location while you use the app to show nearby places, events and partner offers, and to verify place collection and event check-ins. Check-in coordinates and proof photos you select are stored as attendance evidence. We do not continuously collect background location. Posts, events, RSVPs and public profile information may be visible to other members. Accepted friends in a group plan can see that plan, invitations and shortlist votes. Reports, blocking and moderation decisions are stored to protect members. A push registration token identifies the installation for notifications when available."),
+        Section(title: "Website forms and partner records",
+                body: "Website accounts and waitlist entries use Supabase. Support requests store your contact name and email, subject and message. Organizer interest stores organization, type, contact details, events per month and optional public calendar URL. Merchant interest stores business, category, business address, contact details and the offer considered. Avoid including sensitive information in a message. Authorized staff can review these requests and record handling notes. Partner records may include a business address, business contact details and a written agreement reference. Staff access and actions are logged with actor, target, time and relevant before and after values in restricted audit records. An interest form does not activate a partner or approve an organizer."),
+        Section(title: "Analytics, cookies and service logs",
+                body: "The app records first-party feature usage using a random per-install identifier, without names, post content or precise location in those records. Recommendation impressions and actions may be linked to your account and include event IDs, position and score signals. Product Analytics in Profile settings stops new app analytics records. The website uses Vercel Web Analytics for aggregate page use and performance, without analytics cookies or cross-site advertising tracking. Website sign-in uses essential authentication cookies; the site also uses session storage for an already-shown welcome animation. Hosting and service providers process technical request information such as IP addresses and error logs for operation and abuse prevention. The app does not currently integrate a third-party advertising or analytics SDK."),
+        Section(title: "Providers and external requests",
+                body: "Google Firebase operates app accounts, database, functions, photo storage and messaging. Supabase operates website accounts, waitlist and submitted requests. Vercel hosts the website and its web analytics. Apple processes subscriptions. Gift-card fulfilment uses the account email address. The optional AI planners send selected public event or place candidates and planning preferences such as interests, time and duration to Anthropic; event sequencing may include whether friends are going, without their names. Place, event, weather and geocoding providers may receive a search area, coordinates, query or business address needed for a lookup. Local partners are not given your account email, name, precise location or activity history through partner discovery. Redeeming a code reveals that code to you for use with the partner. Links to organizers and public calendars lead to separate services with their own privacy policies."),
+        Section(title: "Retention and deletion",
+                body: "App account and game data are kept while the account exists. Delete Account in Profile settings runs a server-side removal of account-owned data, attendance evidence and proof photos; failed deletion can be retried. Sent gift-card financial records are anonymized for accounting, and filed reports retain their moderation effect without the reporter identity. Website accounts, independently submitted support or interest forms, staff handling notes and immutable audit records are separate from app account deletion. They are retained for follow-up, service operation and accountability; these forms do not have an automatic expiry or deletion schedule. Use the support form to request access, correction or deletion, and we will explain any records that must be retained. Provider backups and operational logs may persist according to provider retention practices. We do not promise instant deletion from every backup or independent system."),
+        Section(title: "Your choices",
+                body: "Manage location and notification permissions in iOS Settings and update optional profile preferences in the app. Turn off Product Analytics in Profile settings. Delete the app account from Profile settings. Website sign-out clears its authentication session cookies. You can ask to access, correct or delete information through the support form. Depending on where you live, additional privacy rights may apply; requests are reviewed under applicable law."),
         Section(title: "Children",
-                body: "Verdure is not directed to children under 13 and we don't knowingly collect their information. If you believe a child has created an account, contact us and we will remove it."),
-        Section(title: "Security",
-                body: "Data travels over encrypted connections and is stored behind access rules that restrict each account to its own data. Points, check-ins, redemptions and moderation decisions are validated on our servers rather than trusted from the app."),
-        Section(title: "Changes",
-                body: "If we change how we handle data we will update this policy and its date, and surface material changes in the app."),
+                body: "People under 13 cannot create an app account. Birth year is used to apply age safeguards; members aged 13–17 receive minor protections. Verdure is not directed to children under 13. If you believe a child has provided information, contact us through the support form so we can investigate and remove it."),
+        Section(title: "Security and changes",
+                body: "We use encrypted connections, server-side authorization and restricted data access. Staff-only submission records and audit history are not public. No system is perfectly secure. If our data practices change, we will update this policy and its date and communicate material changes. Questions and privacy requests can be submitted at https://verdure-app.com/support."),
     ]
 }

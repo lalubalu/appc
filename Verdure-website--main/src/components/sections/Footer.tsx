@@ -17,6 +17,7 @@ let COMPANY_LINKS = [
   { label: "Our Story", href: "/story" },
   { label: "Team", href: "/story#team" },
   { label: "Partnerships", href: "/partnerships" },
+  { label: "Support", href: "/support" },
   { label: "Log In", href: "/login" },
 ];
 
@@ -91,6 +92,9 @@ export default function Footer()
             onClick={sound.playClick}
           >
             Privacy Policy
+          </Link>
+          <Link href="/terms" className="link-underline !flex min-h-[44px] items-center font-num text-[13px] text-cream/75 transition-colors duration-300 hover:text-cream" onMouseEnter={sound.playHover} onClick={sound.playClick}>
+            Terms of Service
           </Link>
         </div>
       </div>

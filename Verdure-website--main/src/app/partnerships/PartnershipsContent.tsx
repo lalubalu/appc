@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useSound } from "@/providers/SoundProvider";
 import PillButton from "@/components/ui/PillButton";
+import SubmissionForm from "@/components/SubmissionForm";
 
 /**
  * PartnershipsContent — full two-tone editorial restyle. Same real content
@@ -237,7 +238,7 @@ export default function PartnershipsContent()
               Bring a place worth walking to, and we&apos;ll bring the walkers.
             </p>
             <PillButton
-              href="/signup"
+              href="#interest"
               variant="ink"
               label="Get in touch"
               hoverLabel="Start the conversation"
@@ -245,6 +246,14 @@ export default function PartnershipsContent()
               onPress={sound.playClick}
             />
           </div>
+        </div>
+      </section>
+      <section id="interest" className="submission-interest">
+        <div className="submission-interest-intro"><span className="submission-eyebrow">Start a conversation</span>
+          <h2>A place for your<br />community.</h2><p>Tell us what you organize or what your business could offer. Our team reviews every request.</p></div>
+        <div className="submission-interest-grid">
+          <section className="submission-panel"><h3>For organizers</h3><p>Bring your public events to Verdure.</p><SubmissionForm kind="organizer" /></section>
+          <section className="submission-panel"><h3>For local businesses</h3><p>Explore an agreed offer for people nearby.</p><SubmissionForm kind="merchant" /></section>
         </div>
       </section>
     </div>

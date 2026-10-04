@@ -49,6 +49,8 @@ let ROUTES: Route[] = [
   { path: "/story", priority: 0.7, changeFrequency: "monthly" },
   { path: "/partnerships", priority: 0.7, changeFrequency: "monthly" },
   { path: "/privacy", priority: 0.3, changeFrequency: "yearly" },
+  { path: "/terms", priority: 0.3, changeFrequency: "yearly" },
+  { path: "/support", priority: 0.5, changeFrequency: "monthly" },
 ];
 
 export default function sitemap(): MetadataRoute.Sitemap

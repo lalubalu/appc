@@ -135,10 +135,12 @@ export let PAGE_UPDATED: Record<string, string> = {
   "/pricing": "2026-07-28",
   "/roadmap": "2026-07-28",
   "/story": "2026-07-28",
-  "/partnerships": "2026-07-28",
+  "/partnerships": "2026-10-04",
   // Matches UPDATED in privacy/PrivacyContent.tsx — the date shown to a reader
   // and the date given to a crawler describe the same document.
-  "/privacy": "2026-07-26",
+  "/privacy": "2026-10-04",
+  "/terms": "2026-10-04",
+  "/support": "2026-10-04",
 };
 
 /* --------------------------------------------------------------- JSON-LD */

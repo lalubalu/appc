@@ -6,17 +6,8 @@ struct OnboardingView: View {
     @Environment(AuthService.self) private var authService
     @State private var currentPage = 0
     @State private var selectedInterests: Set<PlaceCategory> = []
-    @AppStorage("interestCategories") private var interestCategoriesRaw = ""
-    @State private var userName = ""
-    @State private var userEmail = ""
-    @State private var userPassword = ""
-    @State private var birthDate = Calendar.current.date(byAdding: .year, value: -18, to: Date()) ?? Date()
-    @State private var isStudent = false
-    @State private var school = ""
-    @State private var isSignUp = true
-    @State private var showPasswordField = false
+    @State private var radiusMiles: Double = 15
     @State private var animateIn = false
-    @State private var isSubmitting = false
 
     private let pages = [
         OnboardingPage(
@@ -44,7 +35,11 @@ struct OnboardingView: View {
 
     var body: some View {
         if currentPage == totalPages - 1 {
-            AuthView(onComplete: {
+            AuthView(initialInterests: selectedInterests.map(\.rawValue), onSignupRejected: {
+                selectedInterests.removeAll(); radiusMiles = 15
+            }, onComplete: {
+                UserDefaults.standard.set(selectedInterests.map(\.rawValue).joined(separator: ","), forKey: "interestCategories")
+                filters.state.radiusMiles = radiusMiles
                 withAnimation(.spring(response: 0.5)) { hasCompletedOnboarding = true }
             })
             .transition(.move(edge: .trailing).combined(with: .opacity))
@@ -97,8 +92,6 @@ struct OnboardingView: View {
                         welcomePage(pages[currentPage], index: currentPage)
                     } else if currentPage == pages.count {
                         interestsPage
-                    } else {
-                        authPage
                     }
                 }
                 .transition(.asymmetric(
@@ -120,21 +113,9 @@ struct OnboardingView: View {
                     .padding(.bottom, Spacing.sm)
                     .accessibilityHidden(true)   // decorative dots — step info lives on the CTA hint
 
-                    if let error = authService.errorMessage {
-                        Text(error)
-                            .font(VType.body(13, .medium))
-                            .foregroundStyle(Palette.danger)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, Spacing.lg)
-                            .transition(.opacity.combined(with: .move(edge: .top)))
-                            .onAppear { AccessibilityNotification.Announcement(error).post() }
-                    }
-
                     ClayButton(buttonTitle,
                                systemImage: currentPage == totalPages - 1 ? "arrow.right" : nil,
                                kind: .spruce, fullWidth: true) { advance() }
-                        .disabled(isSubmitting)
-                        .opacity(isSubmitting ? 0.6 : 1)
                         .padding(.horizontal, Spacing.lg)
                         .accessibilityHint("Step \(currentPage + 1) of \(totalPages)")
                 }
@@ -208,7 +189,6 @@ struct OnboardingView: View {
                     ) {
                         if selectedInterests.contains(category) { selectedInterests.remove(category) }
                         else { selectedInterests.insert(category) }
-                        interestCategoriesRaw = selectedInterests.map(\.rawValue).joined(separator: ",")
                     }
                 }
             }
@@ -227,13 +207,13 @@ struct OnboardingView: View {
                 ForEach(DiscoveryFilterState.radiusChoices, id: \.self) { miles in
                     Button {
                         Haptics.soft()
-                        withAnimation(.spring(response: 0.3)) { filters.state.radiusMiles = miles }
+                        withAnimation(.spring(response: 0.3)) { radiusMiles = miles }
                     } label: {
-                        ClayChip(text: "\(Int(miles)) mi", selected: filters.state.radiusMiles == miles, accent: Palette.spruce)
+                        ClayChip(text: "\(Int(miles)) mi", selected: radiusMiles == miles, accent: Palette.spruce)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("\(Int(miles)) miles")
-                    .accessibilityAddTraits(filters.state.radiusMiles == miles ? [.isSelected] : [])
+                    .accessibilityAddTraits(radiusMiles == miles ? [.isSelected] : [])
                 }
             }
             Text("You can change this any time from the filter button.")
@@ -241,65 +221,6 @@ struct OnboardingView: View {
         }
         .padding(.horizontal, Spacing.lg)
         .accessibilityElement(children: .contain)
-    }
-
-    // MARK: - Auth
-
-    private var authPage: some View {
-        VStack(spacing: Spacing.lg) {
-            ClayIconTile(systemImage: isSignUp ? "hand.wave.fill" : "person.fill",
-                         kind: .spruce, size: 84, radius: Radius.md)
-                .idleFloat(distance: 5, duration: 3)
-
-            VStack(spacing: Spacing.sm) {
-                Text(isSignUp ? "Create your\naccount" : "Welcome\nback")
-                    .font(VType.display(30, .semibold))
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(Palette.ink)
-                Text(isSignUp ? "Just a few details to get started." : "Sign in to pick up where you left off.")
-                    .font(VType.body(15))
-                    .foregroundStyle(Palette.inkSoft)
-            }
-
-            VStack(spacing: 12) {
-                if isSignUp {
-                    ClayField(placeholder: "Your name", text: $userName, contentType: .name)
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                    DatePicker("Date of birth", selection: $birthDate,
-                               in: ...Calendar.current.date(byAdding: .year, value: -13, to: Date())!,
-                               displayedComponents: .date)
-                        .font(VType.body(14))
-                    Toggle("I'm a student", isOn: $isStudent)
-                    if isStudent { ClayField(placeholder: "School (optional)", text: $school) }
-                }
-                ClayField(placeholder: "Email address", text: $userEmail,
-                          contentType: .emailAddress, keyboard: .emailAddress, autocap: false)
-                    .onChange(of: userEmail) { _, newValue in
-                        if !newValue.isEmpty && !showPasswordField {
-                            withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) { showPasswordField = true }
-                        }
-                    }
-                if showPasswordField {
-                    ClayField(placeholder: "Password (8+ characters)", text: $userPassword,
-                              secure: true, contentType: isSignUp ? .newPassword : .password)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-            }
-            .padding(.horizontal, Spacing.xl)
-
-            Button {
-                withAnimation(.spring(response: 0.4)) { isSignUp.toggle(); authService.clearError() }
-            } label: {
-                Text(isSignUp ? "Already have an account? **Sign in**" : "New here? **Create account**")
-                    .font(VType.body(14))
-                    .foregroundStyle(Palette.inkSoft)
-            }
-            .buttonStyle(.plain)
-
-            if isSubmitting {
-                ProgressView().tint(Palette.spruce.base).transition(.opacity)
-            }
-        }
     }
 
     // MARK: - Helpers
@@ -311,43 +232,14 @@ struct OnboardingView: View {
         if currentPage == pages.count {
             return selectedInterests.isEmpty ? "Continue" : "Continue · \(selectedInterests.count) picked"
         }
-        if isSubmitting { return "Creating account…" }
-        return isSignUp ? "Create Account" : "Sign In"
+        return "Continue"
     }
 
     private func advance() {
         authService.clearError()
-        if currentPage >= totalPages - 1 { submitAuth() }
-        else { withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) { currentPage += 1 } }
+        withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) { currentPage += 1 }
     }
 
-    private func submitAuth() {
-        isSubmitting = true
-        Task {
-            do {
-                if isSignUp {
-                    try await authService.signUp(
-                        email: userEmail.trimmingCharacters(in: .whitespaces),
-                        password: userPassword,
-                        displayName: userName.trimmingCharacters(in: .whitespaces),
-                        birthYear: Calendar.current.component(.year, from: birthDate),
-                        studentStatus: isStudent, school: school,
-                        interests: selectedInterests.map(\.rawValue))
-                } else {
-                    try await authService.signIn(
-                        email: userEmail.trimmingCharacters(in: .whitespaces),
-                        password: userPassword)
-                }
-                await MainActor.run {
-                    isSubmitting = false
-                    Haptics.success()
-                    withAnimation(.spring(response: 0.5)) { hasCompletedOnboarding = true }
-                }
-            } catch {
-                await MainActor.run { isSubmitting = false }
-            }
-        }
-    }
 }
 
 // MARK: - Supporting types

@@ -6,20 +6,25 @@ import SwiftUI
 struct AuthView: View {
     @Environment(AuthService.self) private var authService
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    var initialInterests: [String] = []
+    var onSignupRejected: () -> Void = {}
     var onComplete: () -> Void
 
     @State private var isSignUp = false   // default to Sign In
     @State private var name = ""
     @State private var email = ""
     @State private var password = ""
-    @State private var birthDate = Calendar.current.date(byAdding: .year, value: -18, to: Date()) ?? Date()
+    @State private var birthYearText = ""
+    @State private var acceptedBirthYear: Int?
+    @State private var signupEnded = false
+    @State private var ageError: String?
     @State private var isStudent = false
     @State private var school = ""
     @AppStorage("interestCategories") private var interestCategoriesRaw = ""
     @State private var isSubmitting = false
     @State private var appear = false
     @State private var auroraPhase: CGFloat = 0
-    @AppStorage("accountType") private var accountTypeRaw = AccountType.visitor.rawValue
+    @State private var accountTypeRaw = AccountType.visitor.rawValue
     @State private var showVerification = false
 
     var body: some View {
@@ -29,9 +34,12 @@ struct AuthView: View {
                 VStack(spacing: Spacing.lg) {
                     hero
                     modeSwitch
-                    if isSignUp { accountTypeChooser }
-                    formCard
-                    guestRow
+                        .disabled(isSubmitting)
+                    if isSignUp {
+                        if signupEnded { signupEndedCard }
+                        else if acceptedBirthYear == nil { ageCard }
+                        else { accountTypeChooser.disabled(isSubmitting); formCard; guestRow }
+                    } else { formCard; guestRow }
                 }
                 .padding(.horizontal, Spacing.lg)
                 .padding(.top, 56)
@@ -88,6 +96,48 @@ struct AuthView: View {
         }
     }
 
+    // Birth year is held in view memory only. Account fields and preferences
+    // are not shown or persisted until this neutral screen accepts the answer.
+    private var ageCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("What year were you born?")
+                .font(VType.display(24, .semibold)).foregroundStyle(Palette.ink)
+                .accessibilityAddTraits(.isHeader)
+            Text("We use your birth year to apply age safeguards.")
+                .font(VType.body(14)).foregroundStyle(Palette.inkSoft)
+            field(icon: "calendar", placeholder: "Birth year", text: $birthYearText, keyboard: .numberPad, autocap: false)
+                .accessibilityIdentifier("signupBirthYear")
+            if let ageError { Text(ageError).font(VType.body(13)).foregroundStyle(Palette.danger) }
+            ClayButton("Continue", systemImage: "arrow.right", kind: .spruce, fullWidth: true) {
+                switch AuthService.signupAgeDecision(birthYear: Int(birthYearText.trimmingCharacters(in: .whitespaces))) {
+                case .invalid:
+                    ageError = "Enter a valid birth year."
+                case .under13:
+                    birthYearText = ""; acceptedBirthYear = nil; ageError = nil
+                    name = ""; email = ""; password = ""; school = ""; isStudent = false
+                    signupEnded = true
+                    onSignupRejected()
+                case .eligible(let year):
+                    acceptedBirthYear = year; birthYearText = ""; ageError = nil
+                }
+            }
+            .accessibilityIdentifier("signupAgeContinue")
+        }
+        .padding(Spacing.lg)
+        .background(ClayBackground(style: .surface, radius: Radius.lg, elevation: 1.2))
+    }
+
+    private var signupEndedCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Sign-up is unavailable.").font(VType.display(24, .semibold)).foregroundStyle(Palette.ink)
+                .accessibilityIdentifier("signupEnded")
+            Text("We haven’t created an account or saved your answer.")
+                .font(VType.body(14)).foregroundStyle(Palette.inkSoft)
+        }
+        .padding(Spacing.lg)
+        .background(ClayBackground(style: .surface, radius: Radius.lg, elevation: 1.2))
+    }
+
     // MARK: - Account type chooser (sign-up only)
 
     private var accountTypeChooser: some View {
@@ -132,7 +182,7 @@ struct AuthView: View {
     private var modeSwitch: some View {
         HStack(spacing: 6) {
             segment("Sign In", on: !isSignUp) { withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { isSignUp = false; authService.clearError() } }
-            segment("Sign Up", on: isSignUp) { withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { isSignUp = true; authService.clearError() } }
+            segment("Sign Up", on: isSignUp) { withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) { isSignUp = true; name = ""; email = ""; password = ""; authService.clearError() } }
         }
         .padding(5)
         .background(ClayBackground(style: .inset, radius: Radius.chip + 4))
@@ -168,14 +218,8 @@ struct AuthView: View {
             field(icon: "lock.fill", placeholder: "Password", text: $password, secure: true,
                   content: isSignUp ? .newPassword : .password)
             if isSignUp {
-                DatePicker("Date of birth", selection: $birthDate,
-                           in: ...Calendar.current.date(byAdding: .year, value: -13, to: Date())!,
-                           displayedComponents: .date)
-                    .font(VType.body(14))
-                    .foregroundStyle(Palette.ink)
-                    .datePickerStyle(.compact)
-                Text("Your birth year stays private. It protects younger members in Friends.")
-                    .font(VType.body(11)).foregroundStyle(Palette.inkSoft)
+                Text("Birth year: \(acceptedBirthYear.map(String.init) ?? "")")
+                    .font(VType.body(12)).foregroundStyle(Palette.inkSoft)
                 Toggle("I'm a student", isOn: $isStudent)
                     .font(VType.body(14)).tint(Palette.spruce.base)
                 if isStudent {
@@ -249,6 +293,7 @@ struct AuthView: View {
 
     private func submit() {
         Haptics.tap()
+        if isSignUp && (acceptedBirthYear == nil || signupEnded) { return }
         isSubmitting = true
         Task {
             do {
@@ -256,15 +301,16 @@ struct AuthView: View {
                     try await authService.signUp(email: email.trimmingCharacters(in: .whitespaces),
                                                  password: password,
                                                  displayName: name.trimmingCharacters(in: .whitespaces),
-                                                 birthYear: Calendar.current.component(.year, from: birthDate),
+                                                 birthYear: acceptedBirthYear!,
                                                  studentStatus: isStudent, school: school,
-                                                 interests: interestCategoriesRaw.split(separator: ",").map(String.init))
+                                                 interests: initialInterests.isEmpty ? interestCategoriesRaw.split(separator: ",").map(String.init) : initialInterests)
                 } else {
                     try await authService.signIn(email: email.trimmingCharacters(in: .whitespaces),
                                                  password: password)
                 }
                 await MainActor.run {
                     isSubmitting = false; Haptics.success()
+                    if isSignUp { UserDefaults.standard.set(accountTypeRaw, forKey: "accountType") }
                     // Organizer sign-ups must verify before entering.
                     if isSignUp && accountTypeRaw == AccountType.organizer.rawValue {
                         showVerification = true

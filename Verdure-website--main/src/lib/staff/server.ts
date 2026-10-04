@@ -21,14 +21,16 @@ export function staffConfiguration() {
     functionsUrl: local ? `http://127.0.0.1:5002/${PROJECT}/us-central1` : `https://us-central1-${PROJECT}.cloudfunctions.net`,
   };
 }
-export async function readStaffJson(request: Request, maxBytes = 131072): Promise<Record<string, unknown>> {
+export function checkSameOrigin(request: Request,
+  originMessage = "This request must come from the staff console."): void {
   // Next may normalize a loopback request URL to localhost even when the
   // browser used 127.0.0.1. Host is the origin the browser actually addressed.
   let expectedOrigin: string;
   try { expectedOrigin = new URL(`${new URL(request.url).protocol}//${request.headers.get("host")}`).origin; }
-  catch { throw new StaffError("This request must come from the staff console.", 403); }
-  if (request.headers.get("origin") !== expectedOrigin) throw new StaffError("This request must come from the staff console.", 403);
-  if (!request.headers.get("content-type")?.startsWith("application/json")) throw new StaffError("JSON is required.", 415);
+  catch { throw new StaffError(originMessage, 403); }
+  if (request.headers.get("origin") !== expectedOrigin) throw new StaffError(originMessage, 403);
+}
+export async function readBoundedText(request: Request, maxBytes: number): Promise<string> {
   if (!request.body) throw new StaffError("A request body is required.");
   const reader = request.body.getReader(), chunks: Uint8Array[] = [];
   let size = 0;
@@ -39,8 +41,15 @@ export async function readStaffJson(request: Request, maxBytes = 131072): Promis
     if (size > maxBytes) { await reader.cancel(); throw new StaffError("The request is too large.", 413); }
     chunks.push(value);
   }
+  return Buffer.concat(chunks).toString("utf8");
+}
+export async function readStaffJson(request: Request, maxBytes = 131072,
+  originMessage = "This request must come from the staff console."): Promise<Record<string, unknown>> {
+  checkSameOrigin(request, originMessage);
+  if (!request.headers.get("content-type")?.startsWith("application/json")) throw new StaffError("JSON is required.", 415);
+  const body = await readBoundedText(request, maxBytes);
   try {
-    const data: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    const data: unknown = JSON.parse(body);
     if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error();
     return data as Record<string, unknown>;
   } catch { throw new StaffError("The request must contain a JSON object."); }

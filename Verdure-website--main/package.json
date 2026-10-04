@@ -11,6 +11,7 @@
     "test": "npm run test:ip && npm run test:security",
     "test:ip": "node ip-normalise.test.mjs",
     "test:security": "node scripts/security-regression.mjs",
+    "submissions:local": "node scripts/submissions-local.mjs",
     "supabase:start": "supabase start",
     "supabase:stop": "supabase stop",
     "supabase:reset": "supabase db reset",

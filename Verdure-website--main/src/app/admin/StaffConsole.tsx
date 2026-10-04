@@ -90,14 +90,72 @@ export default function StaffConsole() {
         <Field label="Password"><input name="password" type="password" autoComplete="current-password" required maxLength={256} /></Field>
         <button className="staff-primary" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
       </form></section> : <>
-      <nav className="staff-tabs" aria-label="Staff tools">{["Moderation", "Organizers", "Partners", "Operations"].map((name) =>
+      <nav className="staff-tabs" aria-label="Staff tools">{["Moderation", "Organizers", "Partners", "Submissions", "Operations"].map((name) =>
         <button key={name} aria-current={tab === name ? "page" : undefined} onClick={() => setTab(name)}>{name}</button>)}</nav>
       {tab === "Moderation" && <Moderation onAccessLost={accessLost} />}
       {tab === "Organizers" && <Organizers onAccessLost={accessLost} />}
       {tab === "Partners" && <Partners onAccessLost={accessLost} />}
+      {tab === "Submissions" && <Submissions onAccessLost={accessLost} />}
       {tab === "Operations" && <Operations onAccessLost={accessLost} />}
     </>}
   </>;
+}
+
+type Submission = { id: string; kind: string; contact_name: string; contact_email: string; payload: Record<string, unknown>;
+  status: string; created_at: string; handled_at?: string; handled_by?: string; handling_note?: string };
+type SubmissionAudit = { id: string; actor: string; action: string; occurred_at: string; reason: string; before_state: unknown; after_state: unknown };
+function Submissions({ onAccessLost }: { onAccessLost: () => void }) {
+  const [kind, setKind] = useState(""), [status, setStatus] = useState("pending"), [items, setItems] = useState<Submission[]>([]);
+  const [cursor, setCursor] = useState<string | null>(null), [notes, setNotes] = useState<Record<string, string>>({});
+  const [history, setHistory] = useState<Record<string, { items: SubmissionAudit[]; nextCursor: string | null }>>({});
+  const { busy, run, notice, setMessage } = useWork(onAccessLost);
+  const load = useCallback(async (afterId: string | null = null) => {
+    const result = await request<{ items: Submission[]; nextCursor: string | null }>("/admin/api/submissions", "POST",
+      { action: "list", status, kind: kind || null, afterId });
+    setItems((old) => afterId ? [...old, ...result.items.filter((item) => !old.some((entry) => entry.id === item.id))] : result.items);
+    setCursor(result.nextCursor);
+  }, [kind, status]);
+  const loadHistory = async (id: string, afterId: string | null = null) => {
+    const result = await request<{ items: SubmissionAudit[]; nextCursor: string | null }>("/admin/api/submissions", "POST", { action: "audit", id, afterId });
+    setHistory((old) => ({ ...old, [id]: { ...result, items: afterId ? [...(old[id]?.items || []), ...result.items] : result.items } }));
+  };
+  useEffect(() => { setItems([]); setCursor(null); void run(() => load()); }, [load]); // eslint-disable-line react-hooks/exhaustive-deps
+  const fieldLabels: Record<string, string> = { subject: "Subject", message: "Message", organization: "Organization", organizationType: "Type",
+    eventsPerMonth: "Events per month", publicCalendar: "Publishes a public calendar", calendarURL: "Public calendar", business: "Business",
+    category: "Category", address: "Address", offer: "Offer under consideration" };
+  return <section><h2>Submissions inbox</h2><p>Support requests and interest from organizers and local businesses. Oldest requests appear first.</p>
+    <div className="staff-toolbar"><Field label="Submission status"><select value={status} disabled={busy} onChange={(e) => setStatus(e.target.value)}>
+      <option value="pending">Pending</option><option value="handled">Handled</option></select></Field>
+      <Field label="Submission type"><select value={kind} disabled={busy} onChange={(e) => setKind(e.target.value)}><option value="">All types</option>
+        <option value="support">Support</option><option value="organizer">Organizer interest</option><option value="merchant">Merchant interest</option></select></Field>
+      <button disabled={busy} onClick={() => void run(() => load())}>Refresh inbox</button></div>
+    {notice}
+    {!busy && !items.length && <p className="staff-empty">No {status} submissions match these filters.</p>}
+    <div className="staff-submissions">{items.map((item) => <article className="staff-submission" key={item.id}>
+      <header><h3>{item.kind === "support" ? "Support request" : item.kind === "organizer" ? "Organizer interest" : "Merchant interest"}</h3>
+        <time dateTime={item.created_at}>{new Date(item.created_at).toLocaleString()}</time></header>
+      <p><strong>{item.contact_name}</strong> · <a href={`mailto:${item.contact_email}`}>{item.contact_email}</a></p>
+      <dl>{Object.entries(item.payload).filter(([key, value]) => fieldLabels[key] && value !== null).map(([key, value]) => {
+        const href = key === "calendarURL" ? safeLink(String(value)) : null;
+        return <div key={key}><dt>{fieldLabels[key]}</dt><dd>{href ? <><a href={href} target="_blank" rel="noreferrer">{String(value)}</a>
+          <small>Candidate public source; terms and format must be checked before ingestion.</small></> : typeof value === "boolean" ? value ? "Yes" : "No" : String(value)}</dd></div>;
+      })}</dl>
+      {item.status === "handled" ? <div className="staff-resolution"><strong>Handled {item.handled_at && new Date(item.handled_at).toLocaleString()}</strong>
+        <p>{item.handling_note}</p><small>Reviewed by {item.handled_by}</small></div> : <form onSubmit={(e) => { e.preventDefault(); void run(async () => {
+        await request("/admin/api/submissions", "POST", { action: "handle", id: item.id, note: notes[item.id] || "" });
+        setNotes((old) => { const next = { ...old }; delete next[item.id]; return next; });
+        await load(); setMessage("Submission marked handled. The note and review history were saved.");
+      }); }}><Field label={`Handling note for ${item.contact_name}`}><textarea value={notes[item.id] || ""} required minLength={3} maxLength={1000}
+        onChange={(e) => setNotes((old) => ({ ...old, [item.id]: e.target.value }))} rows={2} /></Field>
+        <button className="staff-primary" disabled={busy}>Mark handled</button></form>}
+      <button disabled={busy} onClick={() => void run(() => loadHistory(item.id))}>Review history for {item.contact_name}</button>
+      {history[item.id] && <div className="staff-audit-history">{history[item.id].items.length === 0 ? <p>No handling actions yet.</p> :
+        history[item.id].items.map((record) => <details key={record.id}><summary>{new Date(record.occurred_at).toLocaleString()} · {record.reason}</summary>
+          <p>Actor: {record.actor} · Action: {record.action}</p><pre>{JSON.stringify({ before: record.before_state, after: record.after_state }, null, 2)}</pre></details>)}
+        {history[item.id].nextCursor && <button disabled={busy} onClick={() => void run(() => loadHistory(item.id, history[item.id].nextCursor))}>Load more review history</button>}</div>}
+    </article>)}</div>
+    {cursor && <button disabled={busy} onClick={() => void run(() => load(cursor))}>Load more submissions</button>}
+  </section>;
 }
 
 function Operations({ onAccessLost }: { onAccessLost: () => void }) {

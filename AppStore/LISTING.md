@@ -94,25 +94,25 @@ outdoors,parks,trails,hiking,walk,nature,community,events,local,explore,rewards,
 
 ## Support / marketing URLs
 
-**Pre-submission blocker:** Verdure does not yet have a receiving support or
-privacy inbox. Rishit will configure free forwarding for
-`support@verdure-app.com` and `privacy@verdure-app.com`, but delivery has not
-been tested. The active website's `/support` and `/terms` routes return 404.
-Set up and test forwarding, then publish the locally aligned website copy
-before submitting. The bundled in-app legal text remains available.
+**Publication remains a pre-submission blocker.** `/terms`, `/support` and the
+corrected privacy page now build locally on the active website. Support uses a
+Supabase-backed form and the authenticated staff submissions inbox; email
+forwarding is no longer a prerequisite for this flow. No website routes or
+migrations were deployed in this sprint. Public link resolution and production
+form delivery still need release verification after publication.
 
 | Field | Value |
 |---|---|
-| Support URL | `https://verdure-app.com/support` — not built on the active site; requires a verified support inbox before publishing |
-| Marketing URL | `https://verdure-app.com` — verified production domain |
-| Privacy Policy URL | `https://verdure-app.com/privacy` — live page requires owner review and local update deployment |
-| Terms of Use (EULA) | Apple's standard EULA; an active-site Verdure Terms route is still needed before linking it publicly |
+| Support URL | `https://verdure-app.com/support` — local form and staff-inbox workflow tested; unpublished |
+| Marketing URL | `https://verdure-app.com` — canonical domain |
+| Privacy Policy URL | `https://verdure-app.com/privacy` — corrected local text; publication pending |
+| Terms of Use (EULA) | Apple's standard EULA plus Verdure `/terms`, now built locally and restored in the app |
 
-The domain is set in one place in the app (`Legal.siteBase` in
-`Verdure/Verdure/Models/Legal.swift`). Both documents also ship **inside the
-binary** (`LegalView`), linked from the paywall, the sign-up form and Profile ›
-Settings › Terms & Privacy. Their in-app text remains available even while
-the public Terms and Support routes are missing.
+The canonical domain is `Legal.siteBase` in `Verdure/Verdure/Models/Legal.swift`.
+Both documents also ship inside the binary through `LegalView`, linked from the
+paywall, signup and Profile settings. Explicit DEBUG emulator QA can set
+`QAWebsiteBaseURL` to a loopback/private-LAN local website to check these links
+before publication; Release always uses the canonical domain.
 
 ---
 
@@ -150,9 +150,9 @@ websites, which is what Apple's "tracking" means.
 | Purchase History | Yes | Yes | No | App Functionality |
 | Device ID | Yes | Yes | No | App Functionality |
 | Other Data Types (birth year, optional student status and school) | Yes | Yes | No | App Functionality |
-| Other Usage Data (saved events and recommendation feedback) | Yes | Yes | No | App Functionality |
+| Other Usage Data (saved events, recommendation feedback and feed analytics) | Yes | Yes | No | App Functionality and Analytics |
 
-No contacts, health, browsing, diagnostics, or advertising data are collected.
+The app does not collect an address book, health or browsing history, payment card details, billing or shipping addresses, or advertising identifiers. Crashlytics is not integrated yet; H2 must update diagnostics disclosures with that feature. Website forms and web analytics are described separately in the shared privacy policy.
 
 **On Product Interaction (the one unlinked row).** Verdure keeps first-party
 analytics: which screens are opened and which features are used. It is keyed to

@@ -13,8 +13,9 @@ the optional features. No deploy, billing, environment or key changes occurred.
 - Near you claims at most one card per app session, within 800 metres. Server
   time controls coffee/morning, food/mealtimes and activities/weekend rules.
   Both location endpoints enforce proximity; there is no distant fallback.
-  Cached cards expire at the server's hour boundary and disappear if refreshed
-  data no longer includes the offer. Only existing When-In-Use GPS is used.
+  Cached cards expire at the server's hour boundary or actual perk expiry.
+  Authenticated known-document SDK listeners remove stale pins/cards on partner
+  or perk revision/availability changes without movement or manual refresh. Only existing When-In-Use GPS is used.
 - Rewards defaults to Nearby when actual GPS exists, preserves the original
   order without GPS, sorts unknown coordinates last, and preserves ties.
 - Offer visibility requires an active partner, recorded agreement, valid price,
@@ -84,3 +85,35 @@ Discovery currently queries only the first 100 active perks. A stationary cached
 The new RSVP compound-query index is present in `firestore.indexes.json`.
 The complete query inventory/check required by H1 is still pending; emulator
 success does not prove a live index exists.
+
+## Complete catalog and stationary invalidation checkpoint
+
+Active perks are paged by document ID in batches of 500; parent partners are
+loaded in batches of 200. Map, near-you and Rewards no longer silently truncate
+at 100 offers. A 501-partner corpus with the closest offer after the first 500
+and a 502-fixture Rewards catalog passed the connected regression.
+
+Staff partner/perk writes, code refill and last-code redemption update safe
+`partnerStatus`/`perkStatus` metadata in the same transaction. Authenticated
+clients may get a known metadata document; list and all client writes are
+refused. Metadata exposes only availability, a public-field revision and perk
+expiry, never contacts, agreement details or code values. The iOS service owns
+and cancels SDK listeners/timers; account/session/request guards discard late
+callbacks. Missing legacy metadata allows the canonical callable result, and
+cached SDK metadata cannot invalidate a newer callable response.
+
+`functions/scripts/partner-catalog-e2e.mjs`: 25 passed, including complete
+catalog, real listeners, non-enumeration, deactivation, renamed businesses,
+last-code stock and refill. `staff-partners-e2e.mjs`: 47 passed again.
+The actual iOS service test observes perk/partner removal and timed expiry with
+Firebase SDK callbacks, without manually refreshing the service.
+
+```sh
+# Requires the local sprint emulator already running after a fresh Functions build.
+FIRESTORE_EMULATOR_HOST=127.0.0.1:8899 node functions/scripts/partner-catalog-e2e.mjs
+```
+
+The above proves map/near-you cache invalidation. Rewards and other cached
+sponsored surfaces still need an immediate-invalidation audit; their canonical
+server responses/redemption checks do not prove a stationary cached client is
+fresh. Physical partner-venue and distance QA remains pending.

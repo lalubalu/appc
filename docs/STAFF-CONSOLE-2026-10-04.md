@@ -49,9 +49,9 @@ transaction. Client writes to audit/job rows are denied, even for admins.
   Low stock means fewer than 10 unused codes.
 - Deactivation is canonical: map/nearby/catalog/redemption recheck the active,
   agreement-backed partner and perk. The console and server refuse inactive
-  offers immediately. Existing iOS discovery caches refresh on movement/hour
-  or a new session; immediate invalidation of a stationary cached pin/card and
-  complete discovery beyond the current 100-perk query remain follow-up work.
+  offers immediately. Safe known-document metadata now invalidates stationary map pins/cards,
+  including a real SDK/timed-expiry test. Active catalog reads page beyond 500.
+  Rewards and other sponsored client caches still need an invalidation audit.
 
 The geocoder uses the fixed US Census Public_AR_Current address endpoint.
 Coordinates cannot be submitted by a client. It requires exactly one valid
@@ -149,3 +149,20 @@ build: both use `.next`, so overlapping them invalidates browser evidence.
 
 No deployment, physical-device QA, device push delivery or production index
 verification is implied. H1's complete query inventory/check remains pending.
+
+## Submissions inbox checkpoint (B4)
+
+The fifth console tab reads support, organizer and merchant requests stored in
+local Supabase. Each list, handle and audit request first verifies the canonical
+Firebase admin claim through `staffSession`. Supabase website login or editable
+user metadata cannot authorize access. Server-only service credentials call
+explicitly restricted invoker RPCs; public table reads and direct RPCs are denied.
+Staff handling and its immutable before/after audit share a Postgres transaction.
+Reads also record actor, filters and returned IDs; audit history is visible in
+the console. Browser-selected actors are ignored. A forced audit failure leaves
+the request pending with no handling note.
+
+43 native browser/server/database checks passed, including all three denied
+non-admin actions and old-cookie denial after CLI revocation. Fresh pending
+migration replay and local security advisors passed with zero findings.
+See WEBSITE-SUBMISSIONS-2026-10-04.md for exact reruns and limitations.

@@ -7,6 +7,43 @@ import XCTest
 
 @MainActor
 final class JourneyTests: XCTestCase {
+    private func signupAtNeutralAgeScreen() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = ["-hasCompletedOnboarding", "NO", "-QADisableMotion", "YES", "-QAOfflineData", "YES"]
+        app.launch()
+        for _ in 0..<4 { QA.waitFor(app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Continue'")).firstMatch, "onboarding continue").tap() }
+        QA.waitFor(app.buttons["Sign Up"], "signup mode").tap()
+        app.swipeUp()
+        QA.waitFor(app.textFields["Birth year"], "neutral birth year")
+        XCTAssertFalse(app.textFields["Your name"].exists)
+        XCTAssertFalse(app.textFields["Email address"].exists)
+        XCTAssertFalse(app.secureTextFields["Password"].exists)
+        return app
+    }
+
+    func testUnder13NeutralAnswerEndsSignupWithoutAccountFields() {
+        let app = signupAtNeutralAgeScreen()
+        app.textFields["Birth year"].tap()
+        app.textFields["Birth year"].typeText(String(Calendar.current.component(.year, from: Date()) - 12))
+        app.buttons["signupAgeContinue"].tap()
+        QA.waitFor(app.staticTexts["signupEnded"], "signup ended")
+        XCTAssertFalse(app.textFields["Birth year"].exists)
+        XCTAssertFalse(app.textFields["Your name"].exists)
+        XCTAssertFalse(app.textFields["Email address"].exists)
+        XCTAssertFalse(app.buttons["Create Account"].exists)
+        XCTAssertFalse(app.buttons["Continue as guest"].exists)
+    }
+
+    func testEligibleMinorReachesAccountFieldsOnlyAfterAgeScreen() {
+        let app = signupAtNeutralAgeScreen()
+        app.textFields["Birth year"].tap()
+        app.textFields["Birth year"].typeText(String(Calendar.current.component(.year, from: Date()) - 13))
+        app.buttons["signupAgeContinue"].tap()
+        QA.waitFor(app.textFields["Your name"], "eligible account fields")
+        XCTAssertTrue(app.textFields["Email address"].exists)
+        XCTAssertTrue(app.secureTextFields["Password"].exists)
+        XCTAssertFalse(app.textFields["Birth year"].exists)
+    }
 
     override func setUpWithError() throws {
         continueAfterFailure = false

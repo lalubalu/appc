@@ -50,6 +50,17 @@ final class AuthService {
         }
     }
 
+    enum SignupAgeDecision: Equatable {
+        case invalid
+        case under13
+        case eligible(Int)
+    }
+
+    static func signupAgeDecision(birthYear: Int?, currentYear: Int = Calendar.current.component(.year, from: Date())) -> SignupAgeDecision {
+        guard let birthYear, birthYear >= currentYear - 110, birthYear <= currentYear else { return .invalid }
+        return currentYear - birthYear < 13 ? .under13 : .eligible(birthYear)
+    }
+
     // MARK: - Auth Methods
 
     /// Sign up with email, password, and display name.
@@ -57,6 +68,13 @@ final class AuthService {
                 studentStatus: Bool, school: String, interests: [String] = []) async throws {
         isLoading = true
         errorMessage = nil
+
+        // Reject age before processing credentials or invoking any SDK/network.
+        guard case .eligible = Self.signupAgeDecision(birthYear: birthYear) else {
+            isLoading = false
+            errorMessage = "Sign-up is unavailable for this birth year."
+            throw AuthError.unknown(errorMessage!)
+        }
 
         // Sanitize inputs
         let cleanEmail = Self.sanitize(email, maxLength: 320).lowercased()
@@ -101,12 +119,6 @@ final class AuthService {
             isLoading = false
             errorMessage = "Please enter your name."
             throw AuthError.missingName
-        }
-        let currentYear = Calendar.current.component(.year, from: Date())
-        guard birthYear >= currentYear - 110, birthYear <= currentYear - 13 else {
-            isLoading = false
-            errorMessage = "You must be at least 13 to create an account."
-            throw AuthError.unknown(errorMessage!)
         }
 
         do {

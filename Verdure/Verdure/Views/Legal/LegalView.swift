@@ -95,15 +95,17 @@ struct LegalView: View {
                 ClayButton("Apple's Standard EULA", systemImage: "doc.text", kind: .ghost, fullWidth: true) {
                     openURL(Legal.appleStandardEULAURL)
                 }
-                // The active website does not publish /terms yet. The bundled
-                // terms above and Apple's EULA remain accessible offline.
+                ClayButton("Terms of Service on the web", systemImage: "safari", kind: .ghost, fullWidth: true) {
+                    openURL(Legal.termsOfServiceURL)
+                }
             } else {
                 ClayButton("Privacy Policy on the web", systemImage: "safari", kind: .ghost, fullWidth: true) {
                     openURL(Legal.privacyPolicyURL)
                 }
             }
-            Text("Questions: \(Legal.contactEmail)")
-                .font(VType.body(12)).foregroundStyle(Palette.inkFaint)
+            ClayButton("Contact support", systemImage: "questionmark.circle", kind: .ghost, fullWidth: true) {
+                openURL(Legal.supportURL)
+            }
         }
         .padding(.top, Spacing.sm)
     }

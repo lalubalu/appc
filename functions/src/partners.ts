@@ -27,10 +27,12 @@
  */
 
 import { onCall, HttpsError } from "firebase-functions/v2/https";
-import { FieldValue } from "firebase-admin/firestore";
+import { FieldValue, FieldPath } from "firebase-admin/firestore";
 import type { Timestamp } from "firebase-admin/firestore";
 import { db, requireUid, enforceRateLimit, safeText, distanceMeters } from "./common.js";
 import { hasActivePlus } from "./common.js";
+import { partnerHasAgreement, partnerStatus, perkStatus } from "./partner-status.js";
+export { partnerHasAgreement } from "./partner-status.js";
 
 /** Hard ceiling per session. See rule 3. */
 export const MAX_SPONSORED_PER_SESSION = 1;
@@ -78,6 +80,9 @@ interface SurfacablePerk {
   partnerId?: string;
   partnerCategory?: string;
   days?: number[];
+  expiresAtMs?: number;
+  partnerRevision?: string;
+  perkRevision?: string;
 }
 
 /** Walking-time estimates are straight-line estimates, not route guidance. */
@@ -96,13 +101,6 @@ export function nearYouEligible(perk: SurfacablePerk, ctx: PerkContext, localDay
     ((ctx.localHour >= 11 && ctx.localHour < 15) || (ctx.localHour >= 17 && ctx.localHour < 21));
   if (/activit|recreation/.test(category)) return localDay === 0 || localDay === 6;
   return true;
-}
-
-export function partnerHasAgreement(data: FirebaseFirestore.DocumentData | undefined): boolean {
-  const agreement = data?.agreement;
-  return data?.active === true && data?.hidden !== true && typeof agreement?.agreedBy === "string" && agreement.agreedBy.trim().length > 0 &&
-    typeof agreement?.reference === "string" && agreement.reference.trim().length > 0 &&
-    typeof agreement?.agreedAt?.toMillis === "function" && agreement.agreedAt.toMillis() > 0;
 }
 
 /**
@@ -183,17 +181,33 @@ export function choosePlacement(
 // Callables
 // ---------------------------------------------------------------------------
 
+/** Page through the entire active catalogue; document IDs give a stable cursor. */
+export async function loadActivePartnerPerks(): Promise<{ docs: FirebaseFirestore.QueryDocumentSnapshot[] }> {
+  const docs: FirebaseFirestore.QueryDocumentSnapshot[] = [];
+  const query = db.collection("partnerPerks").where("active", "==", true).orderBy(FieldPath.documentId());
+  let cursor: FirebaseFirestore.QueryDocumentSnapshot | undefined;
+  for (;;) {
+    const page = await (cursor ? query.startAfter(cursor) : query).limit(500).get();
+    docs.push(...page.docs);
+    if (page.size < 500) return { docs };
+    cursor = page.docs[page.size - 1];
+  }
+}
+
 export async function loadSurfacablePerks(isPlus: boolean, nowMs: number,
-  existing?: FirebaseFirestore.QuerySnapshot, requireStock = true): Promise<SurfacablePerk[]> {
-  const snap = existing ?? await db.collection("partnerPerks").where("active", "==", true).limit(100).get();
+  existing?: { docs: FirebaseFirestore.QueryDocumentSnapshot[] }, requireStock = true): Promise<SurfacablePerk[]> {
+  const snap = existing ?? await loadActivePartnerPerks();
   const partnerIds = [...new Set(snap.docs.map((d) => d.data().partnerId).filter((id): id is string =>
     typeof id === "string" && id.length > 0 && !id.includes("/")))];
-  const partners = new Map((partnerIds.length ? await db.getAll(...partnerIds.map((id) => db.doc(`partners/${id}`))) : [])
-    .map((d) => [d.id, d.data()]));
+  const partners = new Map<string, FirebaseFirestore.DocumentData | undefined>();
+  for (let start = 0; start < partnerIds.length; start += 200) {
+    const batch = await db.getAll(...partnerIds.slice(start, start + 200).map((id) => db.doc(`partners/${id}`)));
+    for (const d of batch) partners.set(d.id, d.data());
+  }
   return snap.docs.flatMap((d) => {
     const x = d.data();
     const partner = partners.get(x.partnerId);
-    if (!partnerHasAgreement(partner) || x.hidden === true ||
+    if (!partnerHasAgreement(partner) || x.active !== true || x.hidden === true || x.removed === true ||
         !Number.isInteger(x.pointCost) || x.pointCost < 500 || x.pointCost > 2000 ||
         (x.expiresAt?.toMillis?.() ?? 0) <= nowMs || (requireStock && !(Number(x.codePoolCount) > 0))) return [];
     const earlyMs = (x.earlyAccessUntil as Timestamp | undefined)?.toMillis?.();
@@ -212,6 +226,9 @@ export async function loadSurfacablePerks(isPlus: boolean, nowMs: number,
       latitude: typeof partner?.latitude === "number" ? partner.latitude : undefined,
       longitude: typeof partner?.longitude === "number" ? partner.longitude : undefined,
       earlyAccessUntilMs: earlyMs,
+      expiresAtMs: x.expiresAt.toMillis(),
+      partnerRevision: partnerStatus(partner).revision,
+      perkRevision: perkStatus(x).revision,
       // Early access changes whether it can be CLAIMED. It never changes
       // whether it is shown, or where — see rule 6. A free member sees the
       // perk and is told when it opens.
@@ -261,6 +278,7 @@ export const nearbyPartners = onCall(async (req) => {
   return { validUntilMs: (Math.floor(now / 3_600_000) + 1) * 3_600_000, offers: selected.map((p) => ({ perkId: p.id, partnerId: p.partnerId, title: p.title,
     partner: p.partner, description: p.description, pointCost: p.pointCost, claimable: p.claimable,
     earlyAccessUntilMs: p.earlyAccessUntilMs ?? null,
+    expiresAtMs: p.expiresAtMs, partnerRevision: p.partnerRevision, perkRevision: p.perkRevision,
     latitude: p.latitude, longitude: p.longitude, distanceMeters: p.distanceMeters,
     walkingMinutes: Math.max(1, Math.round(p.distanceMeters / 80)), sponsored: true })) };
 });

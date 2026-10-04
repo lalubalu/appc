@@ -417,6 +417,33 @@ html.vd-bg-on .kicker,
   }
 }
 
+/* Public support and partner forms: readable paper, forest ink, generous
+   native controls. Form values never depend on animation or decorative media. */
+.submission-page, .submission-interest { color: #173c31; background: #f4f2e9; padding: 9rem clamp(1.25rem, 5vw, 5rem) 5rem; }
+.submission-page { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; gap: clamp(2rem, 6vw, 6rem); }
+.submission-intro h1, .submission-interest h2 { font-family: var(--font-display), Georgia, serif; font-size: clamp(2.8rem, 5.5vw, 5.6rem); font-weight: 500; line-height: 1.02; letter-spacing: -.035em; margin: 1.2rem 0; }
+.submission-intro > p, .submission-interest-intro > p { max-width: 36rem; line-height: 1.7; }
+.submission-eyebrow { text-transform: uppercase; font-size: .75rem; letter-spacing: .16em; font-weight: 700; }
+.submission-panel { background: #fffdf7; border: 1px solid #b9c6b9; border-radius: 1.4rem; padding: clamp(1.3rem, 3vw, 2.6rem); box-shadow: 0 14px 35px #173c3108; min-width: 0; }
+.submission-panel h2, .submission-panel h3 { font-family: var(--font-display), Georgia, serif; font-size: 2rem; margin-bottom: .65rem; font-weight: 600; }
+.submission-form { display: grid; gap: 1.15rem; margin-top: 1.6rem; }
+.submission-field { display: grid; gap: .5rem; font-size: .92rem; font-weight: 600; }
+.submission-field input, .submission-field textarea, .submission-field select { display: block; width: 100%; min-height: 48px; border: 1px solid #829789; border-radius: .65rem; padding: .75rem .9rem; color: #173c31; background: #fff; font: inherit; font-weight: 400; }
+.submission-field textarea { resize: vertical; }
+.submission-field small, .submission-note { font-size: .82rem; font-weight: 400; line-height: 1.65; color: #3b554b; }
+.submission-note a { text-decoration: underline; text-underline-offset: 3px; }
+.submission-field :is(input, textarea, select):focus-visible, .submission-submit:focus-visible { outline: 3px solid #a55a2e; outline-offset: 3px; }
+.submission-submit { min-height: 48px; padding: .8rem 1.3rem; border-radius: 999px; background: #173c31; color: #fffdf7; font-weight: 600; }
+.submission-submit:hover { background: #275846; }
+.submission-submit:disabled { opacity: .65; cursor: wait; }
+.submission-honeypot { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.submission-error { color: #8d2929; font-size: .9rem; line-height: 1.6; }
+.submission-confirmation { border-left: 3px solid #3d7758; padding: 1.2rem; margin-top: 1.4rem; background: #ebf0e7; }
+.submission-interest { padding-top: 5rem; scroll-margin-top: 6rem; }
+.submission-interest-intro { max-width: 70rem; margin: 0 auto 3rem; }
+.submission-interest-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2rem; max-width: 70rem; margin: auto; align-items: start; }
+@media (max-width: 760px) { .submission-page, .submission-interest-grid { grid-template-columns: 1fr; } .submission-page { padding-top: 8rem; } }
+
 /* Ink-outline diamond icon frame (audience cards, milestones). */
 .diamond-frame {
   position: relative;
