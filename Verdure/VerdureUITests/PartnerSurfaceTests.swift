@@ -22,4 +22,73 @@ import XCTest
         XCTAssertTrue(app.staticTexts["Location unavailable · using the default order"].waitForExistence(timeout: 5))
         QA.waitFor(app.buttons["Default"], "default rewards order").tap()
     }
+
+    func testActualStaffWithdrawalClosesPendingRewardsConfirmation() async throws {
+        // Only the local Auth/Functions endpoints are used. The grant itself
+        // comes from rewards-native-fixture.mjs using staff-admin.mjs.
+        func post(_ url: String, _ body: [String: Any], token: String? = nil) async throws -> [String: Any] {
+            var request = URLRequest(url: URL(string: url)!)
+            request.httpMethod = "POST"; request.timeoutInterval = 20
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            if let token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+            let (bytes, response) = try await URLSession.shared.data(for: request)
+            let result = try XCTUnwrap(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
+            XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200, "Local fixture request failed: \(result)")
+            return result
+        }
+        let signedIn = try await post("http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=local",
+            ["email": "qa-rewards-native-staff@example.test", "password": "local-rewards-native-only", "returnSecureToken": true])
+        let token = try XCTUnwrap(signedIn["idToken"] as? String)
+        XCTAssertEqual(signedIn["localId"] as? String, "qa-rewards-native-staff")
+        func call(_ name: String, _ payload: [String: Any]) async throws {
+            let result = try await post("http://127.0.0.1:5002/connectify-19dd8/us-central1/\(name)", ["data": payload], token: token)
+            XCTAssertNotNil(result["result"], "Local staff callable failed: \(result)")
+        }
+        // A separate offer keeps the journey independent of SDK tests that
+        // legitimately redeemed the stocked fixture earlier in the same run.
+        let partnerID = "qa-rewards-native-partner", perkID = "qa-rewards-native-ui"
+        try await call("savePartner", ["partnerId": partnerID, "name": "Fictional Native Rewards Business", "category": "retail",
+            "address": "42 Fictional Native Rewards Road", "contactName": "Fictional owner", "contactEmail": "fictional-owner@example.test",
+            "active": true, "agreement": ["agreedBy": "Fictional owner", "agreedAtMs": Date().addingTimeInterval(-10).timeIntervalSince1970 * 1000,
+                                         "reference": "Local fictional QA agreement; no real business"], "reason": "Local UI fixture"])
+        try await call("upsertPartnerPerk", ["partnerId": partnerID, "perkId": perkID, "title": "Fictional UI Withdrawal Offer",
+            "description": "Local QA only", "terms": "Fictional QA only", "pointCost": 500,
+            "expiresAtMs": Date().addingTimeInterval(300).timeIntervalSince1970 * 1000,
+            "codes": ["LOCAL-UI-WITHDRAWAL"], "reason": "Local UI fixture"])
+        var app = QA.launch(tab: "profile", extraArguments: ["-QAOfflineData", "NO", "-QAUseFirestoreEmulator", "YES", "-QAResetAuth", "YES"])
+        let signIn = app.buttons["profileSignIn"]
+        for _ in 0..<20 where !signIn.isHittable { app.swipeUp() }
+        QA.waitFor(signIn, "guest sign-in").tap()
+        let email = QA.waitFor(app.textFields["Email address"], "email")
+        email.tap(); email.typeText("qa-rewards-native-staff@example.test")
+        let password = app.secureTextFields["Password"]
+        password.tap(); password.typeText("local-rewards-native-only")
+        let submit = app.buttons["authSubmit"]
+        for _ in 0..<4 where !submit.isHittable { app.swipeUp() }
+        QA.waitFor(submit, "sign-in submit").tap()
+        QA.waitFor(app.buttons["openOfflinePacks"], "signed-in profile", timeout: 30)
+        app.terminate()
+        app = QA.launch(tab: "rewards", extraArguments: ["-QAOfflineData", "NO", "-QAUseFirestoreEmulator", "YES"])
+        let redeem = app.buttons["redeem-perk:\(perkID)"]
+        QA.waitFor(redeem, "actual stocked reward", timeout: 30)
+        for _ in 0..<8 where redeem.frame.midY >= app.frame.height - 160 { app.swipeUp() }
+        let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: redeem)
+        XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 15), .completed, "Wait for the actual account balance before redemption.")
+        XCTAssertTrue(redeem.isHittable)
+        let before = XCTAttachment(screenshot: app.screenshot())
+        before.name = "Rewards before redemption confirmation"; before.lifetime = .keepAlways; add(before)
+        redeem.tap()
+        let confirmation = app.alerts["Redeem this perk?"]
+        if !confirmation.waitForExistence(timeout: 5) { print(app.debugDescription.prefix(12000)) }
+        QA.waitFor(confirmation, "redemption confirmation")
+        try await call("deactivatePartnerOffer", ["kind": "perk", "targetId": perkID, "reason": "Withdraw fictional UI offer"])
+        let withdrawn = NSPredicate { _, _ in !confirmation.exists && !redeem.exists }
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: withdrawn, object: nil)], timeout: 15), .completed,
+                       "Staff withdrawal must remove the row and pending confirmation without a gesture or manual refresh.")
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Rewards after live staff withdrawal"; screenshot.lifetime = .keepAlways; add(screenshot)
+        try QA.audit(app, screen: "Rewards after live withdrawal")
+        app.terminate()
+    }
 }

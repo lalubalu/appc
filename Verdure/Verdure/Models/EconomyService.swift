@@ -48,6 +48,9 @@ struct PartnerPerk: Identifiable, Equatable, Sendable {
     let expiresAt: Date?
     var latitude: Double? = nil
     var longitude: Double? = nil
+    var partnerID: String? = nil
+    var partnerRevision: String? = nil
+    var perkRevision: String? = nil
     var coordinate: CLLocationCoordinate2D? {
         guard let latitude, let longitude, latitude.isFinite, longitude.isFinite,
               abs(latitude) <= 90, abs(longitude) <= 180 else { return nil }
@@ -113,6 +116,19 @@ struct RedeemedPerkCode: Identifiable, Equatable, Sendable {
 
 // MARK: Service
 
+private final class RewardsResources {
+    var listeners: [ListenerRegistration] = []
+    var expiryTask: Task<Void, Never>?
+    var refreshTask: Task<Void, Never>?
+    var auth: Auth?
+    var authHandle: AuthStateDidChangeListenerHandle?
+    deinit {
+        expiryTask?.cancel(); refreshTask?.cancel()
+        for listener in listeners { listener.remove() }
+        if let authHandle { auth?.removeStateDidChangeListener(authHandle) }
+    }
+}
+
 @MainActor @Observable
 final class EconomyService {
 
@@ -125,22 +141,124 @@ final class EconomyService {
     var lastError: String?
 
     private var db: Firestore { Firestore.firestore() }
+    private var uid: String?
+    private var requestID = UUID()
+    private var listenerID = UUID()
+    @ObservationIgnored private let resources = RewardsResources()
+
+    func connect(_ account: String?) {
+        if resources.authHandle == nil {
+            let auth = Auth.auth()
+            resources.auth = auth
+            resources.authHandle = auth.addStateDidChangeListener { [weak self] _, user in
+                let account = user?.uid
+                Task { @MainActor [weak self] in
+                    guard Auth.auth().currentUser?.uid == account else { return }
+                    self?.connect(account)
+                }
+            }
+        }
+        guard account != uid else { return }
+        stopListening(); requestID = UUID(); uid = account
+        catalog = RewardsCatalog(); myCodes = []; isLoading = false
+        hasLoaded = false; lastError = nil
+    }
+
+    private func stopListening() {
+        listenerID = UUID()
+        for listener in resources.listeners { listener.remove() }
+        resources.listeners = []
+        resources.expiryTask?.cancel(); resources.refreshTask?.cancel()
+        resources.expiryTask = nil; resources.refreshTask = nil
+    }
 
     // MARK: Catalog
 
     func refresh() async {
+        let account = Auth.auth().currentUser?.uid
+        connect(account)
         if QAData.offline { hasLoaded = true; return }
-        guard Auth.auth().currentUser != nil else { hasLoaded = true; return }
+        guard let account else { hasLoaded = true; return }
+        let request = UUID(); requestID = request
         isLoading = true
-        defer { isLoading = false; hasLoaded = true }
+        defer { if requestID == request { isLoading = false; hasLoaded = true } }
         do {
             let result = try await Functions.functions().httpsCallable("listRewardsCatalog").call([:])
+            guard uid == account, Auth.auth().currentUser?.uid == account, requestID == request else { return }
             guard let data = result.data as? [String: Any] else { return }
             catalog = Self.parseCatalog(data)
+            expirePerks()
+            listenForInvalidation(account: account)
             lastError = nil
         } catch {
+            guard uid == account, Auth.auth().currentUser?.uid == account, requestID == request else { return }
             // Keep whatever we had; the screen shows a retryable state.
             lastError = "Couldn't load rewards. Pull to refresh."
+        }
+    }
+
+    private func expirePerks() {
+        catalog.perks.removeAll { ($0.expiresAt ?? .distantFuture) <= Date() }
+    }
+
+    private func scheduleExpiry() {
+        resources.expiryTask?.cancel()
+        let now = Date()
+        let deadlines = catalog.perks.flatMap { [$0.expiresAt, $0.earlyAccessUntil].compactMap { $0 }.filter { $0 > now } }
+        guard let deadline = deadlines.min() else { return }
+        let generation = listenerID
+        resources.expiryTask = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(max(0, deadline.timeIntervalSinceNow))) } catch { return }
+            guard let self, self.listenerID == generation else { return }
+            self.expirePerks()
+            self.scheduleExpiry()
+            // Early-access eligibility also changes at a clock boundary.
+            self.queueRefresh()
+        }
+    }
+
+    private func listenForInvalidation(account: String) {
+        stopListening()
+        let generation = listenerID
+        var paths = Set<String>()
+        for perk in catalog.perks {
+            var targets = [("perkStatus/\(perk.id)", perk.perkRevision, false, perk.id)]
+            if let partnerID = perk.partnerID, !partnerID.isEmpty, !partnerID.contains("/") {
+                targets.append(("partnerStatus/\(partnerID)", perk.partnerRevision, true, partnerID))
+            }
+            for (path, revision, partner, target) in targets where paths.insert(path).inserted {
+                let listener = db.document(path).addSnapshotListener(includeMetadataChanges: true) { [weak self] snapshot, _ in
+                    // Ignore stale disk data. Missing metadata permits legacy
+                    // offers; every staff write creates current status atomically.
+                    guard let snapshot, !snapshot.metadata.isFromCache, let data = snapshot.data() else { return }
+                    let unavailable = partner ? data["available"] as? Bool == false : data["visible"] as? Bool == false ||
+                        (data["expiresAtMs"] as? Double ?? .greatestFiniteMagnitude) <= Date().timeIntervalSince1970 * 1000
+                    // Pre-v2 perk hashes omit visibility and partial stock.
+                    // Comparing them to v2 callable hashes would refetch forever.
+                    // A subsequent staff write atomically upgrades the metadata.
+                    let comparable = partner || data["revisionVersion"] as? Int == 2
+                    let changed = comparable && revision != nil && (data["revision"] as? String) != revision
+                    guard unavailable || changed else { return }
+                    Task { @MainActor [weak self] in
+                        guard let self, self.uid == account, Auth.auth().currentUser?.uid == account, self.listenerID == generation else { return }
+                        self.catalog.perks.removeAll { partner ? $0.partnerID == target : $0.id == target }
+                        self.scheduleExpiry()
+                        self.queueRefresh()
+                    }
+                }
+                resources.listeners.append(listener)
+            }
+        }
+        scheduleExpiry()
+    }
+
+    private func queueRefresh() {
+        guard resources.refreshTask == nil else { return }
+        resources.refreshTask = Task { [weak self] in
+            do { try await Task.sleep(for: .milliseconds(150)) } catch { return }
+            guard let self else { return }
+            self.resources.refreshTask = nil
+            await self.refresh()
         }
     }
 
@@ -172,7 +290,10 @@ final class EconomyService {
                 terms: nonEmpty(Sanitize.text(p["terms"] as? String, max: 240)),
                 expiresAt: msDate(p["expiresAtMs"]),
                 latitude: p["latitude"] as? Double,
-                longitude: p["longitude"] as? Double
+                longitude: p["longitude"] as? Double,
+                partnerID: p["partnerId"] as? String,
+                partnerRevision: p["partnerRevision"] as? String,
+                perkRevision: p["perkRevision"] as? String
             )
         }
 
@@ -194,10 +315,13 @@ final class EconomyService {
     /// Reads `users/{uid}/perkCodes` — owner-readable by the rules.
     func loadMyCodes() async {
         if QAData.offline { return }
-        guard let uid = Auth.auth().currentUser?.uid else { return }
+        let account = Auth.auth().currentUser?.uid
+        connect(account)
+        guard let account else { return }
         do {
-            let snap = try await db.collection("users").document(uid)
+            let snap = try await db.collection("users").document(account)
                 .collection("perkCodes").limit(to: 50).getDocuments()
+            guard uid == account, Auth.auth().currentUser?.uid == account else { return }
             myCodes = snap.documents.compactMap { doc in
                 let d = doc.data()
                 guard let code = d["code"] as? String, !code.isEmpty else { return nil }

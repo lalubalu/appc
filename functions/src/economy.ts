@@ -382,13 +382,16 @@ export const listRewardsCatalog = onCall(async (req) => {
       id: p.id, title: p.title, partner: trustedOffers.get(p.id)!.partner, description: p.description, kind: p.kind,
       pointCost: Math.min(PERK_MAX_COST, Math.max(PERK_MIN_COST, Number(p.pointCost) || PERK_MIN_COST)),
       earlyAccessUntilMs: p.earlyAccessUntil ? p.earlyAccessUntil.toMillis() : null,
-      plusOnlyUntilOpens: !!(p.earlyAccessUntil && p.earlyAccessUntil.toMillis() > now),
+      plusOnlyUntilOpens: !!(!isPlus && p.earlyAccessUntil && p.earlyAccessUntil.toMillis() > now),
       redeemable: perkVisibleTo(p, isPlus, now) && (Number(p.codePoolCount) || 0) > 0,
       codesLeft: Number(p.codePoolCount) || 0,
       terms: p.terms ?? null,
       expiresAtMs: p.expiresAt ? p.expiresAt.toMillis() : null,
       latitude: trustedOffers.get(p.id)?.latitude ?? null,
       longitude: trustedOffers.get(p.id)?.longitude ?? null,
+      partnerId: trustedOffers.get(p.id)!.partnerId,
+      partnerRevision: trustedOffers.get(p.id)!.partnerRevision,
+      perkRevision: trustedOffers.get(p.id)!.perkRevision,
     }));
   const cash = Object.entries(CASH_CATALOG).map(([id, c]) => ({ id, name: c.name, usd: c.usd, cost: c.cost, active: c.active }));
   const spent = rollingSpendUsd(user, now);

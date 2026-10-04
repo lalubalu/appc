@@ -10,6 +10,7 @@ import {
   perkRelevance, choosePlacement,
   nearYouEligible, partnerHasAgreement,
 } from "../lib/partners.js";
+import { perkStatus } from "../lib/partner-status.js";
 
 let pass = 0, fail = 0;
 const ok = (n, c, e = "") => { if (c) { pass++; console.log(`  ✅ ${n}`); } else { fail++; console.log(`  ❌ ${n} ${e}`); } };
@@ -19,6 +20,16 @@ const perk = (id, o = {}) => ({
   pointCost: 800, categories: [], hours: [], claimable: true, ...o,
 });
 const none = new Set();
+const currentPerk = { active: true, pointCost: 500, codePoolCount: 2, expiresAt: { toMillis: () => 1000 } };
+const currentStatus = perkStatus(currentPerk), soldOutStatus = perkStatus({ ...currentPerk, codePoolCount: 0 });
+ok("status: sold-out offer stays visible but is unavailable", soldOutStatus.visible && !soldOutStatus.available);
+ok("status: withdraw sold-out changes visibility and revision", !perkStatus({ ...currentPerk, codePoolCount: 0, active: false }).visible &&
+   perkStatus({ ...currentPerk, codePoolCount: 0, active: false }).revision !== soldOutStatus.revision);
+ok("status: partial stock change invalidates displayed count", perkStatus({ ...currentPerk, codePoolCount: 1 }).revision !== currentStatus.revision);
+ok("status: hidden and removed offers are invisible", !perkStatus({ ...currentPerk, hidden: true }).visible && !perkStatus({ ...currentPerk, removed: true }).visible);
+ok("status: invalid price is invisible", !perkStatus({ ...currentPerk, pointCost: 10 }).visible);
+ok("status: public metadata contains no private offer/contact/code fields", Object.keys(currentStatus).sort().join(",") === "available,expiresAtMs,revision,revisionVersion,visible");
+ok("status: visibility/stock revision schema is explicitly versioned", currentStatus.revisionVersion === 2);
 
 console.log("── rule 4: never in Friends Activity ──");
 ok("friends_activity is not an allowed surface", !isAllowedSurface("friends_activity"));

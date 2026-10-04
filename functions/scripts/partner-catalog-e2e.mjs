@@ -82,8 +82,8 @@ try {
   for (const kind of ["partnerStatus", "perkStatus"]) {
     const ref = doc(client, kind, kind === "partnerStatus" ? partnerId : perkId);
     const status = (await getDoc(ref)).data();
-    check(`${kind} exposes only availability/revision/expiry`, Object.keys(status).sort().join(",") ===
-      (kind === "partnerStatus" ? "available,revision" : "available,expiresAtMs,revision"));
+    check(`${kind} exposes only visibility/availability/revision/expiry`, Object.keys(status).sort().join(",") ===
+      (kind === "partnerStatus" ? "available,revision" : "available,expiresAtMs,revision,revisionVersion,visible"));
     check(`${kind} cannot be enumerated`, await denied(() => getDocs(collection(client, kind))));
     check(`${kind} cannot be client-forged`, await denied(() => setDoc(ref, { available: true, revision: "forged" })));
   }
@@ -96,6 +96,14 @@ try {
   await until(() => observed.partnerStatus?.available && observed.perkStatus?.available);
   const payload = map.result.offers.find((p) => p.perkId === perkId);
   check("callable revisions match live committed status", payload.partnerRevision === observed.partnerStatus.revision && payload.perkRevision === observed.perkStatus.revision);
+  await call(staff, "upsertPartnerPerk", { ...perk, codes: undefined, earlyAccessUntilMs: Date.now() + 60000, reason: "Local early-access eligibility fixture" });
+  const freeEarly = (await call(member, "listRewardsCatalog")).result?.perks.find(p => p.id === perkId);
+  check("free catalog locks current early-access window", freeEarly?.plusOnlyUntilOpens && !freeEarly.redeemable);
+  await db.doc(`users/${member.localId}`).set({ plusExpiresAt: Timestamp.fromMillis(Date.now() + 86400000) }, { merge: true });
+  const plusEarly = (await call(member, "listRewardsCatalog")).result?.perks.find(p => p.id === perkId);
+  check("Plus catalog exposes early access as unlocked and redeemable", plusEarly?.plusOnlyUntilOpens === false && plusEarly.redeemable);
+  await db.doc(`users/${member.localId}`).set({ plusExpiresAt: null }, { merge: true });
+  await call(staff, "upsertPartnerPerk", { ...perk, codes: undefined, reason: "Restore fictional ordinary offer" });
   check("perk deactivation succeeds", (await call(staff, "deactivatePartnerOffer", { kind: "perk", targetId: perkId, reason: "Deactivate fictional offer" })).result?.active === false);
   await until(() => observed.perkStatus?.available === false);
   check("connected listener receives immediate perk invalidation", observed.perkStatus.revision !== payload.perkRevision);
@@ -106,6 +114,15 @@ try {
   check("last code redemption succeeds", (await call(member, "redeemReward", { rewardId: perkId })).result?.redeemed === true);
   await until(() => observed.perkStatus?.available === false);
   check("last code atomically invalidates displayed perk", (await db.doc(`partnerPerks/${perkId}`).get()).data().codePoolCount === 0);
+  const soldOut = (await call(member, "listRewardsCatalog")).result?.perks.find((p) => p.id === perkId);
+  check("sold-out Rewards remains visible with canonical listener revisions", soldOut?.codesLeft === 0 && !soldOut.redeemable &&
+    soldOut.partnerId === partnerId && soldOut.partnerRevision === observed.partnerStatus.revision && soldOut.perkRevision === observed.perkStatus.revision && observed.perkStatus.visible === true);
+  const soldOutRevision = observed.perkStatus.revision;
+  await call(staff, "deactivatePartnerOffer", { kind: "perk", targetId: perkId, reason: "Withdraw sold-out fictional offer" });
+  await until(() => observed.perkStatus?.visible === false);
+  check("deactivation of already sold-out perk changes revision", observed.perkStatus.revision !== soldOutRevision);
+  check("withdrawn sold-out perk leaves fresh Rewards", !(await call(member, "listRewardsCatalog")).result?.perks.some((p) => p.id === perkId));
+  await call(staff, "upsertPartnerPerk", { ...perk, codes: undefined, reason: "Restore fictional sold-out offer" });
   check("code import restores availability", (await call(staff, "importPartnerCodes", { perkId, csv: `code\nNEW-${suffix}`, reason: "Refill fictional code pool" })).result?.codesAdded === 1);
   await until(() => observed.perkStatus?.available === true);
   const oldRevision = observed.partnerStatus.revision;

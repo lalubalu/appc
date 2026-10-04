@@ -104,7 +104,7 @@ struct RootView: View {
                     .environment(parkGuides)
                     .environment(offlinePacks)
                     .onAppear {
-                        if authService.isAuthStateResolved { offlinePacks.connect(authService.currentUser?.uid) }
+                        if authService.isAuthStateResolved { offlinePacks.connect(authService.currentUser?.uid); economyService.connect(authService.currentUser?.uid) }
                         locationManager.requestPermission()
                         connectServicesIfNeeded()
                         gameState.recordActiveDay()   // real daily streak
@@ -124,10 +124,10 @@ struct RootView: View {
                         }
                     }
                     .onChange(of: authService.currentUser?.uid) { _, uid in
-                        if authService.isAuthStateResolved { offlinePacks.connect(uid); refreshOfflinePacks() }
+                        if authService.isAuthStateResolved { offlinePacks.connect(uid); economyService.connect(uid); refreshOfflinePacks() }
                     }
                     .onChange(of: authService.isAuthStateResolved) { _, resolved in
-                        if resolved { offlinePacks.connect(authService.currentUser?.uid); refreshOfflinePacks() }
+                        if resolved { offlinePacks.connect(authService.currentUser?.uid); economyService.connect(authService.currentUser?.uid); refreshOfflinePacks() }
                     }
                     .onChange(of: network.isWiFi) { _, wifi in
                         if wifi && scenePhase == .active { refreshOfflinePacks() }
@@ -140,6 +140,7 @@ struct RootView: View {
                         partnerDiscovery.beginSession()
                         Task { await partnerDiscovery.refresh(around: locationManager.userLocation) }
                         refreshOfflinePacks()
+                        if economyService.hasLoaded { Task { await economyService.refresh() } }
                         // Retry place-collection ops only; attendance is never queued.
                         Task { await gameState.flushPendingOps() }
                     }

@@ -59,10 +59,10 @@ import CoreLocation
         func set(_ path: String, _ values: [String: Any]) async throws {
             try await request("/\(path)", method: "PATCH", body: ["fields": fields(values)])
         }
-        func until(_ condition: () -> Bool) async throws {
+        func until(_ stage: String, _ condition: () -> Bool) async throws {
             let end = Date().addingTimeInterval(10)
             while !condition() && Date() < end { try await Task.sleep(for: .milliseconds(40)) }
-            XCTAssertTrue(condition(), "Actual partner service did not receive its live invalidation.")
+            XCTAssertTrue(condition(), "Actual partner service did not receive \(stage).")
         }
         // A missing service is an explicit skip, never physical-device proof.
         do { try await set("qaPartnerListener/\(suffix)", ["local": true]) }
@@ -87,10 +87,16 @@ import CoreLocation
         do {
             try await set("partners/\(partnerID)", partner)
             try await set("partnerPerks/\(perkID)", perk)
+            try await set("perkStatus/\(perkID)", ["available": true, "revision": "legacy-pre-v2-field-set",
+                                                   "expiresAtMs": Date().addingTimeInterval(120).timeIntervalSince1970 * 1000])
             await service.refresh(around: origin)
             XCTAssertEqual(service.offers.map(\.id), [perkID])
             XCTAssertEqual(service.nearYou?.id, perkID)
             let original = try XCTUnwrap(service.offers.first)
+            for _ in 0..<25 {
+                try await Task.sleep(for: .milliseconds(40))
+                XCTAssertEqual(service.offers.first?.id, perkID, "Legacy revision formats must not refetch a fresh map payload forever.")
+            }
             // Equivalent to the backend's atomic source/status mutation; no
             // service.refresh call or GPS movement is used to observe removal.
             func deactivate(_ collection: String, id: String, revision: String) async throws {
@@ -102,13 +108,13 @@ import CoreLocation
                 ]])
             }
             try await deactivate("partnerPerks", id: perkID, revision: "fixture-deactivated")
-            try await until { service.offers.isEmpty && service.nearYou == nil }
+            try await until("perk withdrawal") { service.offers.isEmpty && service.nearYou == nil }
             try await set("partnerPerks/\(perkID)", perk)
             try await set("perkStatus/\(perkID)", ["available": true, "revision": original.perkRevision!, "expiresAtMs": original.expiresAt!.timeIntervalSince1970 * 1000])
             service.beginSession(); await service.refresh(around: origin)
             XCTAssertEqual(service.nearYou?.id, perkID)
             try await deactivate("partners", id: partnerID, revision: "fixture-partner-deactivated")
-            try await until { service.offers.isEmpty && service.nearYou == nil }
+            try await until("partner withdrawal") { service.offers.isEmpty && service.nearYou == nil }
             try await set("partners/\(partnerID)", partner)
             try await set("partnerStatus/\(partnerID)", ["available": true, "revision": original.partnerRevision!])
             try await request("/perkStatus/\(perkID)", method: "DELETE")
@@ -117,7 +123,7 @@ import CoreLocation
             service.beginSession(); await service.refresh(around: origin)
             XCTAssertEqual(service.offers.first?.id, perkID)
             XCTAssertEqual(service.nearYou?.id, perkID)
-            try await until { service.offers.isEmpty && service.nearYou == nil }
+            try await until("clock expiry") { service.offers.isEmpty && service.nearYou == nil }
             try Auth.auth().signOut()
             await service.refresh(around: origin)
             XCTAssertTrue(service.offers.isEmpty)

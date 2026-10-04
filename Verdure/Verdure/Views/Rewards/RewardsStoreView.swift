@@ -79,6 +79,9 @@ struct RewardsStoreView: View {
             }
             .task { await economy.refresh(); await economy.loadMyCodes() }
             .refreshable { await economy.refresh(); await economy.loadMyCodes() }
+            .onChange(of: economy.catalog.perks) { _, perks in
+                if let pending = confirmingPerk, !perks.contains(pending) { confirmingPerk = nil }
+            }
             .alert("Redeem this perk?", isPresented: Binding(
                 get: { confirmingPerk != nil }, set: { if !$0 { confirmingPerk = nil } }
             )) {
@@ -120,6 +123,10 @@ struct RewardsStoreView: View {
 
     private func redeemPerk(_ perk: PartnerPerk) {
         guard !isRedeeming else { return }
+        guard economy.catalog.perks.contains(perk), perk.redeemable, (perk.expiresAt ?? .distantFuture) > Date() else {
+            redeemError = "This offer changed. Review the current offer in Rewards."
+            return
+        }
         isRedeeming = true
         Task {
             defer { isRedeeming = false }
@@ -288,6 +295,7 @@ struct RewardsStoreView: View {
         .accessibilityLabel(perkAccessibilityLabel(perk, locked: locked, redeemed: redeemed, affordable: affordable))
         .accessibilityHint(locked ? "Opens the Verdure Plus subscription page."
                                   : (redeemed || !affordable ? "" : "Double tap to redeem."))
+        .accessibilityIdentifier("reward-perk:\(perk.id)")
     }
 
     @ViewBuilder
@@ -320,6 +328,7 @@ struct RewardsStoreView: View {
             }
             .buttonStyle(.plain)
             .disabled(!affordable || !perk.redeemable || isRedeeming)
+            .accessibilityIdentifier("redeem-perk:\(perk.id)")
         }
     }
 

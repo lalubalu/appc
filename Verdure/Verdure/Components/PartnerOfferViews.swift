@@ -40,6 +40,10 @@ struct PartnerOfferDetail: View {
     @Environment(PartnerDiscoveryService.self) private var partners
     @Environment(\.dismiss) private var dismiss
     @State private var showRewards = false
+    private var offerIsCurrent: Bool {
+        (offer.expiresAt ?? .distantFuture) > Date() &&
+        (partners.offers.contains(offer) || partners.nearYou == offer)
+    }
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -67,5 +71,7 @@ struct PartnerOfferDetail: View {
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
             .sheet(isPresented: $showRewards) { RewardsStoreView() }
         }.presentationDetents([.medium, .large])
+            .task { if !offerIsCurrent { dismiss() } }
+            .onChange(of: offerIsCurrent) { _, current in if !current { dismiss() } }
     }
 }

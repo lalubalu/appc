@@ -16,11 +16,13 @@ export function partnerStatus(data: FirebaseFirestore.DocumentData | undefined) 
 }
 export function perkStatus(data: FirebaseFirestore.DocumentData | undefined) {
   const expiresAtMs = data?.expiresAt?.toMillis?.() ?? 0;
-  const available = data?.active === true && data?.hidden !== true && data?.removed !== true && Number(data?.codePoolCount) > 0 &&
+  const visible = data?.active === true && data?.hidden !== true && data?.removed !== true &&
     Number.isInteger(data?.pointCost) && data!.pointCost >= 500 && data!.pointCost <= 2000;
+  const stock = Number(data?.codePoolCount) || 0;
+  const available = visible && stock > 0;
   // Expiry is a timestamp, rather than a clock-dependent revision. Clients
   // can expire an already downloaded offer without another server write.
-  return { available, expiresAtMs, revision: digest([available, expiresAtMs, data?.title ?? null, data?.description ?? null,
+  return { visible, available, expiresAtMs, revisionVersion: 2, revision: digest([visible, available, stock, expiresAtMs, data?.title ?? null, data?.description ?? null,
     data?.terms ?? null, data?.pointCost ?? null, data?.earlyAccessUntil?.toMillis?.() ?? null,
     data?.categories ?? [], data?.hours ?? [], data?.days ?? []]) };
 }

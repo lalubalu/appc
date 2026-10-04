@@ -168,8 +168,22 @@ struct OfflinePackBuilderView: View {
 struct OfflinePackDetailView: View {
     let entry: OfflinePackEntry
     @Environment(OfflinePackService.self) private var service
+    @Environment(EconomyService.self) private var economy
     @State private var pack: OfflinePack?
     @State private var error: String?
+    private var displayedPerks: [OfflinePerk] {
+        guard let pack else { return [] }
+        let now = Date().timeIntervalSince1970 * 1000
+        if !NetworkStatus.shared.isOnline { return pack.perks.filter { $0.expiresAtMs > now } }
+        let ids = Set(pack.perks.map(\.id))
+        return economy.catalog.perks.compactMap { perk in
+            guard ids.contains(perk.id), let expiresAt = perk.expiresAt, expiresAt > Date() else { return nil }
+            return OfflinePerk(id: perk.id, title: perk.title, partner: perk.partner, description: perk.description ?? "",
+                               pointCost: perk.pointCost, latitude: perk.latitude, longitude: perk.longitude,
+                               expiresAtMs: expiresAt.timeIntervalSince1970 * 1000,
+                               earlyAccessUntilMs: perk.earlyAccessUntil.map { $0.timeIntervalSince1970 * 1000 }, viewOnly: true)
+        }
+    }
     var body: some View {
         OfflineSnapshotGuard(ownerUid: entry.ownerUid, expiresAtMs: entry.expiresAtMs) {
             ScrollView {
@@ -219,7 +233,9 @@ struct OfflinePackDetailView: View {
                             }.padding(.vertical, 8)
                         }
                         Text("Partner perks, view only").font(VType.display(23, .semibold))
-                        ForEach(pack.perks.filter { $0.expiresAtMs > Date().timeIntervalSince1970 * 1000 }) { perk in
+                        Text(NetworkStatus.shared.isOnline ? "Showing current offers for this pack." : "Saved when downloaded. Availability may have changed; reconnect to check.")
+                            .font(VType.body(13)).foregroundStyle(Palette.inkSoft)
+                        ForEach(displayedPerks) { perk in
                             VStack(alignment: .leading, spacing: 5) {
                                 Text(perk.partner).font(VType.body(17, .semibold))
                                 Text(perk.title).font(VType.body(15))
@@ -234,7 +250,11 @@ struct OfflinePackDetailView: View {
                 }.padding(Spacing.md).padding(.bottom, 110)
             }.background(VerdureBackground())
         }.navigationTitle("Downloaded pack").navigationBarTitleDisplayMode(.inline)
-        .task(id: entry.id) { do { pack = try service.open(entry) } catch { self.error = error.localizedDescription } }
+        .task(id: entry.id) {
+            do { pack = try service.open(entry) } catch { self.error = error.localizedDescription }
+            if NetworkStatus.shared.isOnline { await economy.refresh() }
+        }
+        .onChange(of: NetworkStatus.shared.isOnline) { _, online in if online { Task { await economy.refresh() } } }
     }
 }
 

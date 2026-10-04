@@ -14,13 +14,13 @@ synonym map remain untouched; `CLAUDE.md` deploy status remains untouched.
 | A1 | No partners in organic For You/Everything; allowed map/near_you surfaces; regression | Implemented locally; allowed surfaces and organic-feed regression: 16 focused checks. See PARTNER-SURFACES-2026-10-04.md. |
 | A2 | Distinct partner map pins; per-user persistent default-on toggle; detail/distance/dismissal | Implemented locally; default-on per-user toggle, distinct pins/detail, dismissal; scoped simulator control/audit checked. Full active catalog now paged beyond 500 and stationary pins invalidated by safe public metadata. 25 connected catalog/listener checks and an actual iOS SDK invalidation/expiry test passed. |
 | A3 | One walking-distance/time-appropriate Discover card; When-In-Use only; persistent dismissal; no far fallback | Implemented locally; 800 m, server local-time rules, one session slot, dismissal and hour expiry; focused checks. Stationary card invalidation, real timed expiry and account clearing tested with SDK listeners. Physical venue QA pending. |
-| A4 | Nearby default rewards sort with location; existing fallback | Implemented locally; 107 iOS units include distance/fallback/tie behavior; scoped Rewards UI checked. 502-fixture Rewards catalog returned in full. Rewards cache invalidation remains to audit; server redemption rechecks availability. |
+| A4 | Nearby default rewards sort with location; existing fallback | Implemented locally; distance/fallback/tie tests and scoped Rewards UI checked. 502-fixture Rewards catalog returned in full. Live stock/price/business/withdrawal/expiry/account updates pass real SDK tests, including legacy metadata compatibility. 30 catalog/listener/rules checks and ten focused native tests passed. Actual live withdrawal closes the Rewards confirmation; offline-pack UI regression passed. See PARTNER-SURFACES-2026-10-04.md. |
 | A5 | One partner alert per RSVP; event venue proximity; shared weekly cap/quiet hours/preference; emulator proof | Implemented and locally checked: 19 RSVP-job checks, atomic shared budget and once-only notice; device push explicitly untested/excluded. |
 | A6 | Opt-in adult-only live promotional alerts; consent/Always toggle; nearest 20 regions; shared cap/privacy | Pending; optional, no cut decision yet |
 | B0 | Firebase admin claim CLI only; every endpoint server-gated; immutable admin-only before/after audit; red-team per path | Implemented locally: claim CLI, canonical Auth server checks, immutable audits for reads/mutations and intent/outcome for long jobs. 29 access checks and 12 legacy-job checks; see STAFF-CONSOLE-2026-10-04.md. |
 | B1 | Contextual moderation queue/history/filters/age, >20h highlight; reason-required remove/restore/warn/suspend | Implemented locally: 19 server workflow checks, 14 pagination/601-report checks, browser removal/restoration and >100 rows. Detailed reports show a bounded preview plus all reasons/count. |
 | B2 | Organizer approval/rejection reasons, 50-cap used/remaining | Implemented locally: 20 server checks including concurrent final-slot approvals; browser approval/cap and >100 application rows. |
-| B3 | Geocoded partners; activation requires recorded agreement; perks 500–2,000; CSV duplicate checks/counts; stock <10; immediate deactivation with reason | Implemented locally: 47 management checks and browser geocoded partner/perk/CSV/deactivation/map proof. Agreement and price/stock constraints enforced server-side. Stationary map/card invalidation verified; Rewards and other sponsored caches remain to audit. No real business activated. |
+| B3 | Geocoded partners; activation requires recorded agreement; perks 500–2,000; CSV duplicate checks/counts; stock <10; immediate deactivation with reason | Implemented locally: 47 management checks and browser geocoded partner/perk/CSV/deactivation/map proof. Agreement and price/stock constraints enforced server-side. Stationary map/card and Rewards invalidation pass connected tests, including withdrawing sold-out offers; historical issued codes are retained. Actual pending confirmation withdrawal and offline UI regressions passed. Open-detail visible dismissal proof remains. No real business activated. |
 | B4 | Support/organizer/merchant submissions; handled status/note | Implemented locally: 43 browser/server/database checks, canonical Firebase authorization for all 3 actions, Supabase immutable read/mutation audits and rollback proof. See WEBSITE-SUBMISSIONS-2026-10-04.md. |
 | B5 | Per-source ingestion failures/last success/count; duplicate rate; queue age; organizer count; treasury/planner/SerpApi spend | Implemented locally: persistent source failures/history, full current supply/duplicate heuristic, aggregated queues, recorded spend estimates. 14 server checks and actual adapter failure visible in browser; invoice reconciliation is not claimed. |
 | C1 | Separate weekly official place pipeline; licenses recorded before ingestion; geometry joins; loud console-visible failures | Backend implemented locally: five permission-checked sources, Tuesday schedule, complete atomic catalog, exact geometry/hole joins, source health and actual browser outage/recovery. 59 new units + 33 pipeline/browser checks; 5,507 real usable features read back with every geometry checksum. Native coordinate joins and public park-week events are now integrated with C2; see PARK-GUIDE-2026-10-04.md as well as PARK-PIPELINE-2026-10-04.md. |
@@ -227,3 +227,33 @@ been claimed.
 - Remaining partner caches, F1/F2, A6, D2 permission/venue follow-up, H2,
   physical G and final whole-sprint acceptance remain in scope. Nothing was cut
   or deployed. The full sprint remains incomplete.
+
+## October 4 Rewards-cache checkpoint
+
+- Rewards now receives canonical partner/perk revision metadata. Stock changes,
+  business/price edits, withdrawal and expiry update a stationary catalog through
+  actual SDK listeners/timers. Sold-out offers stay visible; withdrawing one
+  still changes its revision. SDK sign-out clears the catalog and issued codes;
+  withdrawal preserves legitimate historical codes.
+- Versioned perk metadata avoids repeated invalidation by older persisted hashes.
+  Both native map and Rewards tests exercise that compatibility boundary, then
+  observe real invalidation. The free/Plus early-access catalog verdict was also
+  corrected and checked against actual local server responses.
+- Latest backend: 431 units, 49 index-guard cases, six-file D1 freeze and 30
+  connected catalog/rules/listener checks passed after fresh builds. Ten scoped
+  native tests passed in the recorded combined attempts; their UI failures are
+  retained separately. The final standalone UI test passed with a fresh build,
+  actual staff withdrawal and accessibility audit. The offline-pack UI journey
+  also passed. Saved before/after Rewards screenshots were visually inspected.
+- The initial native map/card timeout remains unexplained; stage diagnostics
+  now make recurrence actionable. SDK ownership compile failures and UI
+  positioning/already-redeemed fixture failures are recorded honestly. The UI
+  journey now uses its own offer, rather than erasing redemption history.
+- Downloaded perks remain view-only snapshots offline with an availability
+  warning. Online, those rows use the current canonical catalog for pack IDs.
+  The newly added open partner detail dismissal still needs actual UI proof.
+  Rewards/offline disposable accounts and offers were cleaned; immutable local
+  staff audits remain. No real business was activated.
+- Remaining: open-detail UI proof, A6, F1/F2 (including C2 stories), D2 reuse/
+  precise-venue follow-up, H2, all physical G gates and final complete-sprint
+  regression/audit. No optional cut, ranking/classifier drift or deployment.

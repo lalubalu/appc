@@ -80,11 +80,10 @@ xcodebuild -quiet -project Verdure.xcodeproj -scheme Verdure \
 
 Scoped simulator UI checks covered Rewards' Nearby fallback, notification settings and the map-layer toggle. The map audit passed with one narrowly recorded exception: MapKit's native Legal attribution link has a text-sized hit region. Full physical VoiceOver and the complete G script remain required. Live partner pin/card interaction on physical phones remains unverified. Push delivery, real purchases, universal links and cellular use against a local emulator remain explicitly untested.
 
-Discovery currently queries only the first 100 active perks. A stationary cached pin/card also remains until its next fetch after server deactivation. Removing that limit and invalidating those caches remain follow-up work; server redemption and fresh surfaces already refuse inactive offers immediately.
-
-The new RSVP compound-query index is present in `firestore.indexes.json`.
-The complete query inventory/check required by H1 is still pending; emulator
-success does not prove a live index exists.
+The initial 100-perk limit and stationary map/card caching gaps were resolved
+in the complete-catalog checkpoint below. H1's full source/index inventory is
+now checked separately in FIRESTORE-INDEXES.md; emulator success does not prove
+a live index exists.
 
 ## Complete catalog and stationary invalidation checkpoint
 
@@ -96,7 +95,7 @@ and a 502-fixture Rewards catalog passed the connected regression.
 Staff partner/perk writes, code refill and last-code redemption update safe
 `partnerStatus`/`perkStatus` metadata in the same transaction. Authenticated
 clients may get a known metadata document; list and all client writes are
-refused. Metadata exposes only availability, a public-field revision and perk
+refused. Metadata exposes only visibility/availability, a public-field revision and perk
 expiry, never contacts, agreement details or code values. The iOS service owns
 and cancels SDK listeners/timers; account/session/request guards discard late
 callbacks. Missing legacy metadata allows the canonical callable result, and
@@ -113,7 +112,97 @@ Firebase SDK callbacks, without manually refreshing the service.
 FIRESTORE_EMULATOR_HOST=127.0.0.1:8899 node functions/scripts/partner-catalog-e2e.mjs
 ```
 
-The above proves map/near-you cache invalidation. Rewards and other cached
-sponsored surfaces still need an immediate-invalidation audit; their canonical
-server responses/redemption checks do not prove a stationary cached client is
-fresh. Physical partner-venue and distance QA remains pending.
+The above checkpoint proves map/near-you cache invalidation. The later Rewards
+checkpoint below extends that evidence. Physical partner-venue and distance QA
+remains pending.
+
+## Rewards cache checkpoint
+
+The canonical Rewards payload now includes parent/perk revisions. The native
+EconomyService listens to known metadata documents, removes withdrawn or
+changed rows immediately, and coalesces a fresh canonical fetch. Revision
+changes include partial stock decrements, so 2 → 1 codes updates a stationary
+screen. Perk metadata uses `revisionVersion: 2`: persisted older-format hashes
+are not compared with newly computed v2 hashes. A read-only emulator inspection
+found one active source-backed status with a different hash format, and actual
+native map/Rewards tests now install legacy metadata and verify that it cannot
+trigger a repeated remove/refetch loop. Staff writes upgrade metadata atomically.
+Perk metadata distinguishes `visible` from `available`: zero-stock
+offers stay visible in Rewards, but withdrawing an already sold-out perk still
+changes its revision and removes it. Metadata remains non-enumerable and
+client-immutable; no contacts, agreements or code values are disclosed.
+
+Expiry removes cached rows on a timer. Early-access opening rechecks canonical
+eligibility. The catalog now correctly returns Plus members' early offers as
+unlocked; the previous flag locked the UI even though server redemption allowed
+the purchase. Actual free/Plus catalog checks cover both sides of that window.
+SDK account changes clear catalog, codes, listeners and pending
+requests; late responses cannot publish another account's data. Already issued
+codes remain available after an offer is withdrawn, until account clearing.
+Rewards drops a pending redemption confirmation when its exact offer snapshot
+changes and checks the current snapshot again before sending a redemption.
+An open map/card offer detail dismisses when its snapshot is withdrawn or
+replaced. That detail's visible dismissal is still awaiting an actual UI test.
+
+Downloaded packs continue to preserve immutable view-only snapshots offline,
+with a visible warning that availability may have changed. Online, their perk
+rows use the current canonical catalog for the downloaded IDs, so withdrawn
+offers are not promoted from stale pack bytes. These changes do not enable any
+offline redemption or check-in. The planner/event-detail sponsored callable has
+no native cached consumer in the inspected app source.
+
+Fresh backend units: 431 passed, plus 49 source/index guard cases and the
+six-file classifier freeze. Connected catalog/rules/listener checks: 30 passed.
+Fresh scoped native tests: 10 passed, zero failed/skipped, covering real staff
+callables, stock/title/price/business edits, sold-out withdrawal, partner
+withdrawal, historic codes, early-access opening, timed expiry and SDK sign-out.
+They also rerun map/card removal/expiry and reward-price parsing/sort regression.
+
+The first native preflight had eight passes and one map/card invalidation
+timeout with an ambiguous shared assertion. Its result is retained; the stage
+diagnostic now identifies perk withdrawal, partner withdrawal or clock expiry.
+The fresh ten-test run passed, but the original timeout's exact cause has not
+been established. Two candidate builds of the new test then failed Swift 6's
+SDK `sending` ownership check; transferring a fresh JSON object fixed the test
+helper without weakening compiler settings.
+
+The offline-pack sign-in/download/relaunch/stored-trail/storage UI regression
+passed. The first Rewards UI attempt failed before confirmation; the focused
+rerun passed after waiting for the account balance and positioning the button
+above the tab bar. A combined SDK/UI attempt passed all ten native checks but
+could not find the redemption button after the SDK test had redeemed that same
+offer. The UI test now creates a separate fictional offer rather than resetting
+redemption history. These unsuccessful attempts are retained as separate
+receipts, never counted as green combined runs.
+
+The final standalone UI test passed with its own offer, including actual
+withdrawal closing the open confirmation and removing the row without manual
+refresh or a gesture, followed by a passing structural accessibility audit.
+Before/after screenshots were inspected. Latest receipts are in
+`docs/evidence/rewards-backend-units-2026-10-04.log`,
+`rewards-catalog-e2e-2026-10-04.log`, `rewards-sdk-legacy-summary-2026-10-04.json`,
+`partner-sdk-legacy-summary-2026-10-04.json` and `rewards-ui-summary-2026-10-04.json`.
+The recorded combined-attempt JSON still honestly includes its failed UI test.
+The Rewards and offline native fixture scripts were cleaned after verification;
+immutable fictional staff audit history is retained locally.
+
+```sh
+# Local sprint emulators must already be running; no production endpoints.
+npm --prefix functions run test:units
+FIRESTORE_EMULATOR_HOST=127.0.0.1:8899 node functions/scripts/partner-catalog-e2e.mjs
+FIRESTORE_EMULATOR_HOST=127.0.0.1:8899 FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 \
+  node functions/scripts/rewards-native-fixture.mjs
+cd Verdure
+xcodegen generate
+xcodebuild -quiet -project Verdure.xcodeproj -scheme Verdure \
+  -destination 'platform=iOS Simulator,name=iPhone 16 Plus' \
+  -only-testing:VerdureTests/PartnerDiscoveryTests \
+  -only-testing:VerdureTests/RewardCatalogParityTests \
+  -only-testing:VerdureTests/RewardsLiveCatalogTests test
+# Back at the repository root after testing:
+FIRESTORE_EMULATOR_HOST=127.0.0.1:8899 FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 \
+  node functions/scripts/rewards-native-fixture.mjs --clean
+```
+
+Physical venue/GPS/two-phone gates, the full final regression and the other
+unfinished sprint sections remain required. No deployment or optional cut.

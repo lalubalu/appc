@@ -188,7 +188,8 @@ final class PartnerDiscoveryService {
                     guard let snapshot, !snapshot.metadata.isFromCache, let data = snapshot.data() else { return }
                     let unavailable = data["available"] as? Bool == false ||
                         (!partner && (data["expiresAtMs"] as? Double ?? .greatestFiniteMagnitude) <= Date().timeIntervalSince1970 * 1000)
-                    let changed = revision != nil && (data["revision"] as? String) != revision
+                    let comparable = partner || data["revisionVersion"] as? Int == 2
+                    let changed = comparable && revision != nil && (data["revision"] as? String) != revision
                     guard unavailable || changed else { return }
                     Task { @MainActor [weak self] in
                         guard let self, self.uid == account, Auth.auth().currentUser?.uid == account,
