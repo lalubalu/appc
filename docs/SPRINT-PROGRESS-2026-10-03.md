@@ -23,9 +23,9 @@ synonym map remain untouched; `CLAUDE.md` deploy status remains untouched.
 | B3 | Geocoded partners; activation requires recorded agreement; perks 500–2,000; CSV duplicate checks/counts; stock <10; immediate deactivation with reason | Implemented locally: 47 management checks and browser geocoded partner/perk/CSV/deactivation/map proof. Agreement and price/stock constraints enforced server-side. Stationary map/card invalidation verified; Rewards and other sponsored caches remain to audit. No real business activated. |
 | B4 | Support/organizer/merchant submissions; handled status/note | Implemented locally: 43 browser/server/database checks, canonical Firebase authorization for all 3 actions, Supabase immutable read/mutation audits and rollback proof. See WEBSITE-SUBMISSIONS-2026-10-04.md. |
 | B5 | Per-source ingestion failures/last success/count; duplicate rate; queue age; organizer count; treasury/planner/SerpApi spend | Implemented locally: persistent source failures/history, full current supply/duplicate heuristic, aggregated queues, recorded spend estimates. 14 server checks and actual adapter failure visible in browser; invoice reconciliation is not claimed. |
-| C1 | Separate weekly official place pipeline; licenses recorded before ingestion; geometry joins; loud console-visible failures | Backend implemented locally: five permission-checked sources, Tuesday schedule, complete atomic catalog, exact geometry/hole joins, source health and actual browser outage/recovery. 59 new units + 33 pipeline/browser checks; 5,507 real usable features read back with every geometry checksum. Native place/event integration remains pending with C2. See PARK-PIPELINE-2026-10-04.md. |
-| C2 | Free parks: confirmed amenities/ages/events/trails/story/hours/access/status; filters; required attribution | Pending |
-| C3 | Free source-backed trail attributes/overlays/location; official closure link/notice; no navigation | Pending; optional, no cut decision yet |
+| C1 | Separate weekly official place pipeline; licenses recorded before ingestion; geometry joins; loud console-visible failures | Backend implemented locally: five permission-checked sources, Tuesday schedule, complete atomic catalog, exact geometry/hole joins, source health and actual browser outage/recovery. 59 new units + 33 pipeline/browser checks; 5,507 real usable features read back with every geometry checksum. Native coordinate joins and public park-week events are now integrated with C2; see PARK-GUIDE-2026-10-04.md as well as PARK-PIPELINE-2026-10-04.md. |
+| C2 | Free parks: confirmed amenities/ages/events/trails/story/hours/access/status; filters; required attribution | Online guide implemented and locally checked: signed-out/free access, geometry joins, status-labelled amenities, published ages/access/entrances, park-week events, attribution and shared filters. 80 park units, 29 actual callable checks, 7 focused native checks plus earlier 12 filter regressions. F1 story integration and full device gates remain pending. See PARK-GUIDE-2026-10-04.md. |
+| C3 | Free source-backed trail attributes/overlays/location; official closure link/notice; no navigation | Online overview implemented locally: source attributes and lossless MapKit overlays, user annotation/recenter control, parent/trail status, notice and official closure link. Real County source flow passed in Simulator and screenshot inspected. Physical/outdoor GPS and offline-pack behavior remain pending with G/C4. No cut. |
 | C4 | Plus server entitlement; park/set/area packs; events/thumbnails/places/saves/plans/view-only perks; size preview/hard cap; storage/delete/age; Wi-Fi refresh/7-day expiry; offline overlays/location; no offline writes/check-in/base imagery caching | Pending |
 | C5 | Working-feature paywall/listing/website copy: offline park and place packs | Pending |
 | D2 | Existing supply audit; nine volunteer source fingerprints/terms; deduplicated in-radius count >=30; document exclusions | Pending |
@@ -66,7 +66,7 @@ are in STAFF-CONSOLE-2026-10-04.md. A reused working-emulator broad run failed
 16 fixture-collision checks; the isolated runner resolves that test setup issue.
 
 Remaining software work includes Rewards/other sponsored cache correctness and A6;
-C1 native integration and C2–C5 park/offline work; D2/D3 curation/supply; F stories/optional explore;
+C2 story integration and C4/C5 offline work; D2/D3 curation/supply; F stories/optional explore;
 H1 inventory and H2 Crashlytics. No optional feature has been silently cut.
 Physical two-phone and outdoor offline GPS/crash gates remain required.
 The full sprint and final gate are still incomplete.
@@ -113,3 +113,24 @@ crash-report proof is implied by these local results.
 See PARK-PIPELINE-2026-10-04.md for exact reruns, source/permission limits,
 counts and evidence. Neither native/device park behavior nor deployment has
 been claimed.
+
+## October 4 park-guide checkpoint
+
+- The real local catalog now includes a checksummed compact 651-park index.
+  Public/free guide callables preserve holes/islands, source status and all
+  pages; park-week events are joined by coordinates, with privacy/age/block
+  filtering. No extra collectible IDs or point awards were added.
+- Native Discover/Map/Collection use confirmed amenity filters. Existing place
+  detail connects to guides by geometry and no longer invents hours, amenities
+  or accessibility. The trail view draws original source lines and boundaries,
+  includes attribution/notice/official link, and has no route guidance.
+- Fresh backend: 366 units, including 80 park checks and the unchanged D1 freeze;
+  29 new callable checks; 28 pipeline regressions. Fresh focused native: 7/7
+  with no skips, including real-source SDK and actual UI flows. Screenshots were
+  inspected and are saved under docs/evidence. These are local results only.
+- A device inventory found one registered iPhone 16 Pro Max marked unavailable;
+  no two-phone install or outdoor run was performed. Hardware availability was
+  requested while software work continued.
+- C4/C5, D2/D3, F1/F2, A6, remaining partner-cache audit, H1/H2 and G/final gates
+  remain in the full scope. C2's F1 story field is not yet implemented. Nothing
+  was cut, deployed or represented as complete without evidence.

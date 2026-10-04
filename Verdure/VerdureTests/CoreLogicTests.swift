@@ -6,6 +6,72 @@ import XCTest
 @MainActor
 final class CoreLogicTests: XCTestCase {
 
+    func testParkGeometryJoinsByBoundaryAndExcludesHoles() throws {
+        let json = #"{"type":"Polygon","coordinates":[[[0,0],[10,0],[10,10],[0,10],[0,0]],[[2,2],[4,2],[4,4],[2,4],[2,2]]]}"#
+        let geometry = try JSONDecoder().decode(ParkGeometry.self, from: Data(json.utf8))
+        XCTAssertTrue(geometry.contains(.init(latitude: 1, longitude: 1)))
+        XCTAssertFalse(geometry.contains(.init(latitude: 3, longitude: 3)))
+        XCTAssertTrue(geometry.contains(.init(latitude: 3, longitude: 2)))
+        XCTAssertFalse(geometry.contains(.init(latitude: 3, longitude: 11)))
+        let roundTrip = try JSONDecoder().decode(ParkGeometry.self, from: JSONEncoder().encode(geometry))
+        XCTAssertEqual(roundTrip.polygons, geometry.polygons)
+        XCTAssertEqual(geometry.coordinatePaths.count, 2)
+    }
+
+    func testParkGeometryPreservesSeparateIslandsAndRejectsBadCoordinates() throws {
+        let json = #"{"type":"MultiPolygon","coordinates":[[[[0,0],[1,0],[1,1],[0,1],[0,0]]],[[[20,20],[21,20],[21,21],[20,21],[20,20]]]]}"#
+        let geometry = try JSONDecoder().decode(ParkGeometry.self, from: Data(json.utf8))
+        XCTAssertTrue(geometry.contains(.init(latitude: 20.5, longitude: 20.5)))
+        XCTAssertFalse(geometry.contains(.init(latitude: 15, longitude: 15)))
+        for json in [#"{"type":"LineString","coordinates":[[200,1],[2,1]]}"#,
+                     #"{"type":"Polygon","coordinates":[[[0,0],[1,0],[1,1],[0,1]]]}"#] {
+            XCTAssertThrowsError(try JSONDecoder().decode(ParkGeometry.self, from: Data(json.utf8)))
+        }
+    }
+
+    func testParkAmenityFiltersPersistWithoutLosingExistingChoices() throws {
+        let legacy = try JSONDecoder().decode(DiscoveryFilterState.self, from: Data(#"{"radiusMiles":25,"placeCategories":["Parks"]}"#.utf8))
+        XCTAssertFalse(legacy.hasParkFilters)
+        XCTAssertEqual(legacy.radiusMiles, 25)
+        XCTAssertEqual(legacy.placeCategories, [.parks])
+        var state = legacy; state.toddlerPlayground = true; state.parkRestrooms = true
+        let restored = try JSONDecoder().decode(DiscoveryFilterState.self, from: JSONEncoder().encode(state))
+        XCTAssertEqual(restored, state)
+        XCTAssertFalse(ParkFlags(toddler: true, dogs: false, restrooms: false, water: true).matches(state))
+        XCTAssertTrue(ParkFlags(toddler: true, dogs: false, restrooms: true, water: false).matches(state))
+        let defaults = UserDefaults(suiteName: "park-filter-\(UUID().uuidString)")!
+        let filters = DiscoveryFilters(defaults: defaults); filters.state = state
+        filters.resetPlaceFilters()
+        XCTAssertFalse(filters.state.hasParkFilters)
+    }
+
+    func testParkGuideLoadsRealCatalogThroughLocalCallableSDK() async throws {
+        let service = ParkGuideService()
+        await service.load(around: .init(latitude: 37.335, longitude: -121.89), radiusMiles: 2, force: true)
+        XCTAssertNil(service.lastError)
+        let park = try XCTUnwrap(service.parks.first)
+        let geometry = try XCTUnwrap(park.geometry)
+        XCTAssertTrue(geometry.contains(park.coordinate))
+        let matches = try await service.matching(park.coordinate)
+        XCTAssertTrue(matches.contains { $0.id == park.id })
+        let guide = try await service.guide(id: park.id)
+        XCTAssertEqual(guide.park.id, park.id)
+        XCTAssertFalse(guide.credits.isEmpty)
+        XCTAssertTrue(guide.credits.contains { $0.attribution.contains("City of San José") })
+        XCTAssertNotNil(guide.park.geometry)
+    }
+
+    func testParkCatalogRequestSurvivesCallerNavigationCancellation() async {
+        let service = ParkGuideService()
+        let task = Task { await service.load(around: .init(latitude: 37.335, longitude: -121.89), radiusMiles: 2, force: true) }
+        await Task.yield()
+        task.cancel()
+        await task.value
+        XCTAssertFalse(service.isLoading)
+        XCTAssertNil(service.lastError)
+        XCTAssertFalse(service.parks.isEmpty)
+    }
+
     func testSignupAgeAllowsNeutralAnswersAndKeepsMinorBoundary() {
         XCTAssertEqual(AuthService.signupAgeDecision(birthYear: nil, currentYear: 2026), .invalid)
         XCTAssertEqual(AuthService.signupAgeDecision(birthYear: 2027, currentYear: 2026), .invalid)

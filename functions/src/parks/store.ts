@@ -6,6 +6,7 @@ import { fetchSource, SOURCE_SPECS } from "./sources.js";
 import { joinParkGeometry, normalizeFeature } from "./normalize.js";
 import type { RequestJSON } from "./sources.js";
 import type { PlaceFeature, SourceId } from "./types.js";
+import { buildParkIndex, type ParkSummary } from "./guides.js";
 
 export type SourceRun = { source: SourceId; fetched: number; normalized: number; skippedNullGeometry: number; normalizedGeometryFeatures: number;
   errors: string[]; durationMs: number };
@@ -74,7 +75,37 @@ async function writeGeneration(id: string, features: PlaceFeature[], runAt: Time
     if (writes >= 20) await flush();
   }
   await flush();
-  await root.update({ status: "ready", count: features.length });
+  const indexJSON = Buffer.from(JSON.stringify(buildParkIndex(features)));
+  const encodedIndex = gzipSync(indexJSON).toString("base64");
+  const indexParts = Math.ceil(encodedIndex.length / CHUNK_CHARACTERS);
+  for (let i = 0; i < indexParts; i++) await root.collection("index").doc(String(i)).create({ data: encodedIndex.slice(i * CHUNK_CHARACTERS, (i + 1) * CHUNK_CHARACTERS) });
+  await root.update({ status: "ready", count: features.length, indexParts,
+    indexSHA256: createHash("sha256").update(indexJSON).digest("hex") });
+}
+export async function loadParkIndex(generation: string): Promise<ParkSummary[]> {
+  const root = db.doc(`parkGenerations/${generation}`), meta = (await root.get()).data();
+  if (meta?.status !== "ready" || !Number.isSafeInteger(meta.indexParts) || meta.indexParts < 1 || meta.indexParts > 256) throw new Error("Park index is unavailable; complete a fresh place-data update.");
+  const parts = await db.getAll(...Array.from({ length: meta.indexParts }, (_, i) => root.collection("index").doc(String(i))));
+  const bytes = gunzipSync(Buffer.from(parts.map((p) => { const value = p.data()?.data; if (typeof value !== "string") throw new Error("Missing park index chunk"); return value; }).join(""), "base64"), { maxOutputLength: 24 * 1024 * 1024 });
+  if (createHash("sha256").update(bytes).digest("hex") !== meta.indexSHA256) throw new Error("Park index checksum mismatch");
+  return JSON.parse(bytes.toString("utf8"));
+}
+export async function readPlaceFeatures(generation: string, ids: string[]): Promise<PlaceFeature[]> {
+  const result: PlaceFeature[] = [];
+  for (let offset = 0; offset < ids.length; offset += 20) {
+    const docs = await db.getAll(...ids.slice(offset, offset + 20).map((id) => db.doc(`parkGenerations/${generation}/features/${id}`)));
+    const page = await Promise.all(docs.map(async (d) => {
+      const data = d.data(); if (!data) throw new Error("Park feature no longer available; refresh the guide.");
+      const count = data.geometryParts;
+      if (!Number.isSafeInteger(count) || count < 1 || count > 256) throw new Error("Invalid stored geometry parts");
+      const chunks = await db.getAll(...Array.from({ length: count }, (_, i) => d.ref.collection("geometry").doc(String(i))));
+      const geometry = decodeGeometry(chunks.map((c) => { const v = c.data()?.data; if (typeof v !== "string") throw new Error("Missing stored geometry chunk"); return v; }), data.geometrySHA256);
+      const { geometryParts, geometrySHA256, geometryBytes, ...detail } = data;
+      return { ...detail, geometry } as PlaceFeature;
+    }));
+    result.push(...page);
+  }
+  return result;
 }
 export async function loadCatalogFeatures(generation?: string): Promise<PlaceFeature[]> {
   const id = generation ?? (await placeCatalogState()).generation;

@@ -117,6 +117,7 @@ export const RATE_LIMITS: Record<string, RateLimit> = {
   createEvent:      { max: 20,  windowMs: HOUR },
   planAdventure:    { max: 30,  windowMs: HOUR },
   recommendedEvents:{ max: 240, windowMs: HOUR },
+  parkBrowse: { max: 240, windowMs: HOUR },
   recordEventFeedback: { max: 120, windowMs: HOUR },
   manageInterestProfiles: { max: 120, windowMs: HOUR },
   planEvents: { max: 30, windowMs: HOUR },

@@ -7,6 +7,55 @@ import XCTest
 
 @MainActor
 final class JourneyTests: XCTestCase {
+    func testParkTrailMapShowsOfficialNoticeWithoutRouteGuidance() throws {
+        let app = QA.launch(tab: "explore", extraArguments: ["-QAOfflineData", "NO", "-QAUseFirestoreEmulator", "YES"])
+        let directory = app.buttons["parkDirectory"]
+        for _ in 0..<4 where !directory.isHittable { app.swipeUp() }
+        QA.waitFor(directory, "park directory").tap()
+        let search = QA.waitFor(app.searchFields.firstMatch, "park search")
+        search.tap(); search.typeText("Los Gatos Creek")
+        app.keyboards.buttons["Search"].tap()
+        // City trail reaches sort before the County park. Lazy rows are only
+        // exposed to accessibility after scrolling them into the viewport.
+        QA.waitFor(app.buttons["park-guide:city-parks_342"], "loaded Los Gatos Creek results", timeout: 60)
+        let county = app.buttons["park-guide:county-boundaries_20"]
+        for _ in 0..<20 where !county.isHittable { app.swipeUp() }
+        QA.waitFor(county, "real County park").tap()
+        QA.waitFor(app.staticTexts["parkStatus"], "loaded County guide", timeout: 30)
+        let map = app.buttons["parkTrailMap"]
+        for _ in 0..<12 where !map.isHittable { app.swipeUp() }
+        QA.waitFor(map, "published trail map").tap()
+        QA.waitFor(app.descendants(matching: .any).matching(identifier: "parkTrailNotice").firstMatch, "trail safety notice")
+        XCTAssertTrue(app.links["Official closures and park information"].exists || app.buttons["Official closures and park information"].exists)
+        XCTAssertFalse(app.buttons["Directions"].exists)
+        XCTAssertFalse(app.buttons["Start route"].exists)
+        let attachment = XCTAttachment(screenshot: app.screenshot()); attachment.name = "Published trail overlays"; attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    func testSourceBackedParkGuideRespectsClosedStatusAndAttribution() throws {
+        let app = QA.launch(tab: "explore", extraArguments: ["-QAOfflineData", "NO", "-QAUseFirestoreEmulator", "YES"])
+        let directory = app.buttons["parkDirectory"]
+        for _ in 0..<4 where !directory.isHittable { app.swipeUp() }
+        QA.waitFor(directory, "park directory").tap()
+        let search = QA.waitFor(app.searchFields.firstMatch, "park search")
+        search.tap(); search.typeText("River Glen Elementary Playground")
+        app.keyboards.buttons["Search"].tap()
+        let row = QA.waitFor(app.buttons["park-guide:city-parks_33"], "real closed City park", timeout: 60)
+        row.tap()
+        let status = QA.waitFor(app.staticTexts["parkStatus"], "source park status", timeout: 30)
+        XCTAssertEqual(status.label, "Closed")
+        XCTAssertTrue(app.staticTexts["This site is not listed as open. Published amenities describe the site and do not confirm access."].exists)
+        let attachment = XCTAttachment(screenshot: app.screenshot()); attachment.name = "Closed park guide"; attachment.lifetime = .keepAlways
+        add(attachment)
+        let attribution = app.staticTexts.matching(identifier: "parkAttribution").firstMatch
+        for _ in 0..<10 where !attribution.isHittable { app.swipeUp() }
+        XCTAssertTrue(attribution.exists)
+        XCTAssertTrue(attribution.label.contains("City of San José"))
+        XCTAssertTrue(attribution.label.contains("CC BY"))
+        XCTAssertFalse(app.buttons["Directions"].exists)
+    }
+
     private func signupAtNeutralAgeScreen() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-hasCompletedOnboarding", "NO", "-QADisableMotion", "YES", "-QAOfflineData", "YES"]

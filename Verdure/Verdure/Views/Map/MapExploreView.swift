@@ -7,6 +7,8 @@ struct MapExploreView: View {
     @Environment(PlacesAPIService.self) private var placesService
     @Environment(DiscoveryFilters.self) private var filters
     @Environment(PartnerDiscoveryService.self) private var partners
+    @Environment(ParkGuideService.self) private var parkGuides
+    @State private var selectedPark: ParkSummary?
     @State private var selectedPartner: PartnerMapOffer?
     @State private var search = SearchDebouncer()
     @State private var position: MapCameraPosition = .automatic
@@ -22,6 +24,7 @@ struct MapExploreView: View {
     /// Pins, deck and list honour the same persisted filters + search as every other surface.
     private var collectiblePlaces: [CollectiblePlace] {
         filters.apply(to: placesService.collectiblePlaces, query: search.debounced, userLocation: locationManager.browsingLocation)
+            .filter { parkGuides.matches($0.place, state: filters.state) }
     }
     private var nearbyUncollected: [CollectiblePlace] {
         gameState.uncollected(from: collectiblePlaces, nearbyOnly: true, userLocation: locationManager.userLocation)
@@ -67,6 +70,10 @@ struct MapExploreView: View {
                     .presentationDragIndicator(.visible)
             }
             .sheet(item: $selectedPartner) { PartnerOfferDetail(offer: $0) }
+            .sheet(item: $selectedPark) { park in NavigationStack { ParkGuideView(parkID: park.id) } }
+            .task(id: "\(locationManager.userCoordinate.latitude),\(locationManager.userCoordinate.longitude),\(filters.state.radiusMiles)") {
+                await parkGuides.load(around: locationManager.userCoordinate, radiusMiles: filters.state.radiusMiles)
+            }
         }
     }
 
@@ -108,6 +115,16 @@ struct MapExploreView: View {
                         }.buttonStyle(.plain).accessibilityLabel("Partner \(offer.partner), \(offer.title), \(offer.pointCost) points")
                     }.annotationTitles(.hidden)
                 }
+            }
+            ForEach(parkGuides.filtered(state: filters.state, query: search.debounced)) { park in
+                Annotation(park.name, coordinate: park.coordinate) {
+                    Button { selectedPark = park; selectedPlace = nil } label: {
+                        Image(systemName: park.status == "open" ? "leaf.fill" : "exclamationmark.triangle.fill")
+                            .font(.system(size: 18, weight: .semibold)).foregroundStyle(Palette.surface)
+                            .frame(width: 44, height: 44)
+                            .background(park.status == "open" ? Palette.teal.base : Palette.terracotta.base, in: Circle())
+                    }.buttonStyle(.plain).accessibilityLabel("Park guide for \(park.name), \(park.statusLabel)")
+                }.annotationTitles(.hidden)
             }
         }
         .mapStyle(.standard(pointsOfInterest: .excludingAll))
@@ -307,6 +324,9 @@ struct MapExploreView: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(spacing: 12) {
+                    ForEach(parkGuides.filtered(state: filters.state, query: search.debounced)) { park in
+                        NavigationLink { ParkGuideView(parkID: park.id) } label: { ParkGuideRow(park: park) }.buttonStyle(.plain)
+                    }
                     ForEach(collectiblePlaces) { collectible in
                         let collected = gameState.isCollected(collectible.id)
                         let dist = locationManager.formattedDistance(to: collectible.coordinate)
@@ -530,4 +550,6 @@ private struct Triangle: Shape {
         .environment(PlacesAPIService())
         .environment(DiscoveryFilters())
         .environment(PartnerDiscoveryService())
+        .environment(ParkGuideService())
+        .environment(AuthService())
 }

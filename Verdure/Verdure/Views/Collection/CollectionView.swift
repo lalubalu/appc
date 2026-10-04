@@ -8,6 +8,7 @@ struct CollectionView: View {
     @State private var selectedCollectible: CollectiblePlace? = nil
     @Environment(DiscoveryFilters.self) private var filters
     @Environment(LocationManager.self) private var locationManager
+    @Environment(ParkGuideService.self) private var parkGuides
     @State private var search = SearchDebouncer()
     /// Single-select rarity chips write into the shared, persisted filter state.
     private var filterRarity: PlaceRarity? { filters.state.rarities.count == 1 ? filters.state.rarities.first : nil }
@@ -15,6 +16,7 @@ struct CollectionView: View {
     private var allCollectibles: [CollectiblePlace] { placesService.collectiblePlaces }
     private var displayedPlaces: [CollectiblePlace] {
         filters.apply(to: allCollectibles, query: search.debounced, userLocation: locationManager.userLocation)
+            .filter { parkGuides.matches($0.place, state: filters.state) }
     }
     private var progress: Double { gameState.collectionProgress(total: allCollectibles.count) }
 
@@ -37,6 +39,11 @@ struct CollectionView: View {
                 AccessibilityNotification.Announcement("\(count) \(count == 1 ? "place" : "places")").post()
             }
             .background(VerdureBackground())
+            .task(id: "\(filters.state.hasParkFilters),\(locationManager.userCoordinate.latitude),\(locationManager.userCoordinate.longitude),\(filters.state.radiusMiles)") {
+                if filters.state.hasParkFilters {
+                    await parkGuides.load(around: locationManager.userCoordinate, radiusMiles: filters.state.radiusMiles)
+                }
+            }
             .sheet(isPresented: $showRewardsStore) { RewardsStoreView().environment(gameState).environment(economy) }
             .sheet(item: $selectedCollectible) { collectible in
                 CollectibleDetailSheet(collectible: collectible)
@@ -353,4 +360,5 @@ private struct CollectibleDetailSheet: View {
         .environment(PlacesAPIService())
         .environment(LocationManager())
         .environment(DiscoveryFilters())
+        .environment(ParkGuideService())
 }

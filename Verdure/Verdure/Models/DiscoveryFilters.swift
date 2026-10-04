@@ -100,6 +100,11 @@ struct DiscoveryFilterState: Codable, Equatable {
     var eventSort: SortOption = .soonest
     var placeSort: SortOption = .distance
     var recentSearches: [String] = []
+    var toddlerPlayground = false
+    var dogFriendly = false
+    var parkRestrooms = false
+    var drinkingWater = false
+    var hasParkFilters: Bool { toddlerPlayground || dogFriendly || parkRestrooms || drinkingWater }
 
     static let radiusChoices: [Double] = [2, 5, 10, 25, 50]
     static let maxRecentSearches = 8
@@ -112,6 +117,7 @@ struct DiscoveryFilterState: Codable, Equatable {
         case radiusMiles, eventCategories, placeCategories, rarities, dateRange, price
         case eventSetting, eventAudience, maxExpectedSize, requiredAccessibility, publicVenueOnly
         case eventSort, placeSort, recentSearches
+        case toddlerPlayground, dogFriendly, parkRestrooms, drinkingWater
     }
 
     init(from decoder: Decoder) throws {
@@ -130,6 +136,10 @@ struct DiscoveryFilterState: Codable, Equatable {
         eventSort = try values.decodeIfPresent(SortOption.self, forKey: .eventSort) ?? .soonest
         placeSort = try values.decodeIfPresent(SortOption.self, forKey: .placeSort) ?? .distance
         recentSearches = try values.decodeIfPresent([String].self, forKey: .recentSearches) ?? []
+        toddlerPlayground = try values.decodeIfPresent(Bool.self, forKey: .toddlerPlayground) ?? false
+        dogFriendly = try values.decodeIfPresent(Bool.self, forKey: .dogFriendly) ?? false
+        parkRestrooms = try values.decodeIfPresent(Bool.self, forKey: .parkRestrooms) ?? false
+        drinkingWater = try values.decodeIfPresent(Bool.self, forKey: .drinkingWater) ?? false
     }
 
     var activeEventFilterCount: Int {
@@ -140,7 +150,8 @@ struct DiscoveryFilterState: Codable, Equatable {
         (publicVenueOnly ? 1 : 0)
     }
     var activePlaceFilterCount: Int {
-        (placeCategories.isEmpty ? 0 : 1) + (rarities.isEmpty ? 0 : 1) + (radiusMiles == 10 ? 0 : 1)
+        (placeCategories.isEmpty ? 0 : 1) + (rarities.isEmpty ? 0 : 1) + (radiusMiles == 10 ? 0 : 1) +
+        (toddlerPlayground ? 1 : 0) + (dogFriendly ? 1 : 0) + (parkRestrooms ? 1 : 0) + (drinkingWater ? 1 : 0)
     }
 }
 
@@ -187,6 +198,8 @@ final class DiscoveryFilters {
     }
     func resetPlaceFilters() {
         state.placeCategories = []; state.rarities = []; state.placeSort = .distance
+        state.toddlerPlayground = false; state.dogFriendly = false
+        state.parkRestrooms = false; state.drinkingWater = false
     }
 
     // MARK: Events

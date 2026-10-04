@@ -11,16 +11,21 @@ struct PlaceDetailView: View {
     @Environment(PlacesAPIService.self) private var placesService
     @Environment(EventsAPIService.self) private var eventsService
     @Environment(LocationManager.self) private var locationManager
+    @Environment(ParkGuideService.self) private var parkGuides
+    @State private var matchedParks: [ParkSummary] = []
+    @State private var parkMatchError = false
 
     private var isSaved: Bool { gameState.isPlaceSaved(place.id) }
 
-    /// Real upcoming events matched to this place by venue name.
+    /// Non-park venues use real coordinates; full park-week events are in the
+    /// geometry-matched guide below, independent of the current feed cache.
     private var eventsHere: [Event] {
-        let name = place.name.lowercased()
-        return eventsService.events
-            .filter { $0.date > Date().addingTimeInterval(-3600) }
-            .filter { $0.locationName.lowercased().contains(name) || name.contains($0.locationName.lowercased()) }
-            .sorted { $0.date < $1.date }
+        guard let coordinate = place.coordinate else { return [] }
+        let venue = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+        return eventsService.events.filter { event in
+            guard event.date > Date(), event.virtual != true, let point = event.coordinate else { return false }
+            return venue.distance(from: CLLocation(latitude: point.latitude, longitude: point.longitude)) <= 50
+        }.sorted { $0.date < $1.date }
     }
 
     /// Open Apple Maps with directions to the place (real coords when known).
@@ -54,11 +59,21 @@ struct PlaceDetailView: View {
                     hero
                     quickStats
                     aboutSection
+                    parkGuideLinks
                     actions
                     eventsSection
                 }
                 .padding(Spacing.md)
                 .padding(.bottom, Spacing.xxl)
+            }
+            .task(id: place.id) {
+                matchedParks = []; parkMatchError = false
+                guard let coordinate = place.coordinate else { return }
+                do {
+                    let parks = try await parkGuides.matching(coordinate)
+                    guard !Task.isCancelled else { return }
+                    matchedParks = parks
+                } catch { if !Task.isCancelled { parkMatchError = true } }
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -187,48 +202,33 @@ struct PlaceDetailView: View {
 
             Divider().background(Palette.surfaceShadow.opacity(0.4))
 
-            // Hours — real (OSM opening_hours) when available; otherwise typical
-            // hours for this kind of place, labeled as such.
-            HStack(spacing: 10) {
-                Image(systemName: "clock.fill").font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(kind.accent.base).frame(width: 22)
-                Text(place.openHoursReal != nil ? "Hours" : "Typical hours")
-                    .font(VType.body(13, .semibold)).foregroundStyle(Palette.inkSoft)
-                Spacer()
-                Text(place.openHoursReal ?? "\(place.openHours) · varies")
-                    .font(VType.body(13, .semibold)).foregroundStyle(Palette.ink)
-                    .lineLimit(1).minimumScaleFactor(0.7)
+            if let hours = place.openHoursReal, !hours.isEmpty {
+                Text("Hours: \(hours)").font(VType.body(14)).foregroundStyle(Palette.ink)
+            } else {
+                Text("Hours are not published for this place. Check its official source before visiting.")
+                    .font(VType.body(14)).foregroundStyle(Palette.inkSoft)
             }
+            Text("Confirmed park amenities and accessibility details appear in the park guide where data is available.")
+                .font(VType.body(13)).foregroundStyle(Palette.inkSoft)
 
-            // Amenities
-            VStack(alignment: .leading, spacing: Spacing.sm) {
-                Text("Typical for \(place.category.rawValue.lowercased())").font(VType.body(13, .semibold)).foregroundStyle(Palette.inkSoft)
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 118), spacing: 8)], spacing: 8) {
-                    ForEach(place.amenities, id: \.label) { item in
-                        HStack(spacing: 6) {
-                            Image(systemName: item.icon).font(.system(size: 12, weight: .bold))
-                                .foregroundStyle(kind.accent.base)
-                            Text(item.label).font(VType.body(12.5, .medium)).foregroundStyle(Palette.ink)
-                                .lineLimit(1)
-                            Spacer(minLength: 0)
-                        }
-                        .padding(.horizontal, 12).padding(.vertical, 9)
-                        .background(ClayBackground(style: .inset, radius: Radius.chip))
-                    }
-                }
-            }
-
-            // Accessibility
-            HStack(spacing: 10) {
-                Image(systemName: "figure.roll").font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(kind.accent.base).frame(width: 22)
-                Text(place.accessibilityNote).font(VType.body(13, .medium)).foregroundStyle(Palette.inkSoft)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
         }
         .padding(Spacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
         .claySurface(.surface, radius: Radius.md)
+    }
+
+    @ViewBuilder private var parkGuideLinks: some View {
+        if !matchedParks.isEmpty {
+            VStack(alignment: .leading, spacing: Spacing.sm) {
+                Text("Park guides at this location").font(VType.display(22, .semibold))
+                ForEach(matchedParks) { park in
+                    NavigationLink { ParkGuideView(parkID: park.id) } label: { ParkGuideRow(park: park) }.buttonStyle(.plain)
+                }
+            }
+        } else if parkMatchError {
+            Text("Park data couldn't be checked for this location. Try again when connected.")
+                .font(VType.body(13)).foregroundStyle(Palette.inkSoft)
+        }
     }
 
     // MARK: - Actions
@@ -325,58 +325,7 @@ struct PlaceDetailView: View {
             .environment(PlacesAPIService())
             .environment(EventsAPIService())
             .environment(LocationManager())
-    }
-}
-
-// MARK: - Derived place info (category-based, deterministic — stands in for backend data)
-
-extension Place {
-    /// Opening hours inferred from the place category.
-    var openHours: String {
-        switch category {
-        case .parks, .gardens:        return "6:00 AM – 10:00 PM"
-        case .trails, .scenic:        return "Dawn to dusk"
-        case .playgrounds:            return "8:00 AM – 8:00 PM"
-        case .waterfront:             return "Open 24 hours"
-        case .sports:                 return "7:00 AM – 9:00 PM"
-        case .community:              return "9:00 AM – 6:00 PM"
-        }
-    }
-
-    /// Amenity chips (SF Symbol + label) inferred from category.
-    var amenities: [(icon: String, label: String)] {
-        switch category {
-        case .parks:
-            return [("figure.walk", "Walking paths"), ("car.fill", "Parking"),
-                    ("toilet.fill", "Restrooms"), ("dog.fill", "Dog friendly")]
-        case .trails, .scenic:
-            return [("car.fill", "Trailhead parking"), ("mountain.2.fill", "Scenic views"),
-                    ("signpost.right.fill", "Trail markers")]
-        case .gardens:
-            return [("leaf.fill", "Botanical garden"), ("toilet.fill", "Restrooms"),
-                    ("bag.fill", "Gift shop"), ("figure.2.arms.open", "Guided tours")]
-        case .playgrounds:
-            return [("figure.play", "Play structures"), ("car.fill", "Parking"),
-                    ("umbrella.fill", "Shaded seating"), ("toilet.fill", "Restrooms")]
-        case .waterfront:
-            return [("water.waves", "Waterfront"), ("car.fill", "Parking"),
-                    ("sailboat.fill", "Boating"), ("toilet.fill", "Restrooms")]
-        case .sports:
-            return [("sportscourt.fill", "Courts & fields"), ("car.fill", "Parking"),
-                    ("drop.fill", "Water fountains"), ("toilet.fill", "Restrooms")]
-        case .community:
-            return [("building.2.fill", "Community space"), ("wifi", "Free Wi-Fi"),
-                    ("cup.and.saucer.fill", "Café"), ("toilet.fill", "Restrooms")]
-        }
-    }
-
-    /// Accessibility summary inferred from category.
-    var accessibilityNote: String {
-        switch category {
-        case .trails, .scenic:
-            return "Some unpaved terrain — partially wheelchair accessible."
-        default:
-            return "Wheelchair accessible with paved paths and accessible parking."
-        }
+            .environment(ParkGuideService())
+            .environment(AuthService())
     }
 }

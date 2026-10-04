@@ -7,6 +7,7 @@ struct ExploreView: View {
     @Environment(LocationManager.self) private var locationManager
     @Environment(SocialService.self) private var social
     @Environment(DiscoveryFilters.self) private var filters
+    @Environment(ParkGuideService.self) private var parkGuides
     @State private var search = SearchDebouncer()
     @State private var showGem = false
     @State private var showPlanner = false
@@ -31,6 +32,7 @@ struct ExploreView: View {
         // Persisted filters (radius, category) + search, all local; then the
         // screen's own For You / chip narrowing on top.
         filters.apply(to: sourcePlaces, query: placeSearch, userLocation: locationManager.browsingLocation).filter { p in
+            guard parkGuides.matches(p, state: filters.state) else { return false }
             if let cat = placeFilter { return p.category == cat }
             if forYou && showForYou { return interests.contains(p.category) }
             return true
@@ -46,6 +48,7 @@ struct ExploreView: View {
                 VStack(alignment: .leading, spacing: Spacing.lg) {
                     header.riseIn(index: 0)
                     nearbySection.riseIn(index: 1)
+                    parkSection
                     plannerTile.riseIn(index: 2)
                     dailyGemTile.riseIn(index: 3)
                 }
@@ -55,6 +58,9 @@ struct ExploreView: View {
             }
             .background(VerdureBackground())
             .task { await placesService.fetchNearbyPlaces(around: locationManager.userCoordinate) }
+            .task(id: "\(locationManager.userCoordinate.latitude),\(locationManager.userCoordinate.longitude),\(filters.state.radiusMiles)") {
+                await parkGuides.load(around: locationManager.userCoordinate, radiusMiles: filters.state.radiusMiles)
+            }
             .onChange(of: locationManager.userLocation) { _, location in
                 guard location != nil else { return }
                 Task { await placesService.fetchNearbyPlaces(around: locationManager.userCoordinate) }
@@ -83,6 +89,22 @@ struct ExploreView: View {
     }
 
     // MARK: - Header
+
+    private var parkSection: some View {
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            NavigationLink { ParkDirectoryView() } label: {
+                Label("Park guides", systemImage: "leaf.fill").font(VType.display(26, .semibold)).foregroundStyle(Palette.ink)
+            }.accessibilityIdentifier("parkDirectory")
+            Text("Confirmed amenities, trails and this week's events. Free online.").font(VType.body(14)).foregroundStyle(Palette.inkSoft)
+            if parkGuides.isLoading { ProgressView("Loading parks") }
+            if parkGuides.lastError != nil {
+                Text("Park data couldn't be loaded. Open Park guides to retry.").font(VType.body(14)).foregroundStyle(Palette.inkSoft)
+            }
+            ForEach(parkGuides.filtered(state: filters.state, query: placeSearch).prefix(4)) { park in
+                NavigationLink { ParkGuideView(parkID: park.id) } label: { ParkGuideRow(park: park) }.buttonStyle(.plain)
+            }
+        }
+    }
 
     private var header: some View {
         HStack(alignment: .center) {
@@ -540,4 +562,5 @@ private struct NearbyCard: View {
         .environment(LocationManager())
         .environment(SocialService())
         .environment(DiscoveryFilters())
+        .environment(ParkGuideService())
 }

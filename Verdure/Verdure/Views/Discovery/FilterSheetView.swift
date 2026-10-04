@@ -27,6 +27,7 @@ struct FilterSheetView: View {
                         organizerDetailSection
                     } else {
                         placeCategorySection
+                        parkAmenitySection
                         raritySection
                     }
                     sortSection
@@ -117,6 +118,21 @@ struct FilterSheetView: View {
                 }
             }
         }
+    }
+
+    private var parkAmenitySection: some View {
+        @Bindable var bound = filters
+        return VStack(alignment: .leading, spacing: Spacing.sm) {
+            Text("Confirmed park amenities").font(VType.body(16, .semibold))
+                .accessibilityAddTraits(.isHeader)
+            Toggle("Playground for toddlers (ages 2–5)", isOn: $bound.state.toddlerPlayground)
+            Toggle("Dog area or dogs-on-leash trail", isOn: $bound.state.dogFriendly)
+            Toggle("Restrooms", isOn: $bound.state.parkRestrooms)
+            Toggle("Drinking water", isOn: $bound.state.drinkingWater)
+            Text("Uses published park data. Unconfirmed amenities and parks not listed open are excluded. Check the official site for current availability.")
+                .font(VType.body(12)).foregroundStyle(Palette.inkSoft)
+                .fixedSize(horizontal: false, vertical: true)
+        }.font(VType.body(14)).tint(Palette.spruce.base)
     }
 
     private var dateSection: some View {
@@ -259,7 +275,7 @@ struct FilterButton: View {
             ZStack(alignment: .topTrailing) {
                 Image(systemName: "line.3.horizontal.decrease.circle")
                     .font(.system(size: 18, weight: .semibold)).foregroundStyle(Palette.ink)
-                    .frame(width: 40, height: 40)
+                    .frame(width: 44, height: 44)
                     .background(ClayBackground(style: .surface, radius: Radius.chip, elevation: 0.5))
                 if count > 0 {
                     Text("\(count)").font(VType.num(10, .bold)).foregroundStyle(Palette.spruce.onColor)

@@ -76,6 +76,7 @@ struct RootView: View {
     @State private var economyService = EconomyService()
     @State private var partnerDiscovery = PartnerDiscoveryService()
     @State private var discoveryFilters = DiscoveryFilters()
+    @State private var parkGuides = ParkGuideService()
     @State private var dailyGemFact: GemFact?
 
     var body: some View {
@@ -94,6 +95,7 @@ struct RootView: View {
                     .environment(economyService)
                     .environment(partnerDiscovery)
                     .environment(discoveryFilters)
+                    .environment(parkGuides)
                     .onAppear {
                         locationManager.requestPermission()
                         connectServicesIfNeeded()

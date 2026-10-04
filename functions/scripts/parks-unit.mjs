@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { parseGeometry, normalizeGeometry, containsPoint, intersectsBoundary, bounds } from "../lib/parks/geometry.js";
 import { normalizeFeature, sourceStatus, joinParkGeometry, parkIdsAt, officialURL } from "../lib/parks/normalize.js";
 import { fetchSource, verifyPermission, SOURCE_SPECS, TERMS_REVIEW_EXPIRES_MS, requestJSON } from "../lib/parks/sources.js";
+import { buildParkIndex, parkSummary, boundaryDistanceMeters, confirmedAmenities, availableAmenities } from "../lib/parks/guides.js";
+import { visibleParkEvent, coordinateInput } from "../lib/parks/api.js";
 let passed = 0;
 function check(name, work) { work(); passed++; console.log(`PASS ${name}`); }
 async function test(name, work) { await work(); passed++; console.log(`PASS ${name}`); }
@@ -70,4 +72,48 @@ check("restricted trail never presented as publicly open",()=> {const f=normaliz
 check("dog permissions preserve yes, no and unknown",()=> {for(const [v,out] of [["on leash","on leash"],["no access","not allowed"],[null,"unknown"]])assert.equal(normalizeFeature("county-trails",feature(1,{public_use:"hiking",dog_use:v},{type:"LineString",coordinates:[[1,1],[2,1]]})).trail.dogs,out);});
 check("official links reject active schemes and unapproved sites",()=> {assert.ok(officialURL("javascript:alert(1)","city-parks").startsWith("https://www.sanjoseca.gov/"));assert.ok(officialURL("https://attacker.test/","county-trails").startsWith("https://parks.santaclaracounty.gov/"));});
 check("geometry joins ignore conflicting names and preserve holes",()=> {const p=normalizeFeature("city-parks",feature(1,{NAME:"One"}));const a=normalizeFeature("county-poi",feature(2,{name:"Other"},{type:"Point",coordinates:[1,1]}));const sameName=normalizeFeature("county-poi",feature(3,{name:"One"},{type:"Point",coordinates:[3,3]}));joinParkGeometry([p,a,sameName]);assert.deepEqual(a.parkIds,[p.id]);assert.deepEqual(sameName.parkIds,[]);assert.deepEqual(parkIdsAt([p],[1,1]),[p.id]);assert.deepEqual(parkIdsAt([p],[3,3]),[]);});
+const openPark = normalizeFeature("city-parks", feature(500));
+const play = normalizeFeature("city-amenities", feature(501, {AMENITYTYPE:"PLAYTOT", AMENITYSTATUS:"Open"}));
+const water = normalizeFeature("county-poi", feature(502, {type:"RESTROOM", drinking_water:"yes"}, {type:"Point", coordinates:[1,1]}));
+check("park filters require source-confirmed age and amenity facts",()=> {
+ const s=parkSummary(openPark,[play,water]); assert.deepEqual(s.flags,{toddler:true,dogs:false,restrooms:true,water:true}); assert.deepEqual(s.ages,[[2,5]]);
+});
+check("closed park cannot pass any available-amenity filter",()=>assert.deepEqual(parkSummary({...openPark,status:"closed"},[play,water]).flags,{toddler:false,dogs:false,restrooms:false,water:false}));
+check("closed and unknown city amenities cannot satisfy availability filters",()=> {
+ for(const status of ["closed","unknown","seasonal","construction"])assert.equal(availableAmenities([{...play,status}]).length,0);
+ assert.equal(availableAmenities([{...water,status:"closed"}]).length,0);
+ assert.equal(confirmedAmenities([{...play,status:"closed"}])[0].status,"closed");
+});
+check("index associates children only through recorded geometry joins",()=> {
+ const child={...play,parkIds:[openPark.id]}; const other={...water,parkIds:[]};
+ const index=buildParkIndex([openPark,child,other]);assert.equal(index[0].flags.toddler,true);assert.equal(index[0].flags.water,false);
+});
+check("distance is zero inside footprint and positive inside its hole",()=> {
+ assert.equal(boundaryDistanceMeters(park,[1,1]),0);assert.ok(boundaryDistanceMeters(park,[3,3])>10000);
+});
+check("nearby calculation measures boundary instead of far-away centroid",()=> {
+ const elongated=parseGeometry({type:"Polygon",coordinates:[[[0,0],[1,0],[1,0.001],[0,0.001],[0,0]]]});
+ assert.ok(boundaryDistanceMeters(elongated,[-0.001,0.0005])<120);
+});
+for(const input of [{latitude:"37",longitude:0},{latitude:NaN,longitude:0},{latitude:91,longitude:0},{latitude:0,longitude:181},null]) check("invalid browse coordinates are rejected",()=>assert.throws(()=>coordinateInput(input)));
+const publicEvent={active:true,hidden:false,broadcast:true,minimumAge:0};
+check("guest can see all-ages public event without creating account",()=>assert.equal(visibleParkEvent(publicEvent,{},new Set(),now),true));
+for(const patch of [{active:false},{hidden:true},{broadcast:false},{removed:true},{virtual:true}])check(`guide omits ${Object.keys(patch)[0]} event`,()=>assert.equal(visibleParkEvent({...publicEvent,...patch},{},new Set(),now),false));
+check("guide respects blocked creator and organizer",()=> {
+ for(const patch of [{creatorID:"blocked"},{organizerId:"blocked"}])assert.equal(visibleParkEvent({...publicEvent,...patch},{},new Set(["blocked"]),now),false);
+});
+check("adult program excluded for minor and guest profiles",()=> {
+ const event={...publicEvent,minimumAge:18};assert.equal(visibleParkEvent(event,{birthYear:2011,ageBand:"minor"},new Set(),now),false);
+ assert.equal(visibleParkEvent(event,{},new Set(),now),false);assert.equal(visibleParkEvent(event,{birthYear:2000,ageBand:"adult"},new Set(),now),true);
+});
+check("upper age and expired deadline remain hard eligibility filters",()=> {
+ assert.equal(visibleParkEvent({...publicEvent,category:"Program",maximumAge:17},{birthYear:2000,ageBand:"adult"},new Set(),now),false);
+ assert.equal(visibleParkEvent({...publicEvent,applicationDeadline:{toMillis:()=>now}},{},new Set(),now),false);
+});
+check("parents and guests can discover children's activities with published age facts",()=> {
+ const event={...publicEvent,category:"Workshop",minimumAge:2,maximumAge:5};
+ assert.equal(visibleParkEvent(event,{birthYear:2000,ageBand:"adult"},new Set(),now),true);
+ assert.equal(visibleParkEvent(event,{},new Set(),now),true);
+ assert.equal(visibleParkEvent({...event,category:"Program"},{birthYear:2000,ageBand:"adult"},new Set(),now),false);
+});
 console.log(`${passed} park unit checks passed`);
