@@ -190,6 +190,8 @@ export function mapBiblioItem(i: BiblioItem, area: LaunchArea, feed: BiblioFeed)
     latitude: i.lat,
     longitude: i.lng,
     category: classify(text),
+    eventTypes: i.types.map((t) => cleanText(t, 80)).filter(Boolean).slice(0, 32),
+    audiences: i.audiences.map((a) => cleanText(a, 80)).filter(Boolean).slice(0, 32),
     // Library programming is free unless the copy says otherwise. Same rule as
     // the LibCal path, same regex, deliberately — these are the same kind of
     // institution and should not disagree about what "free" means.

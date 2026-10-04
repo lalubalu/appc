@@ -25,7 +25,7 @@ export type SourceId =
 /** Mirrors EventCategory in the iOS app and CATEGORY_MAX_POINTS on the server. */
 export type EventCategory =
   | "Cleanup" | "Sports" | "Social" | "Workshop" | "Market"
-  | "Festival" | "Hackathon" | "Meetup" | "Volunteer";
+  | "Festival" | "Hackathon" | "Meetup" | "Volunteer" | "Program";
 
 export interface NormalizedEvent {
   /** Which feed produced this record. */
@@ -56,6 +56,9 @@ export interface NormalizedEvent {
   imageURL?: string;
   /** Feed-provided tags, kept for search + the Volunteering category. */
   tags: string[];
+  /** Activity metadata kept separate from audiences/topics and search tag caps. */
+  eventTypes?: string[];
+  audiences?: string[];
 }
 
 /** What one ingest run did, per source. */
@@ -81,12 +84,12 @@ export interface IngestResult {
 /** Points ceiling per category — mirrors CATEGORY_MAX_POINTS in index.ts. */
 export const CATEGORY_POINTS: Record<EventCategory, number> = {
   Cleanup: 200, Sports: 150, Social: 100, Workshop: 150, Market: 75,
-  Festival: 250, Hackathon: 200, Meetup: 100, Volunteer: 200,
+  Festival: 250, Hackathon: 200, Meetup: 100, Volunteer: 200, Program: 100,
 };
 
 /** SF Symbol per category — mirrors EventCategory.icon in the app. */
 export const CATEGORY_ICON: Record<EventCategory, string> = {
   Cleanup: "sparkles", Sports: "figure.run", Social: "cup.and.saucer.fill",
   Workshop: "hammer.fill", Market: "bag.fill", Festival: "party.popper.fill",
-  Hackathon: "laptopcomputer", Meetup: "person.3.fill", Volunteer: "heart.fill",
+  Hackathon: "laptopcomputer", Meetup: "person.3.fill", Volunteer: "heart.fill", Program: "graduationcap.fill",
 };

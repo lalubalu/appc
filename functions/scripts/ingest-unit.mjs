@@ -460,6 +460,38 @@ ok("classifier: teen volunteer orientation remains Volunteer",
      description: "New to volunteering? Attend orientation and start earning volunteer service hours.",
      tags: ["library", "Teens"], category: "Volunteer" }).category === "Volunteer");
 
+console.log("\n── completing-product classifier regressions ──");
+for (const title of ["Summer Internship", "Research Fellowships", "Paid Apprenticeship"]) {
+  const result = enrichEvent({ ...enrichedWorkshop, title, description: "Work with a local organization.",
+    category: "Volunteer", tags: [] });
+  ok(`classifier: ${title} is Program, not Volunteer`, result.category === "Program" && !result.categories.includes("Volunteer"));
+}
+for (const type of ["Workshops", "Crafts & Hobbies", "Learn English", "STEAM"]) {
+  const result = enrichEvent({ ...enrichedWorkshop, title: "Tuesday at the library", description: "",
+    category: "Social", tags: ["Adults"], eventTypes: [type] });
+  ok(`classifier: activity type ${type} maps without text inference`, result.category === "Workshop" && result.classificationConfidence >= 0.65);
+}
+ok("classifier: audience and generic fitness tags do not invent a sporting activity",
+  enrichEvent({ ...enrichedWorkshop, title: "Afternoon Snack", description: "Pick up food.",
+    category: "Sports", tags: ["Health & Fitness"], eventTypes: ["Health & Fitness"], audiences: ["Kids"] }).category !== "Sports");
+ok("classifier: recreational gaming metadata means Social, never sport",
+  enrichEvent({ ...enrichedWorkshop, title: "Friday Fun", description: "", category: "Sports",
+    tags: [], eventTypes: ["Games & Gaming"] }).category === "Social");
+ok("classifier: mixed source audience bands do not invent adult-only/all-age eligibility",
+  enrichEvent({ ...enrichedWorkshop, title: "Craft time", tags: [], eventTypes: ["Crafts & Hobbies"],
+    audiences: ["Kids, ages 5-10", "Adults, ages 18+"] }).ageSuitability === "unknown");
+ok("classifier: explicit source audience all ages is preserved",
+  enrichEvent({ ...enrichedWorkshop, audiences: ["All Ages"] }).ageSuitability === "all");
+const crowdedLocalist = mapLocalist({ id: 98765, title: "Ofrenda", description_text: "Display on campus.",
+  event_instances: [{ event_instance: { start: "2026-11-01T18:00:00Z" } }],
+  filters: { event_target_audience: Array.from({ length: 12 }, (_, n) => ({ name: `Audience ${n}` })),
+    event_types: [{ name: "Exhibitions, Performances, Installations" }] } }, SAN_JOSE, "events.sjsu.edu", "SJSU")[0];
+ok("localist: activity type survives more than eight audience tags", crowdedLocalist.eventTypes.includes("Exhibitions, Performances, Installations") &&
+  crowdedLocalist.tags.includes("Exhibitions, Performances, Installations"));
+ok("classifier: Localist activity type survives audience truncation", enrichEvent(crowdedLocalist).category === "Festival");
+ok("classifier: BiblioCommons keeps audiences separate from activity types",
+  bcMapped[0].eventTypes?.length > 0 && bcMapped[0].audiences?.length > 0);
+
 console.log("\n── payload coercion (runIngest payload mode) ──");
 const good = coercePayloadRecord({ source: "libcal", sourceEventId: "x1", title: "<b>Book Club</b>", start: "2026-10-01T18:00:00Z", locationName: "Main Library", tags: ["library", 42] }, SAN_JOSE);
 ok("valid payload record coerces with cleaned title and tags", good && good.title === "Book Club" && good.category === "Workshop" && good.tags.length === 1, JSON.stringify(good));

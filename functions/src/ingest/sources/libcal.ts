@@ -122,6 +122,7 @@ export function mapLibCalItem(i: LibCalItem, area: LaunchArea, feed: LibCalFeed)
     latitude: venue?.lat,
     longitude: venue?.lng,
     category: classify(text),
+    audiences: i.audiences.map((a) => cleanText(a, 80)).filter(Boolean).slice(0, 32),
     // Library programming is free unless the copy says otherwise.
     isFree: !/\$\s?\d|ticket(s)? required|admission fee/i.test(description),
     website: cleanUrl(i.link),

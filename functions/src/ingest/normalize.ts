@@ -97,6 +97,7 @@ export function startBucket(start: Date): number {
 export function classify(text: string): EventCategory {
   const t = ` ${text.toLowerCase()} `;
   const has = (...words: string[]) => words.some((w) => t.includes(w));
+  if (/\b(?:internships?|apprenticeships?|fellowships?)\b/.test(t)) return "Program";
   if (has("clean-up", "cleanup", "clean up", "litter", "trash pick")) return "Cleanup";
   if (has("volunteer", "charity", "nonprofit", "non-profit", "fundrais", "food drive", "donation drive", "service day", "give back", "habitat for humanity")) return "Volunteer";
   if (has("hackathon", "hack night", "coding", "devfest", "code jam", "game jam")) return "Hackathon";

@@ -155,6 +155,7 @@ enum EventCategory: String, CaseIterable, Identifiable, Codable {
     case hackathon = "Hackathon"
     case meetup = "Meetup"
     case volunteer = "Volunteer"
+    case program = "Program"
 
     var id: String { rawValue }
 
@@ -172,6 +173,7 @@ enum EventCategory: String, CaseIterable, Identifiable, Codable {
         case .hackathon: return "laptopcomputer"
         case .meetup: return "person.3.fill"
         case .volunteer: return "heart.fill"
+        case .program: return "graduationcap.fill"
         }
     }
 
@@ -187,6 +189,7 @@ enum EventCategory: String, CaseIterable, Identifiable, Codable {
         case .hackathon: return 200
         case .meetup: return 100
         case .volunteer: return 200
+        case .program: return 100
         }
     }
 }

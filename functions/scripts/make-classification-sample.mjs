@@ -1,7 +1,8 @@
 // Read-only, reproducible stratified sample for the required human label audit.
 // Sources requiring private API keys are reported missing, never fabricated.
 import { createHash } from "node:crypto";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
+import { gunzipSync } from "node:zlib";
 import { SAN_JOSE } from "../lib/ingest/areas.js";
 import { enrichEvent } from "../lib/ingest/classify.js";
 import { fetchBiblioCommons } from "../lib/ingest/sources/bibliocommons.js";
@@ -11,7 +12,10 @@ import { fetchLiveWhale } from "../lib/ingest/sources/livewhale.js";
 import { fetchMidpen } from "../lib/ingest/sources/midpen.js";
 import { fetchLegistar } from "../lib/ingest/sources/legistar.js";
 
-const date = new Date().toISOString().slice(0, 10);
+const args = process.argv.slice(2);
+const snapshotPath = args.includes("--snapshot") ? args[args.indexOf("--snapshot") + 1] : null;
+const date = args.includes("--date") ? args[args.indexOf("--date") + 1] : new Date().toISOString().slice(0, 10);
+if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("Invalid sampling date");
 const outputDir = new URL("../../docs/audits/", import.meta.url);
 const groups = [];
 async function add(name, call) {
@@ -28,12 +32,22 @@ async function add(name, call) {
   console.log(`${name}: ${sorted.length} available`);
 }
 
+if (snapshotPath) {
+  const records = JSON.parse(gunzipSync(readFileSync(snapshotPath)));
+  for (const name of [...new Set(records.map((r) => r.feed))]) {
+    const events = records.filter((r) => r.feed === name).map(({ event }) => ({ ...event,
+      start: new Date(event.start), end: event.end ? new Date(event.end) : undefined }));
+    const hash = (r) => createHash("sha256").update(`${date}:${r.source}:${r.sourceEventId}`).digest("hex");
+    groups.push({ name, records: events.sort((a, b) => hash(a).localeCompare(hash(b))), total: events.length });
+  }
+} else {
 for (const feed of SAN_JOSE.bibliocommons) await add(feed.name, () => fetchBiblioCommons(SAN_JOSE, feed));
 for (const feed of SAN_JOSE.libcal) await add(feed.name, () => fetchLibCal(SAN_JOSE, feed));
 for (const feed of SAN_JOSE.localist) await add(feed.name, () => fetchLocalist(SAN_JOSE, feed.host, feed.name));
 for (const feed of SAN_JOSE.livewhale) await add(feed.name, () => fetchLiveWhale(SAN_JOSE, feed.host, feed.name));
 for (const feed of SAN_JOSE.midpen) await add(feed.name, () => fetchMidpen(SAN_JOSE, feed));
 for (const feed of SAN_JOSE.legistar) await add(feed.name, () => fetchLegistar(SAN_JOSE, feed.client, feed.name));
+}
 
 const selected = [];
 let round = 0;
@@ -51,6 +65,7 @@ const rows = selected.map(({ feed, event }) => {
     sourceURL: event.website ?? "", startUTC: event.start.toISOString(),
     venue: event.locationName, title: event.title, description: event.description,
     tags: event.tags.join(" | "), priorCategory: event.category,
+    eventTypes: (event.eventTypes ?? []).join(" | "), audiences: (event.audiences ?? []).join(" | "),
     predictedCategory: enriched.category,
     predictedLabels: enriched.categories.join(" | "),
     confidence: enriched.classificationConfidence,

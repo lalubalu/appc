@@ -79,6 +79,8 @@ export function mapLiveWhale(e: LiveWhaleEvent, area: LaunchArea, host: string, 
     latitude: latitude !== undefined && longitude !== undefined ? latitude : undefined,
     longitude: latitude !== undefined && longitude !== undefined ? longitude : undefined,
     category: classify(`${title} ${tags.join(" ")} ${desc.slice(0, 300)}`),
+    eventTypes: (Array.isArray(e.event_types) ? e.event_types : [])
+      .map((t) => cleanText(t, 80)).filter(Boolean).slice(0, 32),
     // Missing cost means unknown. A mixed-price listing stays paid even if one
     // audience (such as children under six) gets in free.
     isFree: priceMin !== undefined ? priceMin === 0

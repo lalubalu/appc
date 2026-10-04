@@ -199,6 +199,8 @@ function fullDocument(rec: EnrichedEvent, now: Timestamp): FirebaseFirestore.Doc
     startBucket: startBucket(rec.start),
     isFree: rec.isFree ?? null,
     tags: rec.tags.slice(0, 8),
+    eventTypes: rec.eventTypes ?? [],
+    audiences: rec.audiences ?? [],
     ...enrichmentFields(rec),
     ingestedAt: now,
     lastSeenAt: now,
@@ -221,6 +223,7 @@ function refreshFromPrimary(rec: EnrichedEvent): FirebaseFirestore.DocumentData 
     category: rec.category, imagePlaceholder: CATEGORY_ICON[rec.category], pointValue: CATEGORY_POINTS[rec.category],
     titleKey: titleKey(rec.title), venueKey: venueKey(rec.locationName), startBucket: startBucket(rec.start),
     isFree: rec.isFree ?? null, tags: rec.tags.slice(0, 8),
+    eventTypes: rec.eventTypes ?? [], audiences: rec.audiences ?? [],
     ...enrichmentFields(rec),
   };
   if (rec.end) upd.endDate = Timestamp.fromDate(rec.end);

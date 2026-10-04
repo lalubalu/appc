@@ -47,7 +47,7 @@ extension EventCategory {
         case .cleanup, .volunteer: return .teal
         case .sports: return .terracotta
         case .social, .meetup: return .gold
-        case .workshop, .hackathon: return .spruce
+        case .workshop, .hackathon, .program: return .spruce
         case .market: return .gold
         case .festival: return .terracotta
         }

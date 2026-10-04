@@ -26,23 +26,28 @@ const SPORTS_DESCRIPTION = /\b(?:sports?|hike|hiking|trail walk|nature walk|bird
 const VOLUNTEER_TITLE = /\b(?:volunteer(?:ing)?|stewardship|restoration|service day|give back|food drive|trail maintenance|habitat restoration|broom removal)\b/i;
 const VOLUNTEER_INVITATION = /\b(?:volunteer(?:ing)? opportunities?|volunteers? needed|join (?:us|our) (?:volunteer|stewardship)|sign up to volunteer|become (?:a|an) (?:volunteer|adult literacy tutor)|new to volunteering|earn(?:ing)? volunteer service hours)\b/i;
 const RULES: CategoryRule[] = [
+  { category: "Program", pattern: /\b(?:internships?|apprenticeships?|fellowships?)\b/i },
   { category: "Cleanup", pattern: /\b(?:clean[ -]?up|litter|trash pick|creek clean|beach clean)\b/i },
-  { category: "Volunteer", pattern: /\b(?:volunteer(?:ing)?|stewardship|restoration|service day|give back|internship|food drive|trail maintenance|habitat restoration|broom removal)\b/i },
+  { category: "Volunteer", pattern: /\b(?:volunteer(?:ing)?|stewardship|restoration|service day|give back|food drive|trail maintenance|habitat restoration|broom removal)\b/i },
   { category: "Hackathon", pattern: /\b(?:hackathon|hack night|code jam|devfest)\b/i },
-  { category: "Workshop", pattern: /\b(?:workshop|class|clinic|bootcamp|intro(?:duction)? to|learn to|hands[ -]?on|maker|lab|training|story\s?time|coding|3d printing|seminar|homework help|tutoring?|tech help|computer help|digital help)\b/i },
+  { category: "Workshop", pattern: /\b(?:workshops?|classes?|clinics?|bootcamps?|intro(?:duction)? to|learn to|hands[ -]?on|makers?|labs?|training|story\s?times?|coding|3d printing|seminars?|lectures?|webinars?|homework help|tutoring?|tech help|computer help|digital help|STEM|STEAM|LEGO|knitting|crochet(?:ing)?|sewing|arts? (?:&|and) crafts?|jewelry making|reading buddies|read to (?:a )?dog|citizenship interview practice|resume (?:refresh|help)|career advic[ei]|info(?:rmation)? sessions?)\b/i },
   { category: "Market", pattern: /\b(?:farmers? market|flea market|craft fair|bazaar|swap meet|book sale)\b/i },
-  { category: "Festival", pattern: /\b(?:festival|concert|live music|comedy show|theat(?:er|re)|orchestra|symphony|parade|film screening)\b/i },
+  { category: "Festival", pattern: /\b(?:festivals?|concerts?|live music|comedy show|theat(?:er|re)|orchestra|symphony|parade|film screening|exhibits?|exhibitions?|performances?)\b/i },
   { category: "Sports", pattern: SPORTS_ACTIVITY },
-  { category: "Meetup", pattern: /\b(?:meetup|meet up|mixer|networking|club meeting|book club|quiz club|advisory group|public meeting|trustees meeting|community gathering)\b/i },
+  { category: "Meetup", pattern: /\b(?:meetups?|meet up|mixer|networking|club meeting|book club|quiz club|advisory group|public meeting|trustees meeting|board meeting|committee meeting|recovery meeting|coffee chat|community gathering)\b/i },
+  { category: "Social", pattern: /\b(?:board games?|bingo|trivia|scavenger hunt|coloring|colouring)\b/i },
 ];
 
 /** Feed event-type fields are a stronger signal than incidental description words. */
 const STRUCTURED_RULES: CategoryRule[] = [
-  { category: "Workshop", pattern: /\b(?:storytimes?|learning|classes?|seminars?|lectures?|technology & innovation|arts, crafts, & how-to|life skills)\b/i },
-  { category: "Festival", pattern: /\b(?:performance|concerts?|exhibitions?|dance|music)\b/i },
+  { category: "Program", pattern: /\b(?:internships?|apprenticeships?|fellowships?)\b/i },
+  { category: "Workshop", pattern: /\b(?:storytimes?|learning|classes?|workshops?|seminars?|lectures?|webinars?|training|STEAM|STEM|crafts? & hobbies|learn english|computer help|technology & innovation|arts, crafts, & how-to|life skills)\b/i },
+  { category: "Festival", pattern: /\b(?:performances?|concerts?|exhibits?|exhibitions?|dance|music)\b/i },
   { category: "Sports", pattern: /\b(?:hikes?|outdoor recreation|athletics)\b/i },
-  { category: "Meetup", pattern: /\b(?:clubs?|social events and gatherings|community meetings?)\b/i },
+  { category: "Meetup", pattern: /\b(?:clubs?|social events and gatherings|community meetings?|governance meetings?|support groups?|conference\/symposium|religious\/spiritual)\b/i },
   { category: "Volunteer", pattern: /\b(?:volunteer opportunities|community service)\b/i },
+  // These types describe social recreation/resources, never athletics.
+  { category: "Social", pattern: /\b(?:games? & family entertainment|games? & gaming|gaming|community resources)\b/i },
 ];
 
 const FAMILY = /\b(?:family|families|children|kids?|toddler|preschool|baby|babies|story\s?time|all ages)\b/i;
@@ -93,7 +98,17 @@ function inferCost(rec: NormalizedEvent): CostKind {
   return "unknown";
 }
 
-function inferAge(text: string): AgeSuitability {
+function inferAge(text: string, audiences: string[] = []): AgeSuitability {
+  const audience = audiences.join(" ");
+  if (/\ball ages\b|everyone|general public/i.test(audience)) return "all";
+  const children = FAMILY.test(audience) || /preschool|pre-school|pre-teens?|tweens?/i.test(audience);
+  const teens = /\bteens?\b/i.test(audience.replace(/pre[ -]teens?/gi, ""));
+  const adults = /\badults?|seniors?\b/i.test(audience);
+  // Mixed bands are not an assertion that every age is eligible.
+  if ((adults && (children || teens)) || (children && teens)) return "unknown";
+  if (children) return "children";
+  if (teens) return "teens";
+  if (adults) return "adults";
   if (ADULT.test(text)) return "adults";
   if (/\ball ages\b|everyone welcome|open to all/i.test(text)) return "all";
   if (YOUTH.test(text)) return "teens";
@@ -104,9 +119,9 @@ function inferAge(text: string): AgeSuitability {
 /** One pure operation used identically by fresh ingest and corpus backfill. */
 export function enrichEvent(rec: NormalizedEvent): EnrichedEvent {
   const title = rec.title;
-  const structured = rec.tags.join(" ");
+  const structured = (rec.eventTypes?.length ? rec.eventTypes : rec.tags).join(" ");
   const text = `${title} ${rec.description}`;
-  const allText = `${title} ${structured} ${rec.description}`;
+  const allText = `${title} ${structured} ${rec.tags.join(" ")} ${(rec.audiences ?? []).join(" ")} ${rec.description}`;
   const prior = sourcePrior(rec);
   const scores = new Map<EventCategory, number>([[prior.category, prior.confidence]]);
   for (const rule of STRUCTURED_RULES) {
@@ -117,7 +132,7 @@ export function enrichEvent(rec: NormalizedEvent): EnrichedEvent {
   }
   for (const rule of RULES) {
     let confidence = 0;
-    if (rule.pattern.test(title)) confidence = 0.94;
+    if (rule.pattern.test(title)) confidence = rule.category === "Program" ? 0.96 : 0.94;
     else if (rule.pattern.test(structured)) confidence = 0.88;
     else if ((rule.category === "Sports" ? SPORTS_DESCRIPTION : rule.pattern).test(rec.description)) {
       // A volunteer leading a class does not make the class a volunteer
@@ -145,10 +160,10 @@ export function enrichEvent(rec: NormalizedEvent): EnrichedEvent {
   if (FAMILY.test(allText)) labels.add("Family");
   if (YOUTH.test(allText)) labels.add("Youth");
   if (INDOORS.test(allText)) labels.add("Indoor");
-  if (OPPORTUNITY.test(allText) || labels.has("Volunteer")) labels.add("Opportunity");
+  if (OPPORTUNITY.test(allText) || labels.has("Volunteer") || labels.has("Program")) labels.add("Opportunity");
   const cost = inferCost(rec);
   if (cost === "free") labels.add("Free");
-  const age = inferAge(`${structured} ${text}`);
+  const age = inferAge(`${structured} ${text}`, rec.audiences);
   const endInferred = !rec.end;
   const end = rec.end ?? new Date(rec.start.getTime() + (rec.time === "All day" ? 24 : 2) * 3_600_000);
   const quality = Math.min(1,

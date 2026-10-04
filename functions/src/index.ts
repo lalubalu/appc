@@ -48,7 +48,7 @@ const PROOF_BUCKET =
 // Keep in sync with EventCategory.defaultPoints in the app.
 const CATEGORY_MAX_POINTS: Record<string, number> = {
   Cleanup: 200, Sports: 150, Social: 100, Workshop: 150, Market: 75,
-  Festival: 250, Hackathon: 200, Meetup: 100, Volunteer: 200,
+  Festival: 250, Hackathon: 200, Meetup: 100, Volunteer: 200, Program: 100,
 };
 
 // ── Daily earning ceiling (economic backstop) ───────────────────────────────

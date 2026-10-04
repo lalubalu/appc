@@ -40,7 +40,9 @@ function normalized(doc) {
     priceMin: typeof d.priceMin === "number" ? d.priceMin : undefined,
     website: typeof d.website === "string" ? d.website : undefined,
     imageURL: typeof d.imageURL === "string" ? d.imageURL : undefined,
-    tags: Array.isArray(d.tags) ? d.tags.filter((x) => typeof x === "string") : [] };
+    tags: Array.isArray(d.tags) ? d.tags.filter((x) => typeof x === "string") : [],
+    eventTypes: Array.isArray(d.eventTypes) ? d.eventTypes.filter((x) => typeof x === "string") : [],
+    audiences: Array.isArray(d.audiences) ? d.audiences.filter((x) => typeof x === "string") : [] };
 }
 
 // Trust only source coordinates already in the corpus. A shared venue name

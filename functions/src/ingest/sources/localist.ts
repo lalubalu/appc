@@ -58,6 +58,9 @@ export function mapLocalist(e: LocalistEvent, area: LaunchArea, host: string, na
   const title = cleanText(e.title, 120);
   const desc = cleanText(e.description_text || e.description || "", 600);
   const types = Object.values(e.filters ?? {}).flat().map((f) => f.name);
+  const eventTypes = (e.filters?.event_types ?? []).map((f) => cleanText(f.name, 80)).filter(Boolean).slice(0, 32);
+  const audiences = Object.entries(e.filters ?? {}).filter(([key]) => /audience/i.test(key))
+    .flatMap(([, values]) => values.map((f) => cleanText(f.name, 80))).filter(Boolean).slice(0, 32);
   const text = `${title} ${types.join(" ")} ${desc.slice(0, 300)}`;
   const cost = cleanText(e.ticket_cost, 40);
   const priceMatch = /\$\s?(\d+(\.\d{2})?)/.exec(cost);
@@ -82,11 +85,13 @@ export function mapLocalist(e: LocalistEvent, area: LaunchArea, host: string, na
       latitude: cleanCoord(e.geo?.latitude, 90),
       longitude: cleanCoord(e.geo?.longitude, 180),
       category: classify(text),
+      eventTypes,
+      audiences,
       isFree,
       priceMin: priceMatch ? Number(priceMatch[1]) : undefined,
       website: cleanUrl(e.localist_url || e.url),
       imageURL: cleanUrl(e.photo_url),
-      tags: types.map((t) => cleanText(t, 40)).slice(0, 8),
+      tags: [...new Set([...eventTypes, ...types.map((t) => cleanText(t, 40))])].slice(0, 8),
     });
   }
   return out;
