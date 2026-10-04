@@ -17,7 +17,11 @@ struct GoingButton: View {
 
     private var going: Bool { social.isGoing(event.id) }
 
-    var body: some View {
+    @ViewBuilder var body: some View {
+        if !event.isProgram { goingControl }
+    }
+
+    private var goingControl: some View {
         VStack(spacing: 6) {
             Button {
                 guard !isWorking else { return }

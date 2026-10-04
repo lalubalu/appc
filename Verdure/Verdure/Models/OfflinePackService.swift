@@ -18,6 +18,15 @@ struct OfflineEvent: Codable, Identifiable, Sendable {
     let latitude: Double?, longitude: Double?
     let website: String?, source: String
     let minimumAge: Int?, maximumAge: Int?, isFree: Bool?
+    let deadlineMs: Double?, virtual: Bool?, priceMin: Double?
+    var isProgram: Bool { category == "Program" }
+    func isCurrent(birthYear: Int?, now: Date = Date()) -> Bool {
+        guard (endMs ?? startMs) > now.timeIntervalSince1970 * 1000 else { return false }
+        guard isProgram else { return true }
+        guard let deadlineMs, deadlineMs > now.timeIntervalSince1970 * 1000, let birthYear, let minimumAge, let maximumAge else { return false }
+        let age = Calendar(identifier: .gregorian).component(.year, from: now) - birthYear
+        return age >= 13 && age >= minimumAge && age <= maximumAge
+    }
 }
 struct OfflineStop: Codable, Identifiable, Sendable {
     let placeId: String, name: String, latitude: Double, longitude: Double
@@ -39,6 +48,7 @@ struct OfflinePerk: Codable, Identifiable, Sendable {
 }
 struct OfflinePack: Codable, Sendable {
     let version: Int, ownerUid: String, createdAtMs: Double, expiresAtMs: Double
+    let memberBirthYear: Int?
     let selection: OfflineSelection, label: String
     let guides: [ParkGuide], events: [OfflineEvent], savedEventIDs: [String], plans: [OfflinePlan]
     let places: [OfflinePlace], perks: [OfflinePerk], thumbnails: [String: String], unavailableThumbnails: [String]

@@ -209,11 +209,24 @@ final class DiscoveryFilters {
         Self.filterEvents(events, state: state, query: query, userLocation: userLocation, now: now)
     }
 
+    nonisolated static func opportunityCategories(_ events: [Event], origin: CLLocation?, radiusMiles: Double, now: Date = Date()) -> [EventCategory] {
+        let nearby = events.filter { event in
+            guard event.date > now, event.programIsCurrent(now: now), let origin, let point = event.coordinate else { return false }
+            return CLLocation(latitude: point.latitude, longitude: point.longitude).distance(from: origin) <= radiusMiles * 1609.344
+        }
+        return EventCategory.allCases.filter { category in
+            if category == .program { return Set(nearby.filter { $0.isProgram }.map(\.id)).count >= 10 }
+            if category == .volunteer { return Set(nearby.filter { $0.category == .volunteer }.map(\.id)).count >= 30 }
+            return true
+        }
+    }
+
     nonisolated static func filterEvents(_ events: [Event], state: DiscoveryFilterState, query: String,
                                          userLocation: CLLocation?, now: Date = Date()) -> [Event] {
         let q = query.trimmingCharacters(in: .whitespaces)
         let window = state.dateRange.window(now: now)
         var out = events.filter { e in
+            if !e.programIsCurrent(now: now) { return false }
             if !state.eventCategories.isEmpty && !state.eventCategories.contains(e.category) { return false }
             if let window, !(e.date >= window.start && e.date < window.end) { return false }
             switch state.price {

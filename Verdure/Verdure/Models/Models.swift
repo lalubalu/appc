@@ -112,6 +112,14 @@ struct Event: Identifiable, Hashable {
     var applicationDeadline: Date? = nil
     var opportunitySubtype: String? = nil
 
+    var isProgram: Bool { category == .program || opportunitySubtype == "program" }
+    func programIsCurrent(now: Date = Date()) -> Bool {
+        guard isProgram else { return true }
+        guard let deadline = applicationDeadline, let minimumAge, let maximumAge,
+              minimumAge >= 13, maximumAge <= 110, minimumAge <= maximumAge else { return false }
+        return deadline > now
+    }
+
     /// Venue coordinate when both components are known.
     var coordinate: CLLocationCoordinate2D? {
         guard let latitude, let longitude else { return nil }
@@ -129,6 +137,7 @@ struct Event: Identifiable, Hashable {
         case "ics": return "Community calendar"
         case "serpapi": return "Web listing"
         case "organizer": return "Verdure organizer"
+        case "staff-program": return "Staff curated"
         default: return "Community"
         }
     }
@@ -136,7 +145,10 @@ struct Event: Identifiable, Hashable {
     /// "Free", "$12+", or nil when the source gave no price information.
     var priceLabel: String? {
         if isFree == true { return "Free" }
-        if let priceMin, priceMin > 0 { return priceMin == priceMin.rounded() ? "$\(Int(priceMin))+" : String(format: "$%.2f+", priceMin) }
+        if let priceMin, priceMin > 0 {
+            let amount = priceMin == priceMin.rounded() ? "$\(Int(priceMin))" : String(format: "$%.2f", priceMin)
+            return isProgram ? amount : amount + "+"
+        }
         if isFree == false { return "Paid" }
         return nil
     }
@@ -189,7 +201,7 @@ enum EventCategory: String, CaseIterable, Identifiable, Codable {
         case .hackathon: return 200
         case .meetup: return 100
         case .volunteer: return 200
-        case .program: return 100
+        case .program: return 0
         }
     }
 }

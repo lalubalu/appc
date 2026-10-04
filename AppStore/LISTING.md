@@ -159,7 +159,8 @@ The app does not collect an address book, health or browsing history, payment ca
 Offline packs use the existing account, saved-event/plan and location data
 categories above. A selected park or search area and existing provider place
 results are sent to Firebase to prepare a private, server-entitlement-checked
-download. Server staging expires after one hour. Device packs contain the
+download. A pack retains the account birth year to enforce saved Program age
+limits offline. Server staging expires after one hour. Device packs contain the
 member's authorized saves and plans, expire after seven days, are excluded from
 device backups and are removed on sign-out/account switch or manual deletion.
 They contain compressed event thumbnails with image metadata removed, public

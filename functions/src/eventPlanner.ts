@@ -6,7 +6,8 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret, defineString } from "firebase-functions/params";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { db, requireUid, enforceRateLimit, safeText, plusActiveFrom } from "./common.js";
-import { recommendFor, haversineMiles } from "./ranking.js";
+import { haversineMiles } from "./ranking.js";
+import { recommendEligibleFor as recommendFor } from "./program-feed.js";
 import { FREE_PLANS_PER_MONTH, PLAN_VENDOR_COST_CENTS, monthKey, nextMonthISO } from "./adventure.js";
 
 const ANTHROPIC_API_KEY = defineSecret("ANTHROPIC_API_KEY");
@@ -198,7 +199,7 @@ export const planEvents = onCall({ secrets: [ANTHROPIC_API_KEY] }, async (req) =
   const docs = await Promise.all(ranked.slice(0, 50).map((r) => db.collection("events").doc(r.id).get()));
   const rows: EventPlanCandidate[] = docs.flatMap((doc, i) => {
     const x = doc.data();
-    if (!x || x.hidden === true || x.active !== true || x.broadcast !== true) return [];
+    if (!x || x.hidden === true || x.active !== true || x.broadcast !== true || x.category === "Program" || x.opportunitySubtype === "program") return [];
     return [{ id: doc.id, title: safeText(x.title, 120), category: safeText(x.category, 50),
       organizer: safeText(x.organizer, 100), startMs: x.date instanceof Timestamp ? x.date.toMillis() : 0,
       locationName: safeText(x.locationName, 200), isFree: x.isFree === true,

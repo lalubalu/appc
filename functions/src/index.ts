@@ -154,6 +154,7 @@ export const checkInToEvent = onCall(async (req) => {
   }
   if (eventSnap.exists) {
     const ev = eventSnap.data() ?? {};
+    if (ev.category === "Program" || ev.opportunitySubtype === "program") throw new HttpsError("failed-precondition", "Programs link to their organization; attendance points are unavailable.");
 
     // SELF-DEALING. Community events are created by users, and the creator
     // chooses the venue coordinates — so an event you made is always "nearby"
@@ -454,7 +455,8 @@ export { planAdventure } from "./adventure.js";
 // field was collected at onboarding and used by no query on either side.
 // Notifications (sendEventReminders) and partner surfacing call recommendFor()
 // directly rather than re-implementing the ordering.
-export { recommendedEvents, recordEventFeedback } from "./ranking.js";
+export { recordEventFeedback } from "./ranking.js";
+export { recommendedEvents } from "./program-feed.js";
 export { manageInterestProfiles } from "./profiles.js";
 export { planEvents, refineEventPlan } from "./eventPlanner.js";
 export { recordFeedEvent, pruneFeedTelemetry } from "./feedTelemetry.js";
@@ -516,3 +518,5 @@ export { placeDataWeekly } from "./parks/index.js";
 export { nearbyParkGuides, parksAtCoordinate, parkGuide } from "./parks/api.js";
 
 export { offlinePack, expireOfflinePackStages } from "./offline/packs.js";
+
+export { saveProgram, deactivateProgram, listStaffPrograms, programListings, expireProgramListings } from "./programs.js";

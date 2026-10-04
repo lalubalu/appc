@@ -74,3 +74,7 @@
 .staff-audit-history { margin-top: .8rem; }
 .staff-audit-history details { margin: .5rem 0; padding: .8rem; border: 1px solid #c5cdbd; border-radius: .5rem; }
 .staff-audit-history pre { white-space: pre-wrap; font-size: .8rem; }
+
+.staff-program { margin:18px 0; }
+.staff-program > button { margin:0 12px 12px 0; }
+.staff-program .staff-field { max-width:600px; margin-top:14px; }

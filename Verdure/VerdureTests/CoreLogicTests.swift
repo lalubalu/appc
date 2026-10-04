@@ -1,5 +1,6 @@
 import XCTest
 import CryptoKit
+import CoreLocation
 @preconcurrency import FirebaseAuth
 @testable import Verdure
 
@@ -7,6 +8,68 @@ import CryptoKit
 
 @MainActor
 final class CoreLogicTests: XCTestCase {
+
+    func testSavedProgramRechecksDeadlineAndAgeAsTimeAdvancesOffline() throws {
+        let deadline = try XCTUnwrap(ISO8601DateFormatter().date(from: "2027-01-10T00:00:00Z"))
+        let fields: [String: Any] = ["id": "saved-program", "title": "Fictional listing", "description": "", "organizer": "Fixture",
+                                   "category": "Program", "locationName": "Virtual", "source": "staff-program",
+                                   "startMs": deadline.timeIntervalSince1970 * 1000, "deadlineMs": deadline.timeIntervalSince1970 * 1000,
+                                   "minimumAge": 16, "maximumAge": 16]
+        let event = try JSONDecoder().decode(OfflineEvent.self, from: JSONSerialization.data(withJSONObject: fields))
+        let december = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-12-31T12:00:00Z"))
+        let january = try XCTUnwrap(ISO8601DateFormatter().date(from: "2027-01-01T12:00:00Z"))
+        XCTAssertTrue(event.isCurrent(birthYear: 2010, now: december))
+        XCTAssertFalse(event.isCurrent(birthYear: nil, now: december))
+        XCTAssertFalse(event.isCurrent(birthYear: 2015, now: december))
+        XCTAssertFalse(event.isCurrent(birthYear: 2010, now: january), "An open offline listing must recheck age after the year changes")
+        XCTAssertTrue(event.isCurrent(birthYear: 2011, now: deadline.addingTimeInterval(-1)))
+        XCTAssertFalse(event.isCurrent(birthYear: 2011, now: deadline), "The deadline is exclusive even without a connection")
+    }
+
+    func testProgramActualSDKEligibilityFullSupplyAccountChangeAndDeepLinks() async throws {
+        let auth = Auth.auth()
+        try await auth.signIn(withEmail: "program-native-adult@example.test", password: "local-program-native-only")
+        defer { try? auth.signOut() }
+        let service = EventsAPIService()
+        let center = CLLocationCoordinate2D(latitude: 37.335, longitude: -121.89)
+        await service.refresh(around: center)
+        let adultPrograms = service.events.filter { $0.isProgram && $0.id.hasPrefix("program-native-") }
+        XCTAssertEqual(adultPrograms.count, 10)
+        XCTAssertTrue(adultPrograms.allSatisfy { $0.minimumAge == 18 && $0.pointValue == 0 })
+        XCTAssertTrue(DiscoveryFilters.opportunityCategories(adultPrograms, origin: CLLocation(latitude: center.latitude, longitude: center.longitude), radiusMiles: 25).contains(.program))
+        let expired = await service.event(withID: "program-native-11")
+        XCTAssertNil(expired)
+        let teenOnly = await service.event(withID: "program-native-10")
+        XCTAssertNil(teenOnly)
+        try await auth.signIn(withEmail: "program-native-teen@example.test", password: "local-program-native-only")
+        XCTAssertTrue(service.events.filter { $0.isProgram }.isEmpty, "Previous account's eligibility never leaks")
+        await service.refresh(around: center)
+        let teenPrograms = service.events.filter { $0.isProgram && $0.id.hasPrefix("program-native-") }
+        XCTAssertEqual(teenPrograms.map(\.id), ["program-native-10"])
+        XCTAssertFalse(DiscoveryFilters.opportunityCategories(teenPrograms, origin: CLLocation(latitude: center.latitude, longitude: center.longitude), radiusMiles: 25).contains(.program))
+        let adultOnly = await service.event(withID: "program-native-0")
+        XCTAssertNil(adultOnly)
+        try auth.signOut()
+        XCTAssertTrue(service.events.filter { $0.isProgram }.isEmpty)
+    }
+
+    func testProgramThresholdUsesUniqueCurrentInRadiusListingsAndFiltersDeadlines() {
+        let now = Date(), origin = CLLocation(latitude: 37.335, longitude: -121.89)
+        func program(_ id: String, deadline: Date = Date().addingTimeInterval(86400), latitude: Double = 37.335) -> Event {
+            Event(id: id, title: "Fictional program", organizer: "Fixture", date: deadline, time: "Application deadline", locationName: "Fixture",
+                  attendeeCount: 0, maxAttendees: nil, category: .program, imagePlaceholder: "graduationcap", pointValue: 0,
+                  latitude: latitude, longitude: -121.89, minimumAge: 13, maximumAge: 17, applicationDeadline: deadline)
+        }
+        let nine = (0..<9).map { program("fixture-\($0)") }
+        XCTAssertFalse(DiscoveryFilters.opportunityCategories(nine + [nine[0]], origin: origin, radiusMiles: 25, now: now).contains(.program))
+        let ten = nine + [program("tenth")]
+        XCTAssertTrue(DiscoveryFilters.opportunityCategories(ten, origin: origin, radiusMiles: 25, now: now).contains(.program))
+        XCTAssertFalse(DiscoveryFilters.opportunityCategories(nine + [program("expired", deadline: now)], origin: origin, radiusMiles: 25, now: now).contains(.program))
+        XCTAssertFalse(DiscoveryFilters.opportunityCategories(nine + [program("far", latitude: 0)], origin: origin, radiusMiles: 25, now: now).contains(.program))
+        XCTAssertFalse(DiscoveryFilters.opportunityCategories(ten, origin: nil, radiusMiles: 25, now: now).contains(.program))
+        let filtered = DiscoveryFilters.filterEvents(ten + [program("expired", deadline: now)], state: DiscoveryFilterState(), query: "", userLocation: origin, now: now)
+        XCTAssertFalse(filtered.contains { $0.id == "expired" })
+    }
 
     func testOfflinePackActualSDKDownloadPersistenceIsolationAndDeletion() async throws {
         let auth = Auth.auth()

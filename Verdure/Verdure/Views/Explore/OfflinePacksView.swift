@@ -185,8 +185,8 @@ struct OfflinePackDetailView: View {
                             }.buttonStyle(.plain).accessibilityIdentifier("park-guide:\(guide.park.id)")
                         }
                         Text("Events and saves").font(VType.display(23, .semibold))
-                        ForEach(pack.events.filter { ($0.endMs ?? $0.startMs) > Date().timeIntervalSince1970 * 1000 }) { event in
-                            NavigationLink { OfflineEventView(event: event, thumbnail: pack.thumbnails[event.id], ownerUid: pack.ownerUid, expiresAtMs: pack.expiresAtMs) } label: {
+                        ForEach(pack.events.filter { $0.isCurrent(birthYear: pack.memberBirthYear) }) { event in
+                            NavigationLink { OfflineEventView(event: event, thumbnail: pack.thumbnails[event.id], ownerUid: pack.ownerUid, expiresAtMs: pack.expiresAtMs, birthYear: pack.memberBirthYear) } label: {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(event.title).font(VType.body(16, .semibold)).foregroundStyle(Palette.ink)
                                     Text(Date(timeIntervalSince1970: event.startMs / 1000).formatted(date: .abbreviated, time: .shortened)).font(VType.body(13)).foregroundStyle(Palette.inkSoft)
@@ -240,9 +240,21 @@ struct OfflinePackDetailView: View {
 
 private struct OfflineEventView: View {
     let event: OfflineEvent, thumbnail: String?, ownerUid: String, expiresAtMs: Double
+    let birthYear: Int?
     var body: some View {
         OfflineSnapshotGuard(ownerUid: ownerUid, expiresAtMs: expiresAtMs) {
-            ScrollView {
+            TimelineView(.periodic(from: Date(timeIntervalSince1970: 0), by: 30)) { context in
+                if event.isCurrent(birthYear: birthYear, now: context.date) {
+                    detailContent
+                } else {
+                    ContentUnavailableView("Listing unavailable", systemImage: "clock.badge.exclamationmark",
+                                           description: Text("This listing expired or its age eligibility changed. Refresh your pack when online."))
+                }
+            }
+        }.navigationTitle("Saved event").navigationBarTitleDisplayMode(.inline)
+    }
+    private var detailContent: some View {
+        ScrollView {
                 VStack(alignment: .leading, spacing: Spacing.md) {
                     if let thumbnail, let data = Data(base64Encoded: thumbnail), let image = UIImage(data: data) {
                         Image(uiImage: image).resizable().scaledToFit().clipShape(RoundedRectangle(cornerRadius: Radius.md)).accessibilityHidden(true)
@@ -252,13 +264,19 @@ private struct OfflineEventView: View {
                     Text(Date(timeIntervalSince1970: event.startMs / 1000).formatted(date: .complete, time: .shortened)).font(VType.body(15))
                     Text(event.locationName).font(VType.body(15))
                     Text(event.description).font(VType.body(15))
-                    Text("RSVP and check-in are available when you're back online.").font(VType.body(14, .semibold)).foregroundStyle(Palette.inkSoft)
+                    if event.isProgram {
+                        Text("Read the official listing and apply on the organization’s site when you're back online.").font(VType.body(14, .semibold)).foregroundStyle(Palette.inkSoft)
+                        if let minimum = event.minimumAge, let maximum = event.maximumAge { Text("Ages \(minimum)–\(maximum)").font(VType.body(14)) }
+                        if event.isFree == true { Text("Free").font(VType.body(14)) }
+                        else if let cost = event.priceMin { Text(cost, format: .currency(code: "USD")).font(VType.body(14)) }
+                    } else {
+                        Text("RSVP and check-in are available when you're back online.").font(VType.body(14, .semibold)).foregroundStyle(Palette.inkSoft)
+                    }
                     if let website = event.website, let url = URL(string: website), url.scheme == "https" {
                         Link("Official listing — requires a connection", destination: url).font(VType.body(15)).frame(minHeight: 44)
                     }
                     Text("Source: \(event.source)").font(VType.body(12)).foregroundStyle(Palette.inkSoft)
                 }.padding(Spacing.md).padding(.bottom, 110)
-            }.background(VerdureBackground())
-        }.navigationTitle("Saved event").navigationBarTitleDisplayMode(.inline)
+        }.background(VerdureBackground())
     }
 }

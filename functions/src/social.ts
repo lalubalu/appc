@@ -155,6 +155,7 @@ async function loadRsvpableEvent(eventId: string) {
   const snap = await db.collection("events").doc(eventId).get();
   if (!snap.exists) throw new HttpsError("not-found", "That event no longer exists.");
   const ev = snap.data()!;
+  if (ev.category === "Program" || ev.opportunitySubtype === "program") throw new HttpsError("failed-precondition", "Read the official program listing on the organization's site.");
   if (ev.hidden === true || ev.removed === true || ev.active === false) {
     throw new HttpsError("failed-precondition", "That event isn't available.");
   }

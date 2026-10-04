@@ -16,6 +16,7 @@ struct EventsView: View {
     @Environment(StoreService.self) private var store
     @Environment(DiscoveryFilters.self) private var filters
     @State private var search = SearchDebouncer()
+    @State private var eligibilityClock = Date()
     @State private var selectedEvent: Event? = nil
     @State private var showCreateEvent = false
     @State private var showSaved = false
@@ -31,16 +32,10 @@ struct EventsView: View {
         // The service already holds QA fixtures under the DEBUG harness; a live
         // build with nothing nearby shows the honest empty deck instead.
         // Events from blocked organizers never render (mutual block, App Review 1.2).
-        eventsService.events.filter { !moderation.isBlocked($0.creatorID) }
+        eventsService.events.filter { !moderation.isBlocked($0.creatorID) && eventsService.isEligible($0, now: eligibilityClock) }
     }
     private var visibleCategoryChoices: [EventCategory] {
-        let enoughVolunteers = sourceEvents.filter { event in
-            guard event.category == .volunteer, event.date > Date(),
-                  let coordinate = event.coordinate, let origin = locationManager.userLocation else { return false }
-            return CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
-                .distance(from: origin) <= filters.state.radiusMiles * 1609.344
-        }.count >= 30
-        return EventCategory.allCases.filter { $0 != .volunteer || enoughVolunteers }
+        DiscoveryFilters.opportunityCategories(sourceEvents, origin: locationManager.browsingLocation, radiusMiles: filters.state.radiusMiles, now: eligibilityClock)
     }
 
     // MARK: Personalization ("For You")
@@ -105,6 +100,7 @@ struct EventsView: View {
     }()
 
     var body: some View {
+        TimelineView(.periodic(from: Date(timeIntervalSince1970: 0), by: 30)) { tick in
         NavigationStack {
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: Spacing.xl) {
@@ -181,6 +177,8 @@ struct EventsView: View {
                     .presentationDetents([.medium, .large]).presentationDragIndicator(.visible)
             }
             .sheet(isPresented: $showProfiles) { InterestProfilesSheet() }
+        }
+        .onChange(of: tick.date) { _, now in eligibilityClock = now }
         }
     }
 
@@ -441,10 +439,12 @@ struct EventsView: View {
                                      isSelected: selectedCategory == cat) {
                             withAnimation(.spring(response: 0.35)) { filters.state.eventCategories = [cat] }
                         }
+                        .accessibilityIdentifier("event-category:\(cat.rawValue)")
                     }
                 }
                 .padding(.vertical, 2)
             }
+            .accessibilityIdentifier("eventCategories")
         }
         .padding(.horizontal, Spacing.md)
     }
@@ -486,6 +486,7 @@ struct EventsView: View {
                                         .opacity(phase.isIdentity ? 1 : 0.55)
                                 }
                                 .onTapGesture { Haptics.soft(); selectedEvent = event }
+                                .contentShape(Rectangle())
                                 .accessibilityElement(children: .combine)
                                 .accessibilityLabel("\(event.title), \(event.category.displayName), \(dateFormatter.string(from: event.date))")
                                 .accessibilityHint("Opens event details.")
@@ -627,6 +628,10 @@ private struct EventPoster: View {
             }
             .font(VType.body(12, .semibold)).foregroundStyle(on.opacity(0.85)).lineLimit(1).padding(.top, 10)
 
+            if event.isProgram {
+                Label("Apply by \(event.date.formatted(date: .abbreviated, time: .omitted))", systemImage: "calendar")
+                    .font(VType.body(14, .semibold)).foregroundStyle(on)
+            } else {
             HStack(spacing: 10) {
                 HStack(spacing: -9) {
                     ForEach(0..<min(4, max(1, event.attendeeCount)), id: \.self) { _ in
@@ -651,6 +656,7 @@ private struct EventPoster: View {
                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Radius.chip))
             }
             .padding(.top, 16)
+            }
         }
         .padding(Spacing.lg)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -892,7 +898,7 @@ private struct CreateEventSheet: View {
         labeled("CATEGORY") {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 9) {
-                    ForEach(EventCategory.allCases) { cat in
+                    ForEach(EventCategory.allCases.filter { $0 != .program }) { cat in
                         CategoryPill(label: cat.displayName, icon: cat.icon, tint: cat.accent.base,
                                      isSelected: category == cat) { category = cat }
                     }
@@ -1083,12 +1089,21 @@ struct EventDetailSheet: View {
                             detailGrid
                             practicalDetails
                             feedbackControls
-                            goingSection
-                            checkInSection
-                            ClayButton("Get Directions", systemImage: "arrow.triangle.turn.up.right.diamond.fill",
-                                       kind: .teal, fullWidth: true) { openDirections() }
-                            ClayButton(event.website != nil ? "Visit Website" : "More Info",
-                                       systemImage: "safari.fill", kind: .ghost, fullWidth: true) { openMoreInfo() }
+                            if event.isProgram {
+                                Text("Read the official listing and apply on the organization’s site.")
+                                    .font(VType.body(14)).foregroundStyle(Palette.inkSoft)
+                                ClayButton("Read official listing", systemImage: "arrow.up.right.square", kind: .spruce, fullWidth: true) { openMoreInfo() }
+                                    .accessibilityIdentifier("programOfficialListing")
+                            } else {
+                                goingSection
+                                checkInSection
+                                ClayButton("Get Directions", systemImage: "arrow.triangle.turn.up.right.diamond.fill",
+                                           kind: .teal, fullWidth: true) { openDirections() }
+                            }
+                            if !event.isProgram {
+                                ClayButton(event.website != nil ? "Visit Website" : "More Info",
+                                           systemImage: "safari.fill", kind: .ghost, fullWidth: true) { openMoreInfo() }
+                            }
                         }
                         .padding(.horizontal, Spacing.md)
                     }
@@ -1126,7 +1141,7 @@ struct EventDetailSheet: View {
                 // else geocode the venue string so the proximity gate has teeth.
                 if let coord = event.coordinate {
                     venueCoordinate = coord
-                } else {
+                } else if !event.isProgram {
                     venueCoordinate = await EventsAPIService.geocode(event.locationName)
                 }
                 geocodeFinished = true
@@ -1159,6 +1174,7 @@ struct EventDetailSheet: View {
                     .padding(.horizontal, 10).padding(.vertical, 5)
                     .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Radius.chip))
                 Spacer()
+                if !event.isProgram {
                 HStack(spacing: 4) {
                     Image(systemName: "leaf.circle.fill").font(.system(size: 11, weight: .bold))
                     Text("+\(event.pointValue) pts").font(VType.num(12, .bold))
@@ -1166,6 +1182,7 @@ struct EventDetailSheet: View {
                 .foregroundStyle(kind.accent.onColor)
                 .padding(.horizontal, 10).padding(.vertical, 5)
                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Radius.chip))
+                }
             }
             .padding(12)
         }
@@ -1256,16 +1273,18 @@ struct EventDetailSheet: View {
 
     private var detailGrid: some View {
         VStack(spacing: Spacing.sm) {
-            detailRow("calendar", "Date", dateFormatter.string(from: event.date))
+            detailRow("calendar", event.isProgram ? "Deadline" : "Date", dateFormatter.string(from: event.date))
             detailRow("clock.fill", "Time", event.time)
             detailRow("mappin.circle.fill", "Location", event.locationName)
+            if !event.isProgram {
             if let max = event.maxAttendees { detailRow("person.2.fill", "Capacity", "\(event.attendeeCount) / \(max)") }
             else { detailRow("person.2.fill", "Attending", "\(event.attendeeCount) people") }
+            }
             if let price = event.priceLabel { detailRow("tag.fill", "Price", price) }
             detailRow("tray.full.fill", "Listed by", event.sourceCount > 1
                       ? "\(event.sourceLabel) · \(event.sourceCount) sources agree"
                       : event.sourceLabel)
-            detailRow("leaf.circle.fill", "Points", "+\(event.pointValue) for attending")
+            if !event.isProgram { detailRow("leaf.circle.fill", "Points", "+\(event.pointValue) for attending") }
         }
         .padding(Spacing.md)
         .claySurface(.surface, radius: Radius.md)
@@ -1433,6 +1452,7 @@ private struct ForYouEventCard: View {
             HStack(alignment: .top) {
                 ClayIconTile(systemImage: event.imagePlaceholder, kind: kind, size: 44, radius: Radius.chip)
                 Spacer()
+                if !event.isProgram {
                 HStack(spacing: 4) {
                     Image(systemName: "leaf.circle.fill").font(.system(size: 10, weight: .bold))
                     Text("+\(event.pointValue)").font(VType.num(11, .bold))
@@ -1440,6 +1460,7 @@ private struct ForYouEventCard: View {
                 .foregroundStyle(Palette.gold.base)
                 .padding(.horizontal, 8).padding(.vertical, 5)
                 .background(ClayBackground(style: .inset, radius: Radius.chip))
+                }
             }
             Text(event.title)
                 .font(VType.display(15, .semibold)).foregroundStyle(Palette.ink)
@@ -1460,12 +1481,13 @@ private struct ForYouEventCard: View {
         .padding(Spacing.md)
         .frame(width: 210, height: 190, alignment: .topLeading)
         .claySurface(.surface, radius: Radius.md, elevation: 0.9)
+        .contentShape(Rectangle())
         .overlay(alignment: .top) {
             Capsule().fill(kind.accent.faceGradient).frame(height: 5)
                 .padding(.horizontal, 22).offset(y: 2)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(event.title), \(event.category.displayName), \(dateFormatter.string(from: event.date)) at \(event.locationName), earns \(event.pointValue) points")
+        .accessibilityLabel(event.isProgram ? "\(event.title), Program, apply by \(dateFormatter.string(from: event.date)), \(event.locationName)" : "\(event.title), \(event.category.displayName), \(dateFormatter.string(from: event.date)) at \(event.locationName), earns \(event.pointValue) points")
         .accessibilityHint("Opens event details.")
         .accessibilityAddTraits(.isButton)
     }
@@ -2025,7 +2047,7 @@ private struct EventCalendarView: View {
                     .font(VType.body(12, .medium)).foregroundStyle(Palette.inkSoft).lineLimit(1)
             }
             Spacer(minLength: Spacing.sm)
-            PointsBadge(points: event.pointValue, kind: event.category.clayKind)
+            if !event.isProgram { PointsBadge(points: event.pointValue, kind: event.category.clayKind) }
         }
         .padding(Spacing.md)
         .frame(maxWidth: .infinity)

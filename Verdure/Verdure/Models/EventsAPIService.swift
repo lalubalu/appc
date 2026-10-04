@@ -24,10 +24,25 @@ final class EventsAPIService {
 
     // MARK: - Published State
 
-    var events: [Event] = []
+    private var storedEvents: [Event] = []
+    var events: [Event] {
+        get { storedEvents.filter { isEligible($0) } }
+        set { storedEvents = newValue }
+    }
+    private var programOwnerID: String?
+    private var eligibleProgramIDs: Set<String> = []
+    func isEligible(_ event: Event, now: Date = Date()) -> Bool {
+        guard event.isProgram else { return true }
+        return programOwnerID != nil && programOwnerID == Auth.auth().currentUser?.uid &&
+            eligibleProgramIDs.contains(event.id) && event.programIsCurrent(now: now)
+    }
     private(set) var rankedEventIDs: [String] = []
     private var feedSessionID: String?
-    private(set) var everythingEvents: [Event] = []
+    private var storedEverythingEvents: [Event] = []
+    private(set) var everythingEvents: [Event] {
+        get { storedEverythingEvents.filter { isEligible($0) } }
+        set { storedEverythingEvents = newValue }
+    }
     private(set) var everythingHasMore = true
     private(set) var everythingLoading = false
     private(set) var everythingError: String?
@@ -76,6 +91,7 @@ final class EventsAPIService {
     func fetchNearbyEvents(around center: CLLocationCoordinate2D, followedOrganizerIDs: Set<String> = []) async {
         if QAData.offline { return }   // QA: cached/sample data only
         updateCoverage(for: center)
+        await fetchPrograms(around: center)
         // Remember the follow set across plain refreshes (which pass none).
         if !followedOrganizerIDs.isEmpty { self.followedOrganizerIDs = followedOrganizerIDs }
         if let cached = cachedCenter, let last = lastFetchDate,
@@ -96,6 +112,8 @@ final class EventsAPIService {
                 var merged = fetched
                 let seen = Set(fetched.map(\.id))
                 merged.append(contentsOf: followerOnly.filter { !seen.contains($0.id) })
+                merged.removeAll { $0.isProgram }
+                merged.append(contentsOf: self.storedEvents.filter { $0.isProgram && self.isEligible($0) })
                 // A successful read is the truth — including an honest empty list.
                 self.events = merged.sorted { $0.date < $1.date }
                 self.cachedCenter = center
@@ -182,7 +200,7 @@ final class EventsAPIService {
         }
         let area = LaunchArea.nearest(to: center, in: launchAreas)?.id ?? "san-jose-ca"
         if reset || everythingAreaId != area {
-            everythingEvents = []
+            everythingEvents = events.filter { $0.isProgram }
             everythingCursor = nil
             everythingHasMore = true
             everythingAreaId = area
@@ -222,11 +240,16 @@ final class EventsAPIService {
     /// moderation, or aged out between the push and the tap), which the caller
     /// must show honestly rather than as an empty screen.
     func event(withID id: String) async -> Event? {
-        if let local = events.first(where: { $0.id == id }) { return local }
+        if let local = events.first(where: { $0.id == id }), isEligible(local) { return local }
         do {
             let doc = try await Firestore.firestore().collection("events").document(id).getDocument()
             guard doc.exists else { return nil }
-            return Self.mapFirestoreDocument(doc)
+            guard let event = Self.mapFirestoreDocument(doc) else { return nil }
+            if event.isProgram {
+                await fetchPrograms(around: cachedCenter ?? LaunchArea.builtIn[0].center)
+                guard isEligible(event) else { return nil }
+            }
+            return event
         } catch {
             print("[EventsAPI] event(withID:) failed: \(error.localizedDescription)")
             return nil
@@ -348,6 +371,31 @@ final class EventsAPIService {
         }
     }
 
+    private func fetchPrograms(around center: CLLocationCoordinate2D) async {
+        guard !QAData.offline, let uid = Auth.auth().currentUser?.uid else {
+            eligibleProgramIDs = []; programOwnerID = nil; storedEvents.removeAll { $0.isProgram }; return
+        }
+        do {
+            let response = try await Functions.functions().httpsCallable("programListings")
+                .call(["lat": center.latitude, "lng": center.longitude, "radiusMiles": 50.0])
+            guard Auth.auth().currentUser?.uid == uid,
+                  let payload = response.data as? [String: Any], let items = payload["items"] as? [[String: Any]] else { return }
+            let programs = items.compactMap { item -> Event? in
+                guard let id = item["id"] as? String, let ms = item["deadlineMs"] as? Double else { return nil }
+                var data = item
+                data["date"] = Timestamp(date: Date(timeIntervalSince1970: ms / 1000))
+                data["applicationDeadline"] = data["date"]
+                return Self.mapPayload(data, id: id)
+            }
+            programOwnerID = uid; eligibleProgramIDs = Set(programs.map(\.id))
+            storedEvents.removeAll { $0.isProgram }; storedEvents.append(contentsOf: programs)
+            storedEverythingEvents.removeAll { $0.isProgram }; storedEverythingEvents.append(contentsOf: programs)
+        } catch {
+            // Fail closed for age eligibility; ordinary event discovery remains available.
+            eligibleProgramIDs = []; programOwnerID = nil
+        }
+    }
+
     // MARK: - Firestore
 
     /// The app's ONLY event query. Every clause is required by the read rules
@@ -401,6 +449,10 @@ final class EventsAPIService {
     /// parties — both are scrubbed on read like any other external data.
     static func mapFirestoreDocument(_ doc: DocumentSnapshot) -> Event? {
         guard let data = doc.data() else { return nil }
+        return mapPayload(data, id: doc.documentID)
+    }
+
+    private static func mapPayload(_ data: [String: Any], id: String) -> Event? {
         guard let title = data["title"] as? String,
               let organizer = data["organizer"] as? String,
               let timestamp = data["date"] as? Timestamp,
@@ -415,7 +467,7 @@ final class EventsAPIService {
         let sources = (data["sources"] as? [[String: Any]]) ?? []
         let priceMin = Sanitize.coord(data["priceMin"])
         return Event(
-            id: doc.documentID,
+            id: id,
             title: Sanitize.text(title, max: 120).ifEmpty("Untitled event"),
             organizer: Sanitize.text(organizer, max: 80).ifEmpty("Community"),
             date: timestamp.dateValue(),

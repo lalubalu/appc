@@ -7,6 +7,59 @@ import XCTest
 
 @MainActor
 final class JourneyTests: XCTestCase {
+    func testCuratedProgramActualSignInChipAndOfficialListingDetail() throws {
+        var app = QA.launch(tab: "profile", extraArguments: ["-QAOfflineData", "NO", "-QAUseFirestoreEmulator", "YES", "-QAResetAuth", "YES"])
+        let signIn = app.buttons["profileSignIn"]
+        for _ in 0..<20 where !signIn.isHittable { app.swipeUp() }
+        QA.waitFor(signIn, "guest sign-in entry").tap()
+        let email = QA.waitFor(app.textFields["Email address"], "email field")
+        email.tap(); email.typeText("program-native-adult@example.test")
+        let password = app.secureTextFields["Password"]
+        password.tap(); password.typeText("local-program-native-only")
+        let submit = app.buttons["authSubmit"]
+        for _ in 0..<4 where !submit.isHittable { app.swipeUp() }
+        QA.waitFor(submit, "sign-in submission").tap()
+        QA.waitFor(app.buttons["openOfflinePacks"], "signed-in profile", timeout: 30)
+        app.terminate()
+        app = QA.launch(tab: "events", extraArguments: ["-QAOfflineData", "NO", "-QAUseFirestoreEmulator", "YES"])
+        let filterButton = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Filters")).firstMatch
+        QA.waitFor(filterButton, "event filters", timeout: 30).tap()
+        QA.waitFor(app.buttons["50 mi"], "explicit browsing radius").tap()
+        app.buttons["Done"].tap()
+        let program = app.buttons["event-category:Program"]
+        let categories = app.scrollViews["eventCategories"]
+        for _ in 0..<10 where !categories.isHittable { app.swipeUp() }
+        QA.waitFor(categories, "category shortcuts", timeout: 30)
+        for _ in 0..<4 { categories.swipeLeft() }
+        let visible = program.waitForExistence(timeout: 30)
+        if !visible {
+            let failure = XCTAttachment(screenshot: app.screenshot()); failure.name = "Program chip failure"; failure.lifetime = .keepAlways; add(failure)
+            print(app.debugDescription.prefix(8000))
+        }
+        XCTAssertTrue(visible, "ten current Programs enable the chip")
+        guard visible else { return }
+        program.tap()
+        let card = app.buttons.matching(identifier: "event-poster").matching(NSPredicate(format: "label BEGINSWITH %@", "Fictional native program 0, Program")).firstMatch
+        QA.waitFor(card, "actual curated Program poster", timeout: 30)
+        // Bring the poster above the persistent tab bar before tapping it.
+        for _ in 0..<8 {
+            let centerY = card.frame.midY
+            if centerY > 240 && centerY < app.frame.height - 160 { break }
+            if centerY >= app.frame.height - 160 { app.swipeUp() } else { app.swipeDown() }
+        }
+        card.tap()
+        let opened = XCTAttachment(screenshot: app.screenshot()); opened.name = "Program after card tap"; opened.lifetime = .keepAlways; add(opened)
+        let official = app.buttons["programOfficialListing"]
+        for _ in 0..<4 where !official.isHittable { app.swipeUp() }
+        if !official.exists { print(app.debugDescription.prefix(12000)) }
+        QA.waitFor(official, "official listing link")
+        XCTAssertFalse(app.buttons["Upload Proof of Attendance"].exists)
+        XCTAssertFalse(app.buttons["Get Directions"].exists)
+        XCTAssertFalse(app.buttons["Going"].exists)
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "Curated Program detail"; shot.lifetime = .keepAlways; add(shot)
+        try QA.audit(app, screen: "Curated Program detail")
+    }
+
     func testOfflinePackSignInSizeDownloadRelaunchAndStoredTrailView() throws {
         var app = QA.launch(tab: "profile", extraArguments: ["-QAOfflineData", "NO", "-QAUseFirestoreEmulator", "YES", "-QAResetAuth", "YES"])
         let signIn = app.buttons["profileSignIn"]

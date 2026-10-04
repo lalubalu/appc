@@ -206,6 +206,7 @@ export const createEvent = onCall(async (req) => {
   const locationName = safeText(req.data?.locationName, 200);
   const time = safeText(req.data?.time, 50);
   const categoryRaw = safeString(req.data?.category, "Social");
+  if (categoryRaw === "Program" || req.data?.opportunitySubtype === "program") throw new HttpsError("permission-denied", "Programs are curated by staff through the console.");
   const category = (categoryRaw in CATEGORY_POINTS ? categoryRaw : "Social") as EventCategory;
   const startMs = Number(req.data?.startMs);
   const maxAttendeesRaw = Number(req.data?.maxAttendees);

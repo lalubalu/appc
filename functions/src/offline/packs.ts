@@ -7,6 +7,7 @@ import { FieldPath, Timestamp } from "firebase-admin/firestore";
 import { db, requireUid, enforceRateLimit, assertNotSuspended, plusActiveFrom, safeText, blockedSetFor, distanceMeters } from "../common.js";
 import { areFriends } from "../friendships.js";
 import { loadSurfacablePerks } from "../partners.js";
+import { isProgram, programEligible } from "../programs.js";
 import { catalog, parkFeature, validParkId, buildParkGuide, weekEvents, eventDTO, visibleParkEvent, coordinateInput } from "../parks/api.js";
 import { boundaryDistanceMeters } from "../parks/guides.js";
 import { containsPoint } from "../parks/geometry.js";
@@ -134,7 +135,9 @@ export async function buildOfflinePack(uid: string, selection: Selection, profil
         const allowed = d.broadcast === true || d.creatorID === uid || following.has(d.organizerId);
         // The member may keep their own/followed private or virtual saved event;
         // it is never merged into public area/park discovery.
-        if (!allowed || !visibleParkEvent({ ...d, broadcast: true, virtual: false }, profile, blocked, now)) continue;
+        const visible = isProgram(d) ? programEligible(d, profile, now) && !blocked.has(d.creatorID) && !blocked.has(d.organizerId)
+          : visibleParkEvent({ ...d, broadcast: true, virtual: false }, profile, blocked, now);
+        if (!allowed || !visible) continue;
         events.set(row.id, eventDTO(row.id, { ...d, latitude: numericPoint(d)?.[1] ?? null, longitude: numericPoint(d)?.[0] ?? null }));
       }
     }
@@ -172,7 +175,7 @@ export async function buildOfflinePack(uid: string, selection: Selection, profil
       catch { unavailableThumbnails.push(event.id); }
     }
   }));
-  return { version: 1, ownerUid: uid, createdAtMs: now, expiresAtMs: now + PACK_LIFETIME_MS, selection,
+  return { version: 1, ownerUid: uid, memberBirthYear: Number.isInteger(profile.birthYear) ? profile.birthYear : null, createdAtMs: now, expiresAtMs: now + PACK_LIFETIME_MS, selection,
     label: selection.kind === "area" ? "Your area" : guides.length === 1 ? guides[0].park.name : `${guides.length} parks`,
     guides, events: rows, savedEventIDs, plans: [...plans, ...adventurePlans], places: localPlaces(placeInput, includes), perks, thumbnails, unavailableThumbnails,
     mapImageryIncluded: false, actions: "Available when you're back online", checkInAllowed: false };

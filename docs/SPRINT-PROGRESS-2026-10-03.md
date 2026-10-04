@@ -29,7 +29,7 @@ synonym map remain untouched; `CLAUDE.md` deploy status remains untouched.
 | C4 | Plus server entitlement; park/set/area packs; events/thumbnails/places/saves/plans/view-only perks; size preview/hard cap; storage/delete/age; Wi-Fi refresh/7-day expiry; offline overlays/location; no offline writes/check-in/base imagery caching | Implemented locally: server-gated private chunks, exact size preview and 50 MB cap, full snapshots and compressed thumbnails, native account-isolated storage/delete/expiry, Wi-Fi replacement, stored guides/trails/events, online-action refusal and legacy attendance-queue removal. 24 offline units, 32 callable/rules/content/cleanup checks and actual native SDK/UI flows passed. Physical airplane-mode/moving GPS gates remain required with G. See OFFLINE-PACKS-2026-10-04.md. |
 | C5 | Working-feature paywall/listing/website copy: offline park and place packs | Included in the same working feature change, with seven-day/no-base-imagery explanation and matching privacy/App Privacy notes. Fresh website build/lint and 18 production-page/copy-parity checks passed. No publication. |
 | D2 | Existing supply audit; nine volunteer source fingerprints/terms; deduplicated in-radius count >=30; document exclusions | Pending |
-| D3 | Program taxonomy/client; staff curation with required age/cost/location/deadline/official link; >=10 radius threshold; age eligibility and deadline expiry; link-out only | Pending |
+| D3 | Program taxonomy/client; staff curation with required age/cost/location/deadline/official link; >=10 radius threshold; age eligibility and deadline expiry; link-out only | Implemented locally: 34 policy units, 42 actual callable/rules/security checks, 8 actual staff browser checks, canonical age/deadline filtering without ranking tuning, full native supply/account/deep-link checks and a passing Program UI/accessibility journey. Saved eligible Programs work in private offline packs and open details recheck age/expiry. See PROGRAM-CURATION-2026-10-04.md; physical/final gates remain pending. |
 | E1 | Neutral signup age gate; under-13 exits without retaining personal data; preserve 13–17 protections | Implemented locally: neutral blank birth year before account fields, under-13 ends/clears volatile draft, signup age guard precedes credential processing, existing registerAgeBand unchanged. Two actual signup UI flows plus age boundary/persistence units passed. |
 | E2 | Local terms/support pages and restored app link; Supabase support → console; accurate privacy | Implemented locally: build plus 15 production-page/parity checks, 43 submission checks, Swift Terms URL resolves HTTP 200 against explicit local website. Public publication remains outside this sprint. |
 | E3 | Organizer/calendar and merchant interest forms; Supabase → console | Implemented locally: both native browser forms save exact fields in real local Supabase and appear in staff inbox; no partner activation from interest. 43 checks passed. |
@@ -158,3 +158,26 @@ been claimed.
 - C4's physical/outdoor gate, D2/D3, F1/F2, A6, remaining partner-cache audit,
   H1/H2, G and final acceptance remain in scope. No optional cut or deployment
   has been made. See OFFLINE-PACKS-2026-10-04.md and docs/evidence.
+
+## October 4 Program checkpoint
+
+- Staff creates, edits and deactivates official Program listings with required
+  facts, canonical admin authorization and immutable audits. Programs have no
+  attendance points, RSVP, invitations, group outings or park-week event slots.
+- Eligibility is checked against canonical account age, visibility and deadline
+  after existing ranking, before telemetry, and in the independent complete
+  Program supply query. Ten unique current eligible listings in radius are
+  required for the chip; account changes fail closed.
+- Fresh isolated backend: 424 units, 337 end-to-end checks, 49 attacks blocked.
+  Additional actual Program 42 and offline 35 checks passed. Staff browser: 8.
+  Website build/lint/typecheck and 18 legal/production-page checks passed.
+- Native: 123 full units passed; the combined attempt's UI failure is retained
+  honestly. The corrected Program UI separately passed, followed by the new
+  offline deadline/age unit and the actual offline download/trail/storage UI.
+  Both fixture scripts were cleaned after verification. Screenshots inspected.
+- D3 software is locally implemented; D2 supply, F1/F2, A6, remaining partner
+  caches, H1/H2, physical G and final acceptance remain required. The current
+  working emulator has been found to contain test remnants rather than the
+  complete public corpus; a configured-public-source refresh and deduplicated
+  volunteer audit are now in progress. No silent cut, production write or
+  deployment occurred. See PROGRAM-CURATION-2026-10-04.md.

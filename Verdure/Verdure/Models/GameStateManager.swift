@@ -453,6 +453,7 @@ final class GameStateManager {
                       userLocation: CLLocation? = nil,
                       network: NetworkStatus = .shared) async throws -> Int {
         guard network.isOnline else { throw ServerCallError.offline }
+        guard !event.isProgram else { throw ServerCallError.server("Programs link to their organization; attendance points are unavailable.") }
         guard let fx = functionsService, let uid = currentUserID,
               Auth.auth().currentUser?.uid == uid else { throw ServerCallError.notSignedIn }
         guard !SampleData.isSample(id: event.id), !isCheckedIn(event.id),

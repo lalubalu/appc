@@ -87,16 +87,11 @@ export const parksAtCoordinate = onCall(OPTIONS, async (req) => {
 });
 
 export function visibleParkEvent(data: FirebaseFirestore.DocumentData, profile: FirebaseFirestore.DocumentData, blocked: Set<string>, now: number) {
+  if (data.category === "Program" || data.opportunitySubtype === "program") return false;
   if (data.active !== true || data.hidden !== false || data.broadcast !== true || data.removed === true || data.virtual === true ||
     blocked.has(data.creatorID) || blocked.has(data.organizerId)) return false;
-  const year = profile.birthYear, age = Number.isSafeInteger(year) ? new Date(now).getUTCFullYear() - year : null;
-  // Curated opportunities require the account's own age eligibility. General
-  // children's activities remain discoverable by parents; their published age
-  // range describes participants rather than forbidding an adult from reading.
-  const program = data.category === "Program";
+  // Participant ages on general activities remain discoverable by parents.
   if (typeof data.minimumAge === "number" && data.minimumAge >= 18 && profile.ageBand !== "adult") return false;
-  if (program && typeof data.minimumAge === "number" && data.minimumAge > 0 && (age === null || age < data.minimumAge)) return false;
-  if (program && typeof data.maximumAge === "number" && (age === null || age > data.maximumAge)) return false;
   if (data.applicationDeadline?.toMillis && data.applicationDeadline.toMillis() <= now) return false;
   return true;
 }
@@ -105,7 +100,7 @@ export function eventDTO(id: string, d: FirebaseFirestore.DocumentData) {
   return { id, title: safeText(d.title, 200), description: safeText(d.description, 4000), organizer: safeText(d.organizer, 200),
     category: safeText(d.category, 40), locationName: safeText(d.locationName, 200), startMs: d.date.toMillis(), endMs: d.endDate?.toMillis?.() ?? null,
     latitude: d.latitude, longitude: d.longitude, website: /^https?:\/\//i.test(url) ? url : null, imageURL: typeof d.imageURL === "string" ? d.imageURL : null,
-    source: safeText(d.source, 40), minimumAge: d.minimumAge ?? null, maximumAge: d.maximumAge ?? null, isFree: typeof d.isFree === "boolean" ? d.isFree : null };
+    source: safeText(d.source, 40), deadlineMs: d.applicationDeadline?.toMillis?.() ?? null, virtual: typeof d.virtual === "boolean" ? d.virtual : null, priceMin: typeof d.priceMin === "number" ? d.priceMin : null, minimumAge: d.minimumAge ?? null, maximumAge: d.maximumAge ?? null, isFree: typeof d.isFree === "boolean" ? d.isFree : null };
 }
 export async function weekEvents(uid?: string, now = Date.now()) {
   const end = now + 7 * 86_400_000;

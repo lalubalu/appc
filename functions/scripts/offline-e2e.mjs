@@ -49,7 +49,9 @@ try{
   blocked=await fixtureEvent("blocked",point,{creatorID:other.localId}),
   expired=await fixtureEvent("expired",point,{date:Timestamp.fromMillis(Date.now()-86400000)}),
   virtual=await fixtureEvent("saved-virtual",[0,0],{virtual:true});
- await db.doc(`users/${member.localId}`).update({savedEventIDs:[mine,privateOther,inside,expired,virtual]});
+ const program=await fixtureEvent("saved-program",[0,0],{category:"Program",opportunitySubtype:"program",source:"staff-program",minimumAge:18,maximumAge:110,applicationDeadline:Timestamp.fromMillis(Date.now()+86400000),pointValue:0,priceMin:0,isFree:true,virtual:true,website:"https://example.org/official-program"}),
+  teenProgram=await fixtureEvent("ineligible-program",point,{category:"Program",minimumAge:13,maximumAge:17,applicationDeadline:Timestamp.fromMillis(Date.now()+86400000)});
+ await db.doc(`users/${member.localId}`).update({savedEventIDs:[mine,privateOther,inside,expired,virtual,program,teenProgram]});
  await db.doc(`users/${other.localId}/blocks/${member.localId}`).set({uid:member.localId});
  const session=`offline-${suffix}-plan`;sessions.push(session);
  await db.doc(`eventPlanSessions/${session}`).set({uid:member.localId,selectedIDs:[inside,mine,privateOther],candidateIDs:["private-unselected"]});
@@ -76,6 +78,9 @@ try{
  check("real guide retains lossless source geometry and attribution",JSON.stringify(pack.guides[0].park.geometry)===JSON.stringify(feature.geometry)&&pack.guides[0].credits.length>0);
  check("public park events join by geometry; outside/private/hidden/blocked absent",pack.events.some(e=>e.id===inside)&&[outside,privateOther,hidden,blocked,expired].every(id=>!pack.events.some(e=>e.id===id)));
  check("own private and virtual saves included only for their member",pack.savedEventIDs.includes(mine)&&pack.savedEventIDs.includes(virtual)&&!pack.savedEventIDs.includes(privateOther));
+ check("saved eligible Program retains deadline ages cost virtual format and official link",pack.savedEventIDs.includes(program)&&pack.memberBirthYear===2000&&pack.events.some(e=>e.id===program&&e.deadlineMs>Date.now()&&e.minimumAge===18&&e.maximumAge===110&&e.priceMin===0&&e.virtual&&e.website==="https://example.org/official-program"));
+ check("saved Program outside member age is omitted",!pack.savedEventIDs.includes(teenProgram)&&!pack.events.some(e=>e.id===teenProgram));
+ check("Programs are not presented as events taking place at parks",pack.guides.every(g=>g.events.every(e=>e.id!==program&&e.id!==teenProgram)));
  check("plans omit unselected/private candidates, invites, votes and blocked owners",pack.plans.some(p=>p.id===session)&&pack.plans.some(p=>p.id===group)&&pack.plans.every(p=>p.id!==blockedGroup)&&!JSON.stringify(pack.plans).includes("private-unselected")&&!JSON.stringify(pack.plans).includes(other.localId));
  check("successful place itineraries are included",pack.plans.some(p=>p.kind==="places"&&p.stops.length===1));
  check("places preserve provider credit, saved flag and correct selection",pack.places.length===1&&pack.places[0].attribution.includes("OpenStreetMap")&&pack.places[0].saved);

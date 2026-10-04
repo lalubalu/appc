@@ -94,11 +94,12 @@ export default function StaffConsole() {
         <Field label="Password"><input name="password" type="password" autoComplete="current-password" required maxLength={256} /></Field>
         <button className="staff-primary" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
       </form></section> : <>
-      <nav className="staff-tabs" aria-label="Staff tools">{["Moderation", "Organizers", "Partners", "Submissions", "Operations"].map((name) =>
+      <nav className="staff-tabs" aria-label="Staff tools">{["Moderation", "Organizers", "Partners", "Programs", "Submissions", "Operations"].map((name) =>
         <button key={name} aria-current={tab === name ? "page" : undefined} onClick={() => setTab(name)}>{name}</button>)}</nav>
       {tab === "Moderation" && <Moderation onAccessLost={accessLost} />}
       {tab === "Organizers" && <Organizers onAccessLost={accessLost} />}
       {tab === "Partners" && <Partners onAccessLost={accessLost} />}
+      {tab === "Programs" && <Programs onAccessLost={accessLost} />}
       {tab === "Submissions" && <Submissions onAccessLost={accessLost} />}
       {tab === "Operations" && <Operations onAccessLost={accessLost} />}
     </>}
@@ -416,5 +417,68 @@ function Partners({ onAccessLost }: { onAccessLost: () => void }) {
           </section>
         </>}
       </article></div>
+  </section>;
+}
+
+type ProgramListing = { programId: string; title: string; organization: string; officialURL: string; deadlineMs: number;
+  minimumAge: number; maximumAge: number; cost: number; format: string; address: string; active: boolean; hidden: boolean; expired: boolean };
+function Programs({ onAccessLost }: { onAccessLost: () => void }) {
+  const [items, setItems] = useState<ProgramListing[]>([]), [cursor, setCursor] = useState<string | null>(null);
+  const [editing, setEditing] = useState<ProgramListing | null>(null), [revision, setRevision] = useState(0);
+  const [format, setFormat] = useState("in-person"), [reasons, setReasons] = useState<Record<string, string>>({});
+  const { busy, run, notice, setMessage } = useWork(onAccessLost);
+  const load = useCallback(async (afterId: string | null = null) => {
+    const result = await call<{ items: ProgramListing[]; nextCursor: string | null }>("listStaffPrograms", afterId ? { afterId } : {});
+    setItems(old => afterId ? [...old, ...result.items.filter(item => !old.some(entry => entry.programId === item.programId))] : result.items);
+    setCursor(result.nextCursor);
+  }, []);
+  useEffect(() => { void run(() => load()); }, [load]); // eslint-disable-line react-hooks/exhaustive-deps
+  function reset() { setEditing(null); setFormat("in-person"); setRevision(v => v + 1); }
+  async function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); const fields = new FormData(event.currentTarget);
+    await run(async () => {
+      await call("saveProgram", { programId: editing?.programId || uniqueId("program"), title: fields.get("title"), organization: fields.get("organization"),
+        officialURL: fields.get("officialURL"), deadlineMs: new Date(String(fields.get("deadline"))).getTime(), minimumAge: Number(fields.get("minimumAge")),
+        maximumAge: Number(fields.get("maximumAge")), cost: Number(fields.get("cost")), format, address: fields.get("address"),
+        active: fields.get("active") === "on", reason: fields.get("reason") });
+      reset(); await load(); setMessage("Program saved. Current eligible listings are available in Verdure; the Program chip appears at ten nearby listings.");
+    });
+  }
+  return <section><h2>Internships and programs</h2>
+    <p>Curate published opportunities with their official deadline, cost and age requirements. Members read the organization’s listing and apply on its site.</p>
+    <p>Virtual programs use the organization’s local address for nearby discovery. Expired deadlines disappear automatically. Listings hidden by moderation stay hidden after edits.</p>
+    {notice}
+    <form key={`${editing?.programId || "new"}-${revision}`} className="staff-signin" onSubmit={save}>
+      <h3>{editing ? "Edit program" : "Add a program"}</h3>
+      <Field label="Program title"><input name="title" required maxLength={120} defaultValue={editing?.title} /></Field>
+      <Field label="Program organization"><input name="organization" required maxLength={100} defaultValue={editing?.organization} /></Field>
+      <Field label="Official listing link"><input name="officialURL" type="url" required maxLength={1000} placeholder="https://" defaultValue={editing?.officialURL} /></Field>
+      <Field label="Application deadline"><input name="deadline" type="datetime-local" required defaultValue={editing ? dateInput(editing.deadlineMs) : ""} /></Field>
+      <div className="staff-toolbar">
+        <Field label="Minimum eligible age"><input name="minimumAge" type="number" min={13} max={110} required defaultValue={editing?.minimumAge} /></Field>
+        <Field label="Maximum eligible age"><input name="maximumAge" type="number" min={13} max={110} required defaultValue={editing?.maximumAge} /></Field>
+        <Field label="Published cost (USD)"><input name="cost" type="number" min={0} max={100000} step="0.01" required defaultValue={editing?.cost} /></Field>
+      </div>
+      <Field label="Program format"><select value={format} onChange={e => setFormat(e.target.value)}><option value="in-person">In person</option><option value="virtual">Virtual</option></select></Field>
+      <Field label={format === "virtual" ? "Organization’s local address" : "Program venue address"}><input name="address" required maxLength={100} defaultValue={editing?.address} /></Field>
+      <label><input name="active" type="checkbox" defaultChecked={editing?.active ?? false} /> Make this listing active</label>
+      <Field label="Reason for program change"><textarea name="reason" required minLength={3} maxLength={1000} /></Field>
+      <div className="staff-toolbar"><button className="staff-primary" disabled={busy}>{busy ? "Saving…" : "Save program"}</button>
+        {editing && <button type="button" disabled={busy} onClick={reset}>Cancel edit</button>}</div>
+    </form>
+    <div className="staff-toolbar"><h3>Curated listings</h3><button disabled={busy} onClick={() => void run(() => load())}>Refresh programs</button></div>
+    {!items.length && <p>No programs curated yet.</p>}
+    {items.map(item => <article className="staff-detail staff-program" data-program-id={item.programId} key={item.programId}>
+      <h3>{item.title}</h3><p>{item.organization} · Ages {item.minimumAge}–{item.maximumAge} · {item.cost === 0 ? "Free" : `$${item.cost.toFixed(2)}`} · {item.format === "virtual" ? "Virtual" : "In person"}</p>
+      <p>{item.address}</p><p>Deadline: {new Date(item.deadlineMs).toLocaleString()} · {item.expired ? "Expired" : item.hidden ? "Hidden by moderation" : item.active ? "Active" : "Inactive"}</p>
+      <p><a href={item.officialURL} target="_blank" rel="noopener noreferrer">Official listing</a></p>
+      <button disabled={busy} onClick={() => { setEditing(item); setFormat(item.format); setRevision(v => v + 1); }}>Edit program</button>
+      {item.active && <><Field label={`Deactivation reason for ${item.title}`}><input required minLength={3} maxLength={1000} value={reasons[item.programId] || ""}
+        onChange={e => setReasons(old => ({ ...old, [item.programId]: e.target.value }))} /></Field>
+        <button disabled={busy || (reasons[item.programId] || "").trim().length < 3} onClick={() => void run(async () => {
+          await call("deactivateProgram", { programId: item.programId, reason: reasons[item.programId] }); await load(); setMessage("Program deactivated.");
+        })}>Deactivate program</button></>}
+    </article>)}
+    {cursor && <button disabled={busy} onClick={() => void run(() => load(cursor))}>Load more programs</button>}
   </section>;
 }

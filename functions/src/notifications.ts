@@ -33,7 +33,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import type { Timestamp } from "firebase-admin/firestore";
 import { db, requireUid, enforceRateLimit, safeText, safeBool, isBlockedEitherWay } from "./common.js";
 import { notify } from "./social.js";
-import { recommendFor } from "./ranking.js";
+import { recommendEligibleFor as recommendFor } from "./program-feed.js";
 
 /** Hard ceiling. Not a target — most weeks should send fewer. */
 export const MAX_PUSH_PER_WEEK = 2;
@@ -204,6 +204,7 @@ export async function runSuggestionDigest(nowMs = Date.now()): Promise<{ conside
     for (const r of ranked) {
       if (suppressed.has(r.id)) continue;
       const ev = await db.collection("events").doc(r.id).get();
+      if (ev.data()?.category === "Program" || ev.data()?.opportunitySubtype === "program") continue;
       const startMs = (ev.data()?.date as Timestamp)?.toMillis?.() ?? 0;
       if (startMs < nowMs || startMs > horizonMs) continue;
       qualifying.push(r.id);

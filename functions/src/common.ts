@@ -117,6 +117,7 @@ export const RATE_LIMITS: Record<string, RateLimit> = {
   createEvent:      { max: 20,  windowMs: HOUR },
   planAdventure:    { max: 30,  windowMs: HOUR },
   recommendedEvents:{ max: 240, windowMs: HOUR },
+  programListings: { max: 120, windowMs: HOUR },
   offlinePackGenerate: { max: 12, windowMs: HOUR },
   offlinePackRead: { max: 2000, windowMs: HOUR },
   offlinePackControl: { max: 60, windowMs: HOUR },

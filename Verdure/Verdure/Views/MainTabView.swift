@@ -342,6 +342,7 @@ private struct PlanTabView: View {
         let now = Date()
         let weekend = DateRangeOption.thisWeekend.window(now: now, calendar: calendar)!
         return eventsService.events.filter { event in
+            guard !event.isProgram else { return false }
             guard event.date >= now else { return false }
             let fitsWhen: Bool
             switch when {

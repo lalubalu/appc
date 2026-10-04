@@ -78,13 +78,8 @@ struct FilterSheetView: View {
     }
 
     private var eventCategorySection: some View {
-        let enoughVolunteers = eventsService.events.filter { event in
-            guard event.category == .volunteer, event.date > Date(),
-                  let coordinate = event.coordinate else { return false }
-            return CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
-                .distance(from: locationManager.browsingLocation) <= filters.state.radiusMiles * 1609.344
-        }.count >= 30
-        let choices = EventCategory.allCases.filter { $0 != .volunteer || enoughVolunteers }
+        let choices = DiscoveryFilters.opportunityCategories(eventsService.events,
+            origin: locationManager.browsingLocation, radiusMiles: filters.state.radiusMiles)
         return section("Category") {
             FlowChips(items: choices.map { ($0.displayName, $0.icon) },
                       isSelected: { label in

@@ -6,6 +6,7 @@ export const STAFF_COOKIE = "verdure_staff_session";
 const PROJECT = "connectify-19dd8";
 export const STAFF_FUNCTIONS = new Set([
   "staffSession", "staffOperations", "listModerationQueue", "moderateContent", "listOrganizerApplications", "approveOrganizer",
+  "listStaffPrograms", "saveProgram", "deactivateProgram",
   "listStaffPartners", "savePartner", "upsertPartnerPerk", "importPartnerCodes", "deactivatePartnerOffer",
 ]);
 export class StaffError extends Error {

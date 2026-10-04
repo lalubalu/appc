@@ -16,7 +16,7 @@ const validId = (value: unknown, max = 100) => {
 async function validEvent(id: string): Promise<boolean> {
   const snap = await db.collection("events").doc(id).get();
   const data = snap.data();
-  return !!data && data.active === true && data.broadcast === true && data.hidden !== true &&
+  return !!data && data.category !== "Program" && data.opportunitySubtype !== "program" && data.active === true && data.broadcast === true && data.hidden !== true &&
     data.date instanceof Timestamp && data.date.toMillis() > Date.now();
 }
 

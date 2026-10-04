@@ -37,7 +37,7 @@ export function parseCensusGeocode(payload: unknown) {
   }
   return { latitude, longitude, matchedAddress: match.matchedAddress, geocodeProvider: "US Census Public_AR_Current", geocodedAt: Timestamp.now() };
 }
-async function geocode(address: string) {
+export async function geocode(address: string) {
   // Deterministic RAW provider responses can be installed by local test tooling,
   // never by clients. This branch cannot run in deployed Functions.
   if (localFixtures()) {
