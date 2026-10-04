@@ -62,7 +62,7 @@ enum AdventurePlannerError: LocalizedError, Sendable {
         case .rateLimited(let m): return m
         case .quotaExhausted(let limit, _):
             return "You've used all \(limit) free plans this month."
-        case .offline: return "You appear to be offline."
+        case .offline: return "Plan generation is available when you're back online."
         case .failed(let m): return m
         }
     }
@@ -78,6 +78,8 @@ final class AdventurePlannerService: Sendable {
               durationMinutes: Int,
               latitude: Double,
               longitude: Double) async throws -> AdventurePlan {
+
+        guard await NetworkStatus.shared.isOnline else { throw AdventurePlannerError.offline }
 
         // Only places with real coordinates are worth planning around — a stop
         // we can't navigate to isn't a stop. This mirrors the app's rule that

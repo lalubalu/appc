@@ -31,13 +31,42 @@ final class CloudMergeTests: XCTestCase {
         UserDefaults.standard.set(true, forKey: "gameStateSeeded_v2")
     }
 
-    private func sampleEvent() -> Event { TestFixtures.event }     // 200 pts (own id — samples can't earn)
+
+    func testOfflineAttendanceNeverAwardsOrQueues() async {
+        let state = GameStateManager()
+        do {
+            _ = try await state.checkInEvent(TestFixtures.event, proofPhoto: Data([1]),
+                userLocation: CLLocation(latitude: 37.33, longitude: -121.89), network: NetworkStatus(monitoring: false))
+            XCTFail("Offline attendance must be refused")
+        } catch { XCTAssertEqual(error.localizedDescription, ServerCallError.offline.localizedDescription) }
+        XCTAssertEqual(state.pointsBalance, 0)
+        XCTAssertEqual(state.lifetimePoints, 0)
+        XCTAssertFalse(state.isCheckedIn(TestFixtures.event.id))
+        XCTAssertTrue(state.pendingOps.isEmpty)
+        XCTAssertTrue(state.earnHistory.isEmpty)
+    }
+
+    func testLegacyOfflineAttendanceIsCancelledWithoutReplaying() throws {
+        let old = GameStateManager.PendingOp(kind: .checkIn, id: "old-event", category: "Social", points: 100)
+        let place = GameStateManager.PendingOp(kind: .collect, id: "real-place", category: "", points: 5)
+        UserDefaults.standard.set(try JSONEncoder().encode([old, place]), forKey: "pendingServerOps")
+        UserDefaults.standard.set(try JSONEncoder().encode(["old-event", "confirmed-event"]), forKey: "checkedInEventIDs")
+        UserDefaults.standard.set(205, forKey: "pointsBalance")
+        UserDefaults.standard.set(305, forKey: "lifetimePoints")
+        let state = GameStateManager()
+        XCTAssertEqual(state.pendingOps, [place])
+        XCTAssertFalse(state.isCheckedIn("old-event"))
+        XCTAssertTrue(state.isCheckedIn("confirmed-event"))
+        XCTAssertEqual(state.pointsBalance, 105)
+        XCTAssertEqual(state.lifetimePoints, 205)
+        XCTAssertEqual(GameStateManager().pendingOps, [place])
+    }
 
     /// The exact production scenario today: Functions undeployed, so the user
     /// doc has 0 points while the device holds real optimistic earnings.
     func testUndeployedBackendDoesNotWipeLocalPoints() {
         let state = GameStateManager()
-        let earned = state.checkInEvent(sampleEvent())
+        let earned = state.collectPlace(TestFixtures.collectible)
         XCTAssertEqual(state.pointsBalance, earned)
         XCTAssertFalse(state.serverConfirmed, "no callable has answered yet")
 
@@ -90,7 +119,7 @@ final class CloudMergeTests: XCTestCase {
     func testQueuedWorkBlocksAdoptionOfLowerBalance() {
         let state = GameStateManager()
         state.markServerConfirmedForTesting()
-        let earned = state.checkInEvent(sampleEvent())   // queues an op
+        let earned = state.collectPlace(TestFixtures.collectible)   // queues an op
 
         let cloud = CloudGameState(
             collectedPlaceIDs: [], checkedInEventIDs: [],

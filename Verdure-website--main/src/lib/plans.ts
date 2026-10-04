@@ -14,6 +14,7 @@ export interface Plan
   tagline: string;
   features: string[];
   featured: boolean;
+  note?: string;
 }
 
 export let PLANS: Plan[] = [
@@ -45,7 +46,9 @@ export let PLANS: Plan[] = [
       "$5 and $10 cash gift cards",
       "Advanced stats for your last 30 days",
       "Interest profiles and saved event filters",
+      "Offline park and place packs",
     ],
     featured: true,
+    note: "Packs last seven days. Background map imagery is not included. Online park guides and trail overviews are free.",
   },
 ];

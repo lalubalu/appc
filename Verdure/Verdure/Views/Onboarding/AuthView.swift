@@ -235,6 +235,7 @@ struct AuthView: View {
 
             ClayButton(submitTitle, systemImage: isSubmitting ? nil : "arrow.right",
                        kind: .spruce, fullWidth: true) { submit() }
+                .accessibilityIdentifier("authSubmit")
                 .disabled(isSubmitting)
                 .opacity(isSubmitting ? 0.6 : 1)
                 .overlay { if isSubmitting { ProgressView().tint(Palette.spruce.onColor) } }

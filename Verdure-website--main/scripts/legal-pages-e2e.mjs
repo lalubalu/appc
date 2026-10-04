@@ -42,6 +42,13 @@ try {
     assert.deepEqual(appSections, webSections.map(({ title, body }) => ({ title, body })));
     check(`${name} app and website copy match exactly`, appSections.length >= 10);
   }
+  await page.goto(`${origin}/pricing`);
+  check("pricing includes the working offline-pack benefit", await page.getByText("Offline park and place packs", { exact: true }).count() === 1);
+  const pricing = await page.locator("main").innerText();
+  check("pricing explains seven-day packs without selling base imagery", pricing.includes("Packs last seven days") && pricing.includes("Background map imagery is not included") && pricing.includes("trail overviews are free") && !/offline maps/i.test(pricing));
+  const paywall = await readFile(new URL("../../Verdure/Verdure/Views/Paywall/PaywallView.swift", import.meta.url), "utf8");
+  const listing = await readFile(new URL("../../AppStore/LISTING.md", import.meta.url), "utf8");
+  check("native paywall and listing match the offline-pack pricing benefit", [paywall, listing].every(copy => copy.includes("Offline park and place packs") && copy.includes("background map imagery is not included")));
   check("no page JavaScript errors", errors.length === 0);
   console.log(`${checks} legal and production-page checks passed`);
 } finally { await context.close(); await chrome.close(); }

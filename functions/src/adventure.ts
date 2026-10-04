@@ -384,7 +384,7 @@ export const planAdventure = onCall(
       console.error("[planAdventure] treasury write failed", e);
     }
 
-    return {
+    const result = {
       title: plan.title,
       intro: plan.intro,
       stops,
@@ -395,5 +395,9 @@ export const planAdventure = onCall(
       isPlus,
       generatedAtMs: Date.now(),
     };
+    // Private member plan history makes successful place itineraries available
+    // to their owner's offline packs; no other account can enumerate it.
+    await db().collection("users").doc(uid).collection("adventurePlans").add(result);
+    return result;
   }
 );

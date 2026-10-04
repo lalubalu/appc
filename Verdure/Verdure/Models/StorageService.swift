@@ -17,7 +17,7 @@ enum StorageService {
     /// Deterministic, filename-safe name for an event's proof photo. Event IDs can
     /// contain slashes/spaces (SerpApi titles), so hash them — SHA-256 is stable
     /// across launches (unlike `hashValue`), which keeps the path idempotent for
-    /// queued retries.
+    /// repeat online attempts.
     static func proofFileName(for eventId: String) -> String {
         let digest = SHA256.hash(data: Data(eventId.utf8))
         let hex = digest.map { String(format: "%02x", $0) }.joined()
@@ -25,7 +25,7 @@ enum StorageService {
     }
 
     /// Upload a proof JPEG for an event. Returns the storage path for the server
-    /// to verify. Throws on failure (caller keeps the op queued and retries).
+    /// to verify. Throws on failure; attendance is never queued.
     static func uploadProof(eventId: String, jpeg: Data) async throws -> String {
         guard let uid = Auth.auth().currentUser?.uid else {
             throw ServerCallError.notSignedIn

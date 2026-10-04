@@ -209,6 +209,11 @@ service cloud.firestore {
       // this document.
       allow delete: if false;
 
+      // Generated pack bytes are callable-only, even for their owner. Direct
+      // SDK/cache reads must never bypass server entitlement or staging expiry.
+      match /offlinePacks/{document=**} { allow read, write: if false; }
+      match /adventurePlans/{planId} { allow read: if isOwner(userId); allow write: if false; }
+
       // ── Blocks: /users/{userId}/blocks/{blockedUid} ──
       // Owner-only. The document id IS the blocked uid, and the `uid` field must
       // repeat it so collection-group queries (used server-side to compute the

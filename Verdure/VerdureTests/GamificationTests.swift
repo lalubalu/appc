@@ -4,8 +4,8 @@ import CoreLocation
 
 // MARK: - Gamification smoke tests: streaks, challenges, badges
 //
-// All progress is computed from REAL state (earn history / collection sets) —
-// these tests drive that state and assert the derived gamification is honest.
+// Simulated confirmed server replies populate earn history. These units verify
+// derived challenges and badges, not network attendance or physical GPS.
 
 @MainActor
 final class GamificationTests: XCTestCase {
@@ -65,8 +65,8 @@ final class GamificationTests: XCTestCase {
 
     func testEventRegularChallengeTracksMonthlyEvents() {
         let state = freshManager()
-        _ = state.checkInEvent(event("e1", .social))
-        _ = state.checkInEvent(event("e2", .workshop))
+        _ = state.acceptAttendanceForTesting(event("e1", .social))
+        _ = state.acceptAttendanceForTesting(event("e2", .workshop))
 
         let challenge = GamificationEngine.challenges(for: state)
             .first { $0.title == "Event Regular" }!
@@ -78,8 +78,8 @@ final class GamificationTests: XCTestCase {
     func testCommunityHeroCompletionAwardsBonusXPOnce() {
         let state = freshManager()
         let base = state.totalXP
-        _ = state.checkInEvent(event("c1", .cleanup))
-        _ = state.checkInEvent(event("c2", .volunteer))
+        _ = state.acceptAttendanceForTesting(event("c1", .cleanup))
+        _ = state.acceptAttendanceForTesting(event("c2", .volunteer))
 
         let hero = GamificationEngine.challenges(for: state).first { $0.title == "Community Hero" }!
         XCTAssertEqual(hero.progress, 1.0, "2 cleanup/volunteer events completes it")
@@ -87,12 +87,12 @@ final class GamificationTests: XCTestCase {
         XCTAssertEqual(state.totalXP, base + 800 + 250, "completion bonus granted exactly once")
 
         // Third event ALSO completes "Event Regular" (3 events/month) → +300 more.
-        _ = state.checkInEvent(event("c3", .cleanup))
+        _ = state.acceptAttendanceForTesting(event("c3", .cleanup))
         var bonus = state.totalXP - (base + 1200)   // 3 events × 400 XP from points
         XCTAssertEqual(bonus, 250 + 300, "Event Regular completion adds its own one-time bonus")
 
         // A fourth event completes nothing new — no bonus re-award this month.
-        _ = state.checkInEvent(event("c4", .cleanup))
+        _ = state.acceptAttendanceForTesting(event("c4", .cleanup))
         bonus = state.totalXP - (base + 1600)
         XCTAssertEqual(bonus, 550, "no double bonuses within the same month")
     }
@@ -107,10 +107,10 @@ final class GamificationTests: XCTestCase {
         XCTAssertTrue(GamificationEngine.badges(for: state).first { $0.name == "First Steps" }!.earned,
                       "first collect unlocks First Steps")
 
-        _ = state.checkInEvent(event("s1", .social))
-        _ = state.checkInEvent(event("s2", .social))
+        _ = state.acceptAttendanceForTesting(event("s1", .social))
+        _ = state.acceptAttendanceForTesting(event("s2", .social))
         XCTAssertFalse(GamificationEngine.badges(for: state).first { $0.name == "Social Butterfly" }!.earned)
-        _ = state.checkInEvent(event("s3", .social))
+        _ = state.acceptAttendanceForTesting(event("s3", .social))
         XCTAssertTrue(GamificationEngine.badges(for: state).first { $0.name == "Social Butterfly" }!.earned,
                       "third event unlocks Social Butterfly")
     }

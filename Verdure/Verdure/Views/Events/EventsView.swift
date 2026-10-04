@@ -986,6 +986,9 @@ struct EventDetailSheet: View {
     @State private var proofPhotoData: Data? = nil
     @State private var showCelebration = false
     @State private var earnedPoints = 0
+    @State private var isCheckingIn = false
+    @State private var checkInError: String?
+    private let network = NetworkStatus.shared
     /// Venue coordinate: from the event when its source provided one, else a
     /// best-effort geocode of the location name (nil → proximity can't be verified).
     @State private var venueCoordinate: CLLocationCoordinate2D? = nil
@@ -1292,7 +1295,12 @@ struct EventDetailSheet: View {
                 .background(ClayBackground(style: .inset, radius: Radius.sm))
                 .accessibilityElement(children: .combine)
 
-                if proofPhotoData != nil {
+                if let checkInError {
+                    Text(checkInError).font(VType.body(13)).foregroundStyle(Palette.inkSoft)
+                }
+                if !network.isOnline {
+                    gateRow(icon: "wifi.slash", text: "Check-in is available when you're back online. Attendance cannot be saved for later.")
+                } else if proofPhotoData != nil {
                     HStack(spacing: 8) {
                         Image(systemName: "checkmark.seal.fill").foregroundStyle(Palette.teal.base)
                         Text("Proof photo attached").font(VType.scaledBody(13, .medium, relativeTo: .footnote)).foregroundStyle(Palette.ink)
@@ -1341,27 +1349,28 @@ struct EventDetailSheet: View {
         }
     }
 
-    /// The actual check-in: captures the proof photo + GPS fix into the pending-op
-    /// queue (instant optimistic UI; upload + server credit happen on flush).
     private var checkInButton: some View {
-        ClayButton("Check In  ·  +\(event.pointValue) pts", systemImage: "checkmark.circle.fill",
-                   kind: .spruce, fullWidth: true) {
-            guard let coordinate = locationManager.userLocation?.coordinate else { return }
-            earnedPoints = gameState.checkInEvent(event, proofPhoto: proofPhotoData,
-                                                  userCoordinate: coordinate)
-            if earnedPoints > 0 {
-                Haptics.success()
-                AccessibilityNotification.Announcement(
-                    "Checked in to \(event.title). Earned \(earnedPoints) points."
-                ).post()
-                withAnimation(.spring(response: 0.4)) { showCelebration = true }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.6) {
-                    withAnimation { showCelebration = false }
-                }
+        ClayButton(isCheckingIn ? "Verifying attendance…" : "Check In  ·  +\(event.pointValue) pts",
+                   systemImage: "checkmark.circle.fill", kind: .spruce, fullWidth: true) {
+            guard !isCheckingIn else { return }
+            isCheckingIn = true; checkInError = nil
+            Task {
+                defer { isCheckingIn = false }
+                do {
+                    earnedPoints = try await gameState.checkInEvent(event, proofPhoto: proofPhotoData,
+                                                                    userLocation: locationManager.userLocation)
+                    if earnedPoints > 0 {
+                        Haptics.success()
+                        AccessibilityNotification.Announcement("Checked in to \(event.title). Earned \(earnedPoints) points.").post()
+                        withAnimation(.spring(response: 0.4)) { showCelebration = true }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.6) { withAnimation { showCelebration = false } }
+                    }
+                } catch { checkInError = error.localizedDescription }
             }
         }
+        .disabled(isCheckingIn || !network.isOnline)
         .accessibilityLabel("Check in to \(event.title)")
-        .accessibilityHint("Earns \(event.pointValue) points. Uses your location and proof photo to verify attendance.")
+        .accessibilityHint("Requires an online connection, fresh location and proof photo. Points appear after verification.")
     }
 
     /// Inset row explaining why check-in is currently locked.

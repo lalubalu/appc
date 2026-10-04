@@ -565,6 +565,7 @@ private struct PlanTabView: View {
     private func makePlan() async {
         attempted = true
         planError = nil
+        guard NetworkStatus.shared.isOnline else { planError = "Plan generation is available when you're back online."; return }
         guard Auth.auth().currentUser != nil, !QAData.offline else {
             selectedIDs = Array(candidates.prefix(2).map(\.id))
             sessionID = nil
@@ -615,6 +616,7 @@ private struct PlanTabView: View {
     }
 
     private func refine(_ action: String, targetID: String? = nil) async {
+        guard NetworkStatus.shared.isOnline else { planError = "Plan changes are available when you're back online."; return }
         guard let sessionID else {
             if action == "shorter", selectedIDs.count > 1 { selectedIDs.removeLast() }
             return

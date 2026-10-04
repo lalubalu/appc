@@ -45,7 +45,7 @@ enum ServerCallError: LocalizedError, Sendable {
     var errorDescription: String? {
         switch self {
         case .notSignedIn: return "Sign in to continue."
-        case .offline: return "You appear to be offline. Try again once you're connected."
+        case .offline: return "Available when you're back online."
         case .alreadyRedeemed: return "You've already redeemed this reward."
         case .notEnoughPoints: return "Not enough points yet."
         case .server(let message): return message

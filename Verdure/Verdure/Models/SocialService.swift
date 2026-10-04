@@ -363,6 +363,7 @@ final class SocialService {
     /// Mark Going / not going. Optimistic; reverts on failure and surfaces the server's reason.
     @discardableResult
     func setGoing(_ eventId: String, going: Bool) async -> Bool {
+        guard NetworkStatus.shared.isOnline else { lastError = ServerCallError.offline.localizedDescription; return false }
         let before = goingEventIDs
         if going { goingEventIDs.insert(eventId) } else { goingEventIDs.remove(eventId) }
         do {

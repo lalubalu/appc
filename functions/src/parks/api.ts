@@ -22,7 +22,7 @@ async function browseBudget(req: CallableRequest) {
 }
 let cachedIndex: { generation: string; value: Promise<ParkSummary[]> } | undefined;
 const featureCache = new Map<string, Promise<PlaceFeature>>();
-async function catalog() {
+export async function catalog() {
   const state = await placeCatalogState();
   if (!state.generation) throw new HttpsError("unavailable", "Official park data is unavailable. Try again after the next data update.");
   if (!cachedIndex || cachedIndex.generation !== state.generation) {
@@ -32,7 +32,7 @@ async function catalog() {
   try { return { state, index: await entry.value }; }
   catch (error) { if (cachedIndex === entry) cachedIndex = undefined; throw new HttpsError("unavailable", "Official park data could not be loaded. Try again shortly."); }
 }
-async function parkFeature(generation: string, id: string) {
+export async function parkFeature(generation: string, id: string) {
   const key = `${generation}:${id}`;
   if (!featureCache.has(key)) {
     if (featureCache.size >= 1000) featureCache.delete(featureCache.keys().next().value!);
@@ -46,11 +46,11 @@ export function coordinateInput(data: any): Position {
     throw new HttpsError("invalid-argument", "A valid latitude and longitude are required.");
   return [data.longitude, data.latitude];
 }
-function validParkId(value: unknown) {
+export function validParkId(value: unknown) {
   if (typeof value !== "string" || !/^(city-parks|county-boundaries)_\d{1,12}$/.test(value)) throw new HttpsError("invalid-argument", "Choose a known park.");
   return value;
 }
-function publicState(state: Awaited<ReturnType<typeof placeCatalogState>>) {
+export function publicState(state: Awaited<ReturnType<typeof placeCatalogState>>) {
   return { generation: state.generation, publishedAtMs: state.publishedAtMs, refreshDelayed: state.latestOutcome === "failed" };
 }
 export const nearbyParkGuides = onCall(OPTIONS, async (req) => {
@@ -100,16 +100,16 @@ export function visibleParkEvent(data: FirebaseFirestore.DocumentData, profile: 
   if (data.applicationDeadline?.toMillis && data.applicationDeadline.toMillis() <= now) return false;
   return true;
 }
-function eventDTO(id: string, d: FirebaseFirestore.DocumentData) {
+export function eventDTO(id: string, d: FirebaseFirestore.DocumentData) {
   const url = safeText(d.website ?? d.url ?? d.sourceUrl, 2000);
   return { id, title: safeText(d.title, 200), description: safeText(d.description, 4000), organizer: safeText(d.organizer, 200),
     category: safeText(d.category, 40), locationName: safeText(d.locationName, 200), startMs: d.date.toMillis(), endMs: d.endDate?.toMillis?.() ?? null,
     latitude: d.latitude, longitude: d.longitude, website: /^https?:\/\//i.test(url) ? url : null, imageURL: typeof d.imageURL === "string" ? d.imageURL : null,
     source: safeText(d.source, 40), minimumAge: d.minimumAge ?? null, maximumAge: d.maximumAge ?? null, isFree: typeof d.isFree === "boolean" ? d.isFree : null };
 }
-async function weekEvents(req: CallableRequest, boundary: Boundary) {
-  const now = Date.now(), end = now + 7 * 86_400_000;
-  const [profile, blocked] = req.auth ? await Promise.all([db.doc(`users/${req.auth.uid}`).get().then((s) => s.data() ?? {}), blockedSetFor(req.auth.uid)]) : [{}, new Set<string>()];
+export async function weekEvents(uid?: string, now = Date.now()) {
+  const end = now + 7 * 86_400_000;
+  const [profile, blocked] = uid ? await Promise.all([db.doc(`users/${uid}`).get().then((s) => s.data() ?? {}), blockedSetFor(uid)]) : [{}, new Set<string>()];
   const query = db.collection("events").where("hidden", "==", false).where("active", "==", true).where("broadcast", "==", true)
     .where("date", ">=", Timestamp.fromMillis(now)).where("date", "<", Timestamp.fromMillis(end)).orderBy("date");
   const events: ReturnType<typeof eventDTO>[] = [];
@@ -118,20 +118,20 @@ async function weekEvents(req: CallableRequest, boundary: Boundary) {
     const page = await (cursor ? query.startAfter(cursor) : query).limit(500).get(); scanned += page.size;
     if (scanned > 50_000) throw new HttpsError("resource-exhausted", "This week's park events exceed the current query bound.");
     for (const doc of page.docs) { const d = doc.data(); if (visibleParkEvent(d, profile, blocked, now) && typeof d.latitude === "number" && typeof d.longitude === "number" &&
-      Number.isFinite(d.latitude) && Number.isFinite(d.longitude) && containsPoint(boundary, [d.longitude, d.latitude])) events.push(eventDTO(doc.id, d)); }
+      Number.isFinite(d.latitude) && Number.isFinite(d.longitude) && Math.abs(d.latitude) <= 90 && Math.abs(d.longitude) <= 180) events.push(eventDTO(doc.id, d)); }
     if (page.size < 500) break; cursor = page.docs.at(-1);
   }
   return events;
 }
-export const parkGuide = onCall(OPTIONS, async (req) => {
-  const id = validParkId(req.data?.parkId); await browseBudget(req);
-  const { state, index } = await catalog(), summary = index.find((p) => p.id === id);
+export async function buildParkGuide(state: Awaited<ReturnType<typeof placeCatalogState>>, index: ParkSummary[], id: string,
+  week: Awaited<ReturnType<typeof weekEvents>>) {
+  const summary = index.find((p) => p.id === id);
   if (!summary) throw new HttpsError("not-found", "This park is not in the current catalog.");
   const related = await db.collection(`parkGenerations/${state.generation}/features`).where("parkIds", "array-contains", id).get();
   const features = await readPlaceFeatures(state.generation, related.docs.map((d) => d.id));
   const park = features.find((f) => f.id === id)!;
   if (!park) throw new HttpsError("unavailable", "The park guide could not be loaded.");
-  const events = await weekEvents(req, park.geometry as Boundary);
+  const events = week.filter((e) => containsPoint(park.geometry as Boundary, [e.longitude, e.latitude]));
   const credits = [...new Map(features.map((f) => [f.credit.datasetURL, f.credit])).values()];
   const amenities = confirmedAmenities(features);
   const result = { ...publicState(state), park: { ...summary, geometry: park.geometry, geometryNotes: park.geometryNotes ?? [] }, amenities,
@@ -141,4 +141,9 @@ export const parkGuide = onCall(OPTIONS, async (req) => {
     entrances: amenities.filter((a) => a.kind === "entrance"), events, credits, story: null };
   if (Buffer.byteLength(JSON.stringify(result)) > 24 * 1024 * 1024) throw new HttpsError("resource-exhausted", "This guide exceeds the current download bound.");
   return result;
+}
+export const parkGuide = onCall(OPTIONS, async (req) => {
+  const id = validParkId(req.data?.parkId); await browseBudget(req);
+  const { state, index } = await catalog();
+  return buildParkGuide(state, index, id, await weekEvents(req.auth?.uid));
 });

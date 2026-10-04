@@ -13,7 +13,7 @@
     "deploy": "firebase deploy --only functions",
     "logs": "firebase functions:log",
     "redteam": "npm run build && cd .. && npx firebase-tools@13 emulators:exec --only auth,functions,firestore,storage \"node functions/scripts/redteam.mjs\"",
-    "test:units": "npm run check:classifier && npm run build && node scripts/fulfillment-unit.mjs && node scripts/subscription-unit.mjs && node scripts/ingest-unit.mjs && node scripts/ranking-unit.mjs && node scripts/notifications-unit.mjs && node scripts/partners-unit.mjs && node scripts/event-planner-unit.mjs && node scripts/parks-unit.mjs",
+    "test:units": "npm run check:classifier && npm run build && node scripts/fulfillment-unit.mjs && node scripts/subscription-unit.mjs && node scripts/ingest-unit.mjs && node scripts/ranking-unit.mjs && node scripts/notifications-unit.mjs && node scripts/partners-unit.mjs && node scripts/event-planner-unit.mjs && node scripts/parks-unit.mjs && node scripts/offline-unit.mjs",
     "check:classifier": "node scripts/check-classifier-freeze.mjs",
     "ingest:smoke": "npm run build && node scripts/ingest-smoke.mjs",
     "seed:partners": "npm run build && cd .. && npx firebase-tools@13 emulators:exec --only firestore \"node functions/scripts/seed-partners.mjs\"",
@@ -27,7 +27,8 @@
   "dependencies": {
     "@apple/app-store-server-library": "^3.1.0",
     "firebase-admin": "^12.6.0",
-    "firebase-functions": "^6.1.0"
+    "firebase-functions": "^6.1.0",
+    "sharp": "0.35.5"
   },
   "devDependencies": {
     "firebase": "^12.16.0",

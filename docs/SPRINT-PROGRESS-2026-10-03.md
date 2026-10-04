@@ -26,8 +26,8 @@ synonym map remain untouched; `CLAUDE.md` deploy status remains untouched.
 | C1 | Separate weekly official place pipeline; licenses recorded before ingestion; geometry joins; loud console-visible failures | Backend implemented locally: five permission-checked sources, Tuesday schedule, complete atomic catalog, exact geometry/hole joins, source health and actual browser outage/recovery. 59 new units + 33 pipeline/browser checks; 5,507 real usable features read back with every geometry checksum. Native coordinate joins and public park-week events are now integrated with C2; see PARK-GUIDE-2026-10-04.md as well as PARK-PIPELINE-2026-10-04.md. |
 | C2 | Free parks: confirmed amenities/ages/events/trails/story/hours/access/status; filters; required attribution | Online guide implemented and locally checked: signed-out/free access, geometry joins, status-labelled amenities, published ages/access/entrances, park-week events, attribution and shared filters. 80 park units, 29 actual callable checks, 7 focused native checks plus earlier 12 filter regressions. F1 story integration and full device gates remain pending. See PARK-GUIDE-2026-10-04.md. |
 | C3 | Free source-backed trail attributes/overlays/location; official closure link/notice; no navigation | Online overview implemented locally: source attributes and lossless MapKit overlays, user annotation/recenter control, parent/trail status, notice and official closure link. Real County source flow passed in Simulator and screenshot inspected. Physical/outdoor GPS and offline-pack behavior remain pending with G/C4. No cut. |
-| C4 | Plus server entitlement; park/set/area packs; events/thumbnails/places/saves/plans/view-only perks; size preview/hard cap; storage/delete/age; Wi-Fi refresh/7-day expiry; offline overlays/location; no offline writes/check-in/base imagery caching | Pending |
-| C5 | Working-feature paywall/listing/website copy: offline park and place packs | Pending |
+| C4 | Plus server entitlement; park/set/area packs; events/thumbnails/places/saves/plans/view-only perks; size preview/hard cap; storage/delete/age; Wi-Fi refresh/7-day expiry; offline overlays/location; no offline writes/check-in/base imagery caching | Implemented locally: server-gated private chunks, exact size preview and 50 MB cap, full snapshots and compressed thumbnails, native account-isolated storage/delete/expiry, Wi-Fi replacement, stored guides/trails/events, online-action refusal and legacy attendance-queue removal. 24 offline units, 32 callable/rules/content/cleanup checks and actual native SDK/UI flows passed. Physical airplane-mode/moving GPS gates remain required with G. See OFFLINE-PACKS-2026-10-04.md. |
+| C5 | Working-feature paywall/listing/website copy: offline park and place packs | Included in the same working feature change, with seven-day/no-base-imagery explanation and matching privacy/App Privacy notes. Fresh website build/lint and 18 production-page/copy-parity checks passed. No publication. |
 | D2 | Existing supply audit; nine volunteer source fingerprints/terms; deduplicated in-radius count >=30; document exclusions | Pending |
 | D3 | Program taxonomy/client; staff curation with required age/cost/location/deadline/official link; >=10 radius threshold; age eligibility and deadline expiry; link-out only | Pending |
 | E1 | Neutral signup age gate; under-13 exits without retaining personal data; preserve 13–17 protections | Implemented locally: neutral blank birth year before account fields, under-13 ends/clears volatile draft, signup age guard precedes credential processing, existing registerAgeBand unchanged. Two actual signup UI flows plus age boundary/persistence units passed. |
@@ -134,3 +134,27 @@ been claimed.
 - C4/C5, D2/D3, F1/F2, A6, remaining partner-cache audit, H1/H2 and G/final gates
   remain in the full scope. C2's F1 story field is not yet implemented. Nothing
   was cut, deployed or represented as complete without evidence.
+
+## October 4 offline-pack checkpoint
+
+- Paid/free/other-account actual callable paths, direct client SDK staging rules,
+  exact download size/hash, selection geometry, authorized saves/plans, compressed
+  image bytes, view-only perks, subscription/staging expiry and bounded cleanup
+  are checked locally. The final focused pack run passed 32 checks. Public
+  guide regression passed 29.
+- Native actual Firebase SDK tests verify full download, private file storage,
+  backup exclusion, reopening, corruption/owner/expiry rejection, deletion,
+  account cleanup, offline-action refusal and successful Wi-Fi replacement.
+  The latest full native snapshot passed 122 tests with no failures or skips.
+  The expanded journey separately covers stored-event refusal, source trail
+  overlay, accessibility audits and storage deletion.
+- Broad backend snapshot: 390 units, 337 end-to-end, 49 attacks blocked. The
+  later bounded staging-cleanup adjustment has separate fresh 32-check evidence.
+  Final whole-sprint gates remain pending after the other sections.
+- Paywall, listing, website pricing and identical app/website privacy changed
+  with the feature. Website production build/lint and 18 page/parity checks
+  passed. Simulator screenshots were inspected; they include system imagery,
+  and the DEBUG offline preflight is not physical airplane-mode proof.
+- C4's physical/outdoor gate, D2/D3, F1/F2, A6, remaining partner-cache audit,
+  H1/H2, G and final acceptance remain in scope. No optional cut or deployment
+  has been made. See OFFLINE-PACKS-2026-10-04.md and docs/evidence.

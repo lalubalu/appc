@@ -4,12 +4,8 @@ import CoreLocation
 
 // MARK: - GameStateManager transaction-logic smoke tests
 //
-// These cover the CLIENT half of the earn/redeem pipeline: optimistic awards,
-// double-earn guards, the pending-op queue (incl. proof-photo spooling and
-// persistence across relaunches), and the signed-out redeem path. The SERVER
-// half (Cloud Functions transactions) is validated by its own idempotent
-// design + typescript build; no network is touched here — with no
-// FunctionsService connected, flushPendingOps() is a guarded no-op.
+// Confirmed attendance never enters the retry queue. Place collections retain
+// their existing retry semantics. These are local units, not live server proof.
 
 @MainActor
 final class GameStateManagerTests: XCTestCase {
@@ -47,48 +43,34 @@ final class GameStateManagerTests: XCTestCase {
 
     // MARK: Check-in
 
-    func testCheckInAwardsPointsOnceAndQueuesServerOp() throws {
+    func testConfirmedAttendanceUsesServerAwardAndNeverQueues() {
         let state = freshManager()
-        let coordinate = CLLocationCoordinate2D(latitude: 44.98, longitude: -93.26)
-
-        let awarded = state.checkInEvent(sampleEvent, proofPhoto: nil, userCoordinate: coordinate)
-
-        XCTAssertEqual(awarded, sampleEvent.pointValue)
-        XCTAssertEqual(state.pointsBalance, sampleEvent.pointValue)
-        XCTAssertEqual(state.lifetimePoints, sampleEvent.pointValue)
+        let awarded = state.acceptAttendanceForTesting(sampleEvent, awarded: 75)
+        XCTAssertEqual(awarded, 75)
+        XCTAssertEqual(state.pointsBalance, 75)
+        XCTAssertEqual(state.lifetimePoints, 75)
         XCTAssertTrue(state.isCheckedIn(sampleEvent.id))
-        XCTAssertEqual(state.pendingOps.count, 1)
-        let op = try XCTUnwrap(state.pendingOps.first)
-        XCTAssertEqual(op.kind, .checkIn)
-        XCTAssertEqual(op.id, sampleEvent.id)
-        XCTAssertEqual(op.points, sampleEvent.pointValue)
-        XCTAssertEqual(op.lat, coordinate.latitude)
-        XCTAssertEqual(op.lon, coordinate.longitude)
+        XCTAssertTrue(state.pendingOps.isEmpty)
+        XCTAssertTrue(state.serverConfirmed)
     }
 
-    func testDoubleCheckInIsANoOp() {
+    func testConfirmedDoubleCheckInIsANoOp() {
         let state = freshManager()
-        _ = state.checkInEvent(sampleEvent)
-
-        let second = state.checkInEvent(sampleEvent)
-
-        XCTAssertEqual(second, 0, "double check-in must award nothing")
-        XCTAssertEqual(state.pointsBalance, sampleEvent.pointValue, "balance unchanged by replay")
-        XCTAssertEqual(state.pendingOps.count, 1, "no duplicate server op queued")
+        _ = state.acceptAttendanceForTesting(sampleEvent)
+        XCTAssertEqual(state.acceptAttendanceForTesting(sampleEvent), 0)
+        XCTAssertEqual(state.pointsBalance, sampleEvent.pointValue)
+        XCTAssertTrue(state.pendingOps.isEmpty)
     }
 
-    func testCheckInSpoolsProofPhotoToDisk() throws {
-        let state = freshManager()
-        let fakeJPEG = Data([0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10])
-
-        _ = state.checkInEvent(sampleEvent, proofPhoto: fakeJPEG,
-                               userCoordinate: CLLocationCoordinate2D(latitude: 1, longitude: 2))
-
-        let op = try XCTUnwrap(state.pendingOps.first)
-        let file = try XCTUnwrap(op.proofFile, "check-in with a photo must spool a proof file")
+    func testLegacyAttendanceProofIsRemovedRatherThanUploadedLater() throws {
+        let file = StorageService.proofFileName(for: sampleEvent.id)
         let url = GameStateManager.proofsDirectory.appendingPathComponent(file)
-        XCTAssertEqual(try Data(contentsOf: url), fakeJPEG, "spooled bytes must match the photo")
-        XCTAssertNil(op.proofPath, "storage path is only set after a real upload")
+        try Data([0xFF, 0xD8]).write(to: url)
+        let op = GameStateManager.PendingOp(kind: .checkIn, id: sampleEvent.id, category: "Social", points: 100, proofFile: file)
+        UserDefaults.standard.set(try JSONEncoder().encode([op]), forKey: "pendingServerOps")
+        let state = freshManager()
+        XCTAssertTrue(state.pendingOps.isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
     }
 
     // MARK: Place collection
@@ -123,7 +105,7 @@ final class GameStateManagerTests: XCTestCase {
 
     func testSampleContentCanNeverEarn() {
         let state = freshManager()
-        XCTAssertEqual(state.checkInEvent(SampleData.events[0]), 0)
+        XCTAssertEqual(state.acceptAttendanceForTesting(SampleData.events[0]), 0)
         XCTAssertEqual(state.collectPlace(SampleData.collectiblePlaces[0]), 0)
         XCTAssertEqual(state.pointsBalance, 0)
         XCTAssertTrue(state.pendingOps.isEmpty, "fixture ids must never reach the server queue")
@@ -166,9 +148,8 @@ final class GameStateManagerTests: XCTestCase {
 
     func testPendingOpsPersistAcrossManagerInstances() {
         let first = freshManager()
-        _ = first.checkInEvent(sampleEvent, userCoordinate: CLLocationCoordinate2D(latitude: 3, longitude: 4))
         _ = first.collectPlace(samplePlace)
-        XCTAssertEqual(first.pendingOps.count, 2)
+        XCTAssertEqual(first.pendingOps.count, 1)
 
         // Simulate an app relaunch: a brand-new manager must reload the queue.
         let second = GameStateManager()
@@ -183,19 +164,14 @@ final class GameStateManagerTests: XCTestCase {
 
         let state = GameStateManager()
 
-        XCTAssertEqual(state.pendingOps.count, 1)
-        let op = try XCTUnwrap(state.pendingOps.first)
-        XCTAssertEqual(op.id, "old-event")
-        XCTAssertNil(op.lat)
-        XCTAssertNil(op.proofFile)
+        XCTAssertTrue(state.pendingOps.isEmpty, "Legacy attendance decodes but cannot be replayed")
     }
 
     // MARK: Reset
 
     func testResetAllClearsEverything() {
         let state = freshManager()
-        _ = state.checkInEvent(sampleEvent, proofPhoto: Data([0xFF, 0xD8]),
-                               userCoordinate: CLLocationCoordinate2D(latitude: 1, longitude: 1))
+        _ = state.acceptAttendanceForTesting(sampleEvent)
         _ = state.collectPlace(samplePlace)
 
         state.resetAll()

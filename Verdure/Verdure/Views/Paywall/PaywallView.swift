@@ -148,6 +148,8 @@ struct PaywallView: View {
                     detail: "Where your points come from, and your last 30 days", kind: .spruce),
         PlusFeature(icon: "square.stack.3d.up.fill", title: "Advanced Personalization",
                     detail: "Switch interest profiles and save event filters", kind: .teal),
+        PlusFeature(icon: "arrow.down.circle.fill", title: "Offline park and place packs",
+                    detail: "Seven-day downloads of guides, trail lines and plans; background map imagery is not included", kind: .spruce),
     ]
 
     /// The feature COPY, exposed for tests.

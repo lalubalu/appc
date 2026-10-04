@@ -14,6 +14,9 @@ struct ParkDirectoryView: View {
                 Text("Playgrounds, amenities and this week's events from published sources.")
                     .font(VType.body(15)).foregroundStyle(Palette.inkSoft)
                 FilterButton(mode: .places)
+                NavigationLink { OfflinePacksView() } label: {
+                    Label("Offline park and place packs", systemImage: "arrow.down.circle").font(VType.body(15, .semibold)).frame(minHeight: 44)
+                }.tint(Palette.spruce.base)
                 if service.isLoading { ProgressView("Loading park guides") }
                 if let error = service.lastError {
                     Text(error).font(VType.body(14)).foregroundStyle(Palette.inkSoft)
@@ -64,6 +67,9 @@ struct ParkGuideRow: View {
 
 struct ParkGuideView: View {
     let parkID: String
+    var snapshot: ParkGuide? = nil
+    var snapshotOwnerUid: String? = nil
+    var snapshotExpiresAtMs: Double? = nil
     @Environment(ParkGuideService.self) private var service
     @Environment(AuthService.self) private var auth
     @State private var guide: ParkGuide?
@@ -73,6 +79,13 @@ struct ParkGuideView: View {
     @State private var requestID = UUID()
 
     var body: some View {
+        Group {
+            if let uid = snapshotOwnerUid, let expiry = snapshotExpiresAtMs {
+                OfflineSnapshotGuard(ownerUid: uid, expiresAtMs: expiry) { content }
+            } else { content }
+        }
+    }
+    private var content: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.lg) {
                 if let guide, loadedAccount == (auth.currentUser?.uid ?? "guest") {
@@ -98,6 +111,10 @@ struct ParkGuideView: View {
 
     @MainActor private func load() async {
         let uid = auth.currentUser?.uid
+        if let snapshot {
+            guard uid == snapshotOwnerUid else { guide = nil; return }
+            guide = snapshot; loadedAccount = uid ?? "guest"; loading = false; return
+        }
         let token = UUID(); requestID = token
         guide = nil; error = nil; loading = true
         do {
@@ -113,6 +130,11 @@ struct ParkGuideView: View {
 
     private func header(_ guide: ParkGuide) -> some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
+            if snapshot == nil {
+                NavigationLink { OfflinePackBuilderView(initialParkID: parkID) } label: {
+                    Label("Download for offline use", systemImage: "arrow.down.circle").font(VType.body(15, .semibold)).frame(minHeight: 44)
+                }.tint(Palette.spruce.base)
+            }
             Text(guide.park.name).font(VType.display(34, .bold)).foregroundStyle(Palette.ink)
                 .accessibilityAddTraits(.isHeader)
             Text(guide.park.statusLabel).font(VType.body(17, .semibold))
@@ -140,7 +162,11 @@ struct ParkGuideView: View {
             Text(guide.park.credit.attribution).font(VType.body(12)).foregroundStyle(Palette.inkSoft)
                 .accessibilityIdentifier("parkAttribution")
             if !guide.trails.isEmpty {
-                NavigationLink { ParkTrailMapView(guide: guide) } label: {
+                NavigationLink {
+                    if let uid = snapshotOwnerUid, let expiry = snapshotExpiresAtMs {
+                        OfflineSnapshotGuard(ownerUid: uid, expiresAtMs: expiry) { ParkTrailMapView(guide: guide) }
+                    } else { ParkTrailMapView(guide: guide) }
+                } label: {
                     Label("View trail lines", systemImage: "map").font(VType.body(16, .semibold)).frame(minHeight: 44)
                 }.tint(Palette.spruce.base).accessibilityIdentifier("parkTrailMap")
             }
@@ -188,13 +214,19 @@ struct ParkGuideView: View {
             heading("Here this week")
             if guide.events.isEmpty { Text("No public events are listed here for the next seven days.").font(VType.body(14)).foregroundStyle(Palette.inkSoft) }
             ForEach(guide.events) { event in
-                NavigationLink { ParkEventDetail(event: event) } label: {
+                NavigationLink {
+                    if let uid = snapshotOwnerUid, let expiry = snapshotExpiresAtMs {
+                        OfflineSnapshotGuard(ownerUid: uid, expiresAtMs: expiry) {
+                            ParkEventDetail(event: event, viewOnly: true)
+                        }
+                    } else { ParkEventDetail(event: event) }
+                } label: {
                     VStack(alignment: .leading, spacing: 5) {
                         Text(event.title).font(VType.display(20, .semibold)).foregroundStyle(Palette.ink)
                         Text(event.date.formatted(date: .abbreviated, time: .shortened)).font(VType.body(14)).foregroundStyle(Palette.inkSoft)
                         Text(event.organizer).font(VType.body(13)).foregroundStyle(Palette.inkSoft)
                     }.padding(Spacing.md).frame(maxWidth: .infinity, alignment: .leading).claySurface(.surface, radius: Radius.md)
-                }.buttonStyle(.plain)
+                }.buttonStyle(.plain).accessibilityIdentifier("park-event:\(event.id)")
             }
         }
     }
@@ -253,6 +285,7 @@ struct ParkGuideView: View {
 
 private struct ParkEventDetail: View {
     let event: ParkEvent
+    var viewOnly = false
     @State private var showEvent = false
     var body: some View {
         ScrollView {
@@ -265,7 +298,11 @@ private struct ParkEventDetail: View {
                 if let min = event.minimumAge { Text("Minimum age: \(min)").font(VType.body(14)) }
                 if let max = event.maximumAge { Text("Maximum age: \(max)").font(VType.body(14)) }
                 if let free = event.isFree { Text(free ? "Free" : "Paid event").font(VType.body(14)) }
-                Button("Open event actions") { showEvent = true }.frame(minHeight: 44).tint(Palette.spruce.base)
+                if viewOnly || !NetworkStatus.shared.isOnline {
+                    Text("RSVP and check-in are available when you're back online.").font(VType.body(14, .semibold))
+                } else {
+                    Button("Open event actions") { showEvent = true }.frame(minHeight: 44).tint(Palette.spruce.base)
+                }
                 if let value = event.website, let url = URL(string: value), ["http", "https"].contains(url.scheme ?? "") {
                     Link("Official event listing", destination: url).frame(minHeight: 44).tint(Palette.spruce.base)
                 }

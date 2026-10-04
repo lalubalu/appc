@@ -1,10 +1,117 @@
 import XCTest
+import CryptoKit
+@preconcurrency import FirebaseAuth
 @testable import Verdure
 
 // MARK: - Core-logic QA: Daily Gem rotation, sanitizer, personalization mapping
 
 @MainActor
 final class CoreLogicTests: XCTestCase {
+
+    func testOfflinePackActualSDKDownloadPersistenceIsolationAndDeletion() async throws {
+        let auth = Auth.auth()
+        try await auth.signIn(withEmail: "offline-native-plus@example.test", password: "local-offline-native-only")
+        defer { NetworkStatus.shared.forceOfflineForTesting = false; NetworkStatus.shared.forceWiFiForTesting = false; try? auth.signOut() }
+        for _ in 0..<50 where !NetworkStatus.shared.isOnline { try await Task.sleep(for: .milliseconds(100)) }
+        XCTAssertTrue(NetworkStatus.shared.isOnline)
+        let uid = try XCTUnwrap(auth.currentUser?.uid)
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("offline-test-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let service = OfflinePackService(directory: directory); service.connect(uid)
+        let preview = try await service.preview(selection: .parks(["county-boundaries_20"]), places: [], savedPlaceIDs: [])
+        XCTAssertGreaterThan(preview.downloadBytes, preview.storedBytes)
+        XCTAssertLessThanOrEqual(preview.downloadBytes, OfflinePackService.maxBytes)
+        XCTAssertEqual(preview.expiresAtMs - preview.createdAtMs, 604_800_000)
+        XCTAssertTrue(service.entries.isEmpty, "Size preview must not install a pack")
+        try await service.download(preview)
+        let entry = try XCTUnwrap(service.entries.first)
+        let pack = try service.open(entry)
+        XCTAssertEqual(pack.guides.count, 1); XCTAssertFalse(pack.guides[0].trails.isEmpty)
+        XCTAssertNotNil(pack.guides[0].park.geometry); XCTAssertFalse(pack.guides[0].credits.isEmpty)
+        XCTAssertFalse(pack.mapImageryIncluded); XCTAssertFalse(pack.checkInAllowed)
+        // UI preflight forced offline. Opening uses only the checked local file;
+        // actual cellular/GPS/airplane-mode testing is still a physical gate.
+        NetworkStatus.shared.forceOfflineForTesting = true
+        let restored = OfflinePackService(directory: directory); restored.connect(uid)
+        XCTAssertEqual(restored.entries.count, 1)
+        XCTAssertEqual(try restored.open(entry).guides[0].trails.count, pack.guides[0].trails.count)
+        do { _ = try await restored.preview(selection: entry.selection, places: [], savedPlaceIDs: []); XCTFail("Offline generation must be refused") }
+        catch { XCTAssertEqual(error.localizedDescription, "Available when you're back online.") }
+        let accountDirectory = try XCTUnwrap(FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil).first)
+        XCTAssertEqual(try accountDirectory.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup, true)
+        let bytes = try JSONEncoder().encode(pack)
+        func hash(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
+        XCTAssertThrowsError(try OfflinePackService.verifiedPack(bytes, sha256: "damaged", ownerUid: uid))
+        XCTAssertThrowsError(try OfflinePackService.verifiedPack(bytes, sha256: hash(bytes), ownerUid: "another-account"))
+        XCTAssertThrowsError(try OfflinePackService.verifiedPack(bytes, sha256: hash(bytes), ownerUid: uid, nowMs: pack.expiresAtMs))
+        for patch in [["checkInAllowed": true], ["mapImageryIncluded": true], ["version": 2], ["expiresAtMs": pack.createdAtMs + 604_800_001]] as [[String: Any]] {
+            var object = try XCTUnwrap(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
+            object.merge(patch) { _, new in new }
+            let changed = try JSONSerialization.data(withJSONObject: object)
+            XCTAssertThrowsError(try OfflinePackService.verifiedPack(changed, sha256: hash(changed), ownerUid: uid))
+        }
+        try restored.delete(entry)
+        XCTAssertTrue(restored.entries.isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: accountDirectory.appendingPathComponent(entry.id + ".json").path))
+        restored.connect("another-account")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: accountDirectory.path))
+        XCTAssertThrowsError(try restored.open(entry))
+    }
+
+    func testOfflinePackWiFiRefreshReplacesOnlyACompleteDownloadAndKeepsPlaces() async throws {
+        let auth = Auth.auth()
+        try await auth.signIn(withEmail: "offline-native-plus@example.test", password: "local-offline-native-only")
+        defer { NetworkStatus.shared.forceOfflineForTesting = false; NetworkStatus.shared.forceWiFiForTesting = false; try? auth.signOut() }
+        for _ in 0..<50 where !NetworkStatus.shared.isOnline { try await Task.sleep(for: .milliseconds(100)) }
+        let uid = try XCTUnwrap(auth.currentUser?.uid)
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let service = OfflinePackService(directory: directory); service.connect(uid)
+        let guide = try await ParkGuideService().guide(id: "county-boundaries_20")
+        let point = guide.park.coordinate
+        let place = Place(id: "osm-local-offline-fixture", name: "Fictional cached provider place", category: .parks,
+                          shortDescription: "Local fixture", distance: "", distanceValue: 0, rating: nil, reviewCount: nil,
+                          imagePlaceholder: "leaf.fill", accentColor: .verdureGreen, isFeatured: false, latitude: point.latitude, longitude: point.longitude)
+        let preview = try await service.preview(selection: .parks([guide.park.id]), places: [place], savedPlaceIDs: [place.id])
+        try await service.download(preview)
+        let first = try XCTUnwrap(service.entries.first)
+        XCTAssertEqual(try service.open(first).places.count, 1)
+        NetworkStatus.shared.forceOfflineForTesting = true
+        await service.refreshOnWiFi(places: [], savedPlaceIDs: [place.id])
+        XCTAssertEqual(service.entries.first?.id, first.id, "Offline refresh must keep the current complete pack")
+        NetworkStatus.shared.forceOfflineForTesting = false; NetworkStatus.shared.forceWiFiForTesting = true
+        await service.refreshOnWiFi(places: [], savedPlaceIDs: [place.id])
+        XCTAssertNil(service.lastError)
+        let updated = try XCTUnwrap(service.entries.first)
+        XCTAssertNotEqual(updated.id, first.id)
+        XCTAssertEqual(service.entries.count, 1)
+        let fresh = try service.open(updated)
+        XCTAssertEqual(fresh.places.first?.id, place.id); XCTAssertEqual(fresh.places.first?.saved, true)
+        XCTAssertTrue(fresh.places.first?.attribution.contains("OpenStreetMap") == true)
+        XCTAssertThrowsError(try service.open(first), "Old file must be deleted only after a complete replacement")
+        await service.refreshOnWiFi(places: [], savedPlaceIDs: [])
+        XCTAssertEqual(service.entries.first?.id, updated.id, "Repeated foregrounds must respect the hourly refresh bound")
+    }
+
+    func testOfflinePackFreeAccountRefusedByActualSDKAndActionsDoNotMutate() async throws {
+        let auth = Auth.auth()
+        try await auth.signIn(withEmail: "offline-native-free@example.test", password: "local-offline-native-only")
+        defer { NetworkStatus.shared.forceOfflineForTesting = false; try? auth.signOut() }
+        for _ in 0..<50 where !NetworkStatus.shared.isOnline { try await Task.sleep(for: .milliseconds(100)) }
+        let service = OfflinePackService(directory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString))
+        service.connect(auth.currentUser?.uid)
+        do { _ = try await service.preview(selection: .parks(["city-parks_342"]), places: [], savedPlaceIDs: []); XCTFail("Free account must be refused by server") }
+        catch { XCTAssertEqual((error as NSError).code, 7, "Firebase permission denied") }
+        XCTAssertTrue(service.entries.isEmpty)
+        NetworkStatus.shared.forceOfflineForTesting = true
+        let social = SocialService()
+        let going = await social.setGoing("never-submit-offline", going: true)
+        XCTAssertFalse(going)
+        XCTAssertFalse(social.isGoing("never-submit-offline"))
+        XCTAssertEqual(social.lastError, "Available when you're back online.")
+        do { _ = try await AdventurePlannerService().plan(places: [], interests: [], timeOfDay: "morning", durationMinutes: 60, latitude: 37, longitude: -121); XCTFail("Offline planning must be refused") }
+        catch { XCTAssertEqual(error.localizedDescription, "Plan generation is available when you're back online.") }
+    }
 
     func testParkGeometryJoinsByBoundaryAndExcludesHoles() throws {
         let json = #"{"type":"Polygon","coordinates":[[[0,0],[10,0],[10,10],[0,10],[0,0]],[[2,2],[4,2],[4,4],[2,4],[2,2]]]}"#

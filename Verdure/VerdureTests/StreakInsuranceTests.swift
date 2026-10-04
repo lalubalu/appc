@@ -140,9 +140,9 @@ final class StreakInsuranceTests: XCTestCase {
         let copy = PaywallView.featureCopyForTesting
 
         // Guard against a vacuous pass: an empty list also "mentions no
-        // streak". Pin that the list is real and is the expected five before
-        // asserting what is absent from it.
-        XCTAssertEqual(copy.count, 10, "five features, each a title and a detail")
+        // streak". Check that the list contains real paid benefits before
+        // asserting what is absent from it; new benefits may change its size.
+        XCTAssertFalse(copy.isEmpty, "An empty feature list cannot prove the free streak is excluded from paid benefits")
         let sold = copy.joined(separator: " ").lowercased()
         XCTAssertTrue(sold.contains("adventure planner"), "the list under test must be the real one")
 

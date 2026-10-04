@@ -27,11 +27,13 @@ struct ProfileView: View {
     @State private var deleteAccountError: String?
     @State private var showPaywall = false
     @State private var showSignOutConfirm = false
+    @State private var showSignIn = false
     @State private var showOrganizerVerify = false
     @State private var showAllBadges = false
     @State private var showAllChallenges = false
     @State private var showAbout = false
     @State private var showNotifSettings = false
+    @State private var showOfflinePacks = false
     @State private var showSafety = false
     @State private var showLegal = false
     @State private var showHousehold = false
@@ -80,6 +82,13 @@ struct ProfileView: View {
                 AllChallengesView(challenges: challenges)
             }
             .sheet(isPresented: $showAbout) { AboutVerdureView() }
+            .sheet(isPresented: $showOfflinePacks) { NavigationStack { OfflinePacksView() } }
+            .sheet(isPresented: $showSignIn) {
+                AuthView(onSignupRejected: { showSignIn = false }, onComplete: { showSignIn = false })
+            }
+            .sheet(isPresented: $showOrganizerVerify) { OrganizerVerificationView() }
+            .sheet(isPresented: $showSafety) { SafetyView() }
+            .sheet(isPresented: $showLegal) { LegalView() }
             .sheet(isPresented: $showNotifSettings) { NotificationSettingsView() }
             .sheet(isPresented: $showHousehold) { householdSheet }
             .sheet(isPresented: $showStats) { StatsAndLeaderboardView().environment(gameState).environment(store) }
@@ -353,6 +362,10 @@ struct ProfileView: View {
                 .accessibilityLabel(store.isPlus ? "Verdure Plus, active" : "Verdure Plus, upgrade")
                 .accessibilityHint("Opens the Verdure Plus subscription page.")
                 rowDivider
+                Button { showOfflinePacks = true } label: {
+                    settingsRow(icon: "arrow.down.circle.fill", label: "Offline packs", accent: .spruce) { chevron }
+                }.buttonStyle(.plain).accessibilityIdentifier("openOfflinePacks")
+                rowDivider
                 settingsRow(icon: "moon.fill", label: "Dark Mode", accent: .spruce) {
                     Toggle("", isOn: $prefersDarkMode).tint(Palette.spruce.base).labelsHidden()
                 }
@@ -430,7 +443,8 @@ struct ProfileView: View {
             .padding(.vertical, 6)
             .claySurface(.surface, radius: Radius.md)
 
-            Button { Haptics.tap(); showSignOutConfirm = true } label: {
+            if authService.isAuthenticated {
+              Button { Haptics.tap(); showSignOutConfirm = true } label: {
                 HStack(spacing: 9) {
                     Image(systemName: "rectangle.portrait.and.arrow.right").font(.system(size: 16, weight: .bold))
                     Text("Sign Out").font(VType.body(17, .bold))
@@ -451,10 +465,10 @@ struct ProfileView: View {
                 Button("Reset Demo Data", role: .destructive) { gameState.resetAll() }
                 Button("Cancel", role: .cancel) {}
             }
-            .sheet(isPresented: $showOrganizerVerify) { OrganizerVerificationView() }
-            .sheet(isPresented: $showSafety) { SafetyView() }
-            .sheet(isPresented: $showLegal) { LegalView() }
-
+            } else {
+                ClayButton("Sign in", systemImage: "person.crop.circle", kind: .spruce, fullWidth: true) { showSignIn = true }
+                    .accessibilityIdentifier("profileSignIn")
+            }
             deleteAccountButton
             .sheet(isPresented: $showPaywall) {
                 PaywallView(source: "profile")
@@ -662,6 +676,7 @@ struct ProfileView: View {
             trailing()
         }
         .padding(.horizontal, Spacing.md).padding(.vertical, 11)
+        .contentShape(Rectangle())
     }
 }
 

@@ -62,6 +62,7 @@ export default function PricingContent()
         <ul className="mt-7 flex flex-col gap-3 border-t border-line pt-7">
           {features}
         </ul>
+        {plan.note && <p className="t-body2 mt-4 text-cream/70">{plan.note}</p>}
 
         <div className="mt-auto pt-9">
           <PillButton

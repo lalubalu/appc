@@ -75,6 +75,8 @@ feature ships or is pulled, update this file in the same commit.
 > • Cash gift cards — $5 and $10, members only
 > • Advanced stats — where your points come from and your last 30 days
 > • Advanced personalization — switch interest profiles and save event filters
+> • Offline park and place packs — seven-day downloads of guides, trail lines,
+>   events, places and plans; background map imagery is not included
 >
 > Verdure is free to use. A subscription is entirely optional and never required
 > to earn points or redeem partner perks.
@@ -154,6 +156,17 @@ websites, which is what Apple's "tracking" means.
 
 The app does not collect an address book, health or browsing history, payment card details, billing or shipping addresses, or advertising identifiers. Crashlytics is not integrated yet; H2 must update diagnostics disclosures with that feature. Website forms and web analytics are described separately in the shared privacy policy.
 
+Offline packs use the existing account, saved-event/plan and location data
+categories above. A selected park or search area and existing provider place
+results are sent to Firebase to prepare a private, server-entitlement-checked
+download. Server staging expires after one hour. Device packs contain the
+member's authorized saves and plans, expire after seven days, are excluded from
+device backups and are removed on sign-out/account switch or manual deletion.
+They contain compressed event thumbnails with image metadata removed, public
+park/trail data and view-only perks, with no partner codes, background map
+imagery or queued attendance. Saved place itineraries are now retained in the
+member's account so they can be included; account deletion removes them.
+
 **On Product Interaction (the one unlinked row).** Verdure keeps first-party
 analytics: which screens are opened and which features are used. It is keyed to
 a random per-install UUID, not to the account, and carries no names, no message
@@ -227,7 +240,9 @@ switch it off in Profile › Settings › Product Analytics.
 > **About the subscription**
 > Verdure+ unlocks an unlimited Adventure Planner (free members get 5 plans a
 > calendar month), early access to partner perks, cash gift cards ($5 and $10),
-> and advanced stats. Everything else in the app is free — including the daily
+> advanced stats, interest profiles and saved filters, and offline park and place
+> packs. Online park guides and trail overviews remain free. Background map
+> imagery is not included in downloads. Other free features include the daily
 > streak and its one-missed-day freeze, which is not a paid feature and is not
 > sold anywhere. The paywall lists
 > only features that are live in this build — it previously advertised $25/$50

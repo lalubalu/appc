@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		4C486ED365839B55AE6B6D42 /* OfflinePacksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8DD75CE61C0FB134F89D1F7 /* OfflinePacksView.swift */; };
+		9352AFC7D8D1DCCC97F425CC /* OfflinePackService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55545EB927134EF374277FFE /* OfflinePackService.swift */; };
+		32B336126F179F93C4BA31D9 /* NetworkStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83FFEC33A63A254749CC1C55 /* NetworkStatus.swift */; };
 		0113C3ACA7BB550400050FA8 /* DeepLinkRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A6DB81CD3B804ACDD083CF8 /* DeepLinkRouter.swift */; };
 		0315B14A9E2039CF66DA1330 /* OrganizerVerificationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C3F67EDF9828ADE46D44C8E /* OrganizerVerificationView.swift */; };
 		031B1A9A522396A3D027E259 /* AdventurePlannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA6A0F79585FF85230ACA757 /* AdventurePlannerView.swift */; };
@@ -131,6 +134,9 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		C8DD75CE61C0FB134F89D1F7 /* OfflinePacksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflinePacksView.swift; sourceTree = "<group>"; };
+		55545EB927134EF374277FFE /* OfflinePackService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflinePackService.swift; sourceTree = "<group>"; };
+		83FFEC33A63A254749CC1C55 /* NetworkStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkStatus.swift; sourceTree = "<group>"; };
 		03A7624DC05E120CBE8C96D2 /* JourneyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JourneyTests.swift; sourceTree = "<group>"; };
 		040EE3EF01F3E4F0A91994C4 /* StreakInsuranceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreakInsuranceTests.swift; sourceTree = "<group>"; };
 		046EBA7E822D16C7DA6FF62B /* FunctionsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FunctionsService.swift; sourceTree = "<group>"; };
@@ -462,6 +468,8 @@
 				3839B31C15EF3A824DD5F394 /* NotificationPreferences.swift */,
 				1F0A2817279DC71C68D1D3AC /* PartnerDiscoveryService.swift */,
 				8CFDA61B2D2113CA383ABD22 /* ParkGuideService.swift */,
+				55545EB927134EF374277FFE /* OfflinePackService.swift */,
+				83FFEC33A63A254749CC1C55 /* NetworkStatus.swift */,
 				FAB429D1B84B1A8DA86F5AFD /* PersonalStats.swift */,
 				1C5DEE879934EC46DB64A8A8 /* PlacesAPIService.swift */,
 				A1885A91E1C32FEF46DA7630 /* ProviderKit.swift */,
@@ -533,6 +541,7 @@
 				7F91EB7C7709DEBD9167F2DC /* ExploreView.swift */,
 				9A0269E080A13E4D39959C84 /* PlaceDetailView.swift */,
 				58121625313FC9C5E676E439 /* ParkGuideView.swift */,
+				C8DD75CE61C0FB134F89D1F7 /* OfflinePacksView.swift */,
 			);
 			path = Explore;
 			sourceTree = "<group>";
@@ -768,6 +777,9 @@
 				0315B14A9E2039CF66DA1330 /* OrganizerVerificationView.swift in Sources */,
 				7B52A8708816A4E17F44A83B /* PartnerDiscoveryService.swift in Sources */,
 				329E05FE6D9C7D2124201CFA /* ParkGuideService.swift in Sources */,
+				4C486ED365839B55AE6B6D42 /* OfflinePacksView.swift in Sources */,
+				9352AFC7D8D1DCCC97F425CC /* OfflinePackService.swift in Sources */,
+				32B336126F179F93C4BA31D9 /* NetworkStatus.swift in Sources */,
 				F0E1C22F022BA85207783B7F /* PartnerOfferViews.swift in Sources */,
 				A68257C600ACE00EA9AD0168 /* PaywallView.swift in Sources */,
 				88CD742C1E5142F039E01585 /* PersonalStats.swift in Sources */,

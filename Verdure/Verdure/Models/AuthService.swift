@@ -13,6 +13,7 @@ final class AuthService {
     // MARK: - Published State
 
     var currentUser: VerdureUser?
+    private(set) var isAuthStateResolved = false
     var isAuthenticated: Bool { currentUser != nil }
     var isLoading = false
     var errorMessage: String?
@@ -46,6 +47,7 @@ final class AuthService {
                 } else {
                     self?.currentUser = nil
                 }
+                self?.isAuthStateResolved = true
             }
         }
     }

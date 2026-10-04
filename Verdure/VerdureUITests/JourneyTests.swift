@@ -7,6 +7,72 @@ import XCTest
 
 @MainActor
 final class JourneyTests: XCTestCase {
+    func testOfflinePackSignInSizeDownloadRelaunchAndStoredTrailView() throws {
+        var app = QA.launch(tab: "profile", extraArguments: ["-QAOfflineData", "NO", "-QAUseFirestoreEmulator", "YES", "-QAResetAuth", "YES"])
+        let signIn = app.buttons["profileSignIn"]
+        for _ in 0..<20 where !signIn.isHittable { app.swipeUp() }
+        QA.waitFor(signIn, "guest sign-in entry").tap()
+        let email = QA.waitFor(app.textFields["Email address"], "email field")
+        email.tap(); email.typeText("offline-native-plus@example.test")
+        let password = app.secureTextFields["Password"]
+        password.tap(); password.typeText("local-offline-native-only")
+        let submit = app.buttons["authSubmit"]
+        for _ in 0..<4 where !submit.isHittable { app.swipeUp() }
+        QA.waitFor(submit, "actual sign-in submission").tap()
+        QA.waitFor(app.buttons["openOfflinePacks"], "signed-in profile", timeout: 30)
+        app.terminate()
+        app = QA.launch(tab: "profile", extraArguments: ["-QAOfflineData", "NO", "-QAUseFirestoreEmulator", "YES"])
+        let packs = app.buttons["openOfflinePacks"]
+        for _ in 0..<15 where !packs.isHittable { app.swipeUp() }
+        QA.waitFor(packs, "storage entry").tap()
+        QA.waitFor(app.buttons["chooseOfflinePack"], "choose pack").tap()
+        let search = QA.waitFor(app.textFields["offlineParkSearch"], "park selection search")
+        search.tap(); search.typeText("Los Gatos Creek")
+        // Dismiss the keyboard without navigating away from the selection.
+        app.staticTexts["Ready before you leave"].tap()
+        let county = app.buttons["offline-choice:county-boundaries_20"]
+        for _ in 0..<12 where !county.isHittable { app.swipeUp() }
+        QA.waitFor(county, "real County selection", timeout: 60).tap()
+        let prepare = app.buttons["prepareOfflinePack"]
+        for _ in 0..<8 where !prepare.isHittable { app.swipeDown() }
+        QA.waitFor(prepare, "prepare size preview").tap()
+        QA.waitFor(app.staticTexts["offlineDownloadSize"], "size before download", timeout: 60)
+        XCTAssertFalse(app.staticTexts["Pack downloaded"].exists)
+        try QA.audit(app, screen: "Offline pack size preview")
+        let previewShot = XCTAttachment(screenshot: app.screenshot()); previewShot.name = "Offline pack size preview"; previewShot.lifetime = .keepAlways; add(previewShot)
+        QA.waitFor(app.buttons["downloadOfflinePack"], "confirmed download").tap()
+        QA.waitFor(app.staticTexts["Pack downloaded"], "verified pack installed", timeout: 120)
+        app.terminate()
+        // This DEBUG seam disables online actions; it is not airplane-mode or
+        // physical GPS evidence. The UI must reload the persisted snapshot.
+        app = QA.launch(tab: "profile", extraArguments: ["-QAOfflineData", "NO", "-QAUseFirestoreEmulator", "YES", "-QAForceOffline", "YES"])
+        let stored = app.buttons["openOfflinePacks"]
+        for _ in 0..<15 where !stored.isHittable { app.swipeUp() }
+        QA.waitFor(stored, "offline storage entry").tap()
+        let row = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'offline-pack:'")).firstMatch
+        QA.waitFor(row, "persisted pack after relaunch").tap()
+        QA.waitFor(app.buttons["park-guide:county-boundaries_20"], "stored guide").tap()
+        QA.waitFor(app.staticTexts["parkStatus"], "stored source status")
+        XCTAssertFalse(app.buttons["Download for offline use"].exists)
+        let event = app.buttons["park-event:offline-native-park-event"]
+        for _ in 0..<12 where !event.isHittable { app.swipeUp() }
+        QA.waitFor(event, "stored event details").tap()
+        QA.waitFor(app.staticTexts["RSVP and check-in are available when you're back online."], "offline event action explanation")
+        XCTAssertFalse(app.buttons["Open event actions"].exists)
+        app.navigationBars.buttons.firstMatch.tap()
+        let map = app.buttons["parkTrailMap"]
+        for _ in 0..<12 where !map.isHittable { app.swipeUp() }
+        QA.waitFor(map, "stored trail overlay").tap()
+        QA.waitFor(app.descendants(matching: .any).matching(identifier: "parkTrailNotice").firstMatch, "stored trail notice")
+        XCTAssertFalse(app.buttons["Directions"].exists)
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "Stored trail view offline preflight"; shot.lifetime = .keepAlways; add(shot)
+        for _ in 0..<3 { app.navigationBars.buttons.firstMatch.tap() }
+        QA.waitFor(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'offline-pack:'")).firstMatch, "pack storage after browsing")
+        try QA.audit(app, screen: "Offline pack storage")
+        QA.waitFor(app.buttons["Delete Los Gatos Creek"], "delete stored pack").tap()
+        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'offline-pack:'")).firstMatch.exists)
+    }
+
     func testParkTrailMapShowsOfficialNoticeWithoutRouteGuidance() throws {
         let app = QA.launch(tab: "explore", extraArguments: ["-QAOfflineData", "NO", "-QAUseFirestoreEmulator", "YES"])
         let directory = app.buttons["parkDirectory"]

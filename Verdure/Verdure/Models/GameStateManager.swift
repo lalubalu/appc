@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 import CoreLocation
 import Observation
+@preconcurrency import FirebaseAuth
 
 @MainActor @Observable
 final class GameStateManager {
@@ -236,10 +237,8 @@ final class GameStateManager {
 
     // MARK: - Server Ops Queue
     //
-    // Points are SERVER-authoritative: check-ins, collections, and redemptions go
-    // through Cloud Functions callables (see FunctionsService). Earn actions apply
-    // optimistically for instant UI + offline support, and are queued here until
-    // the server confirms them. The callables are idempotent, so replays are safe.
+    // Only place collections remain in the legacy retry queue. Attendance is
+    // never queued: a fresh online request must succeed before it earns points.
 
     struct PendingOp: Codable, Equatable {
         enum Kind: String, Codable { case checkIn, collect }
@@ -320,54 +319,22 @@ final class GameStateManager {
         var lastBalance: Int?
         var lastLifetime: Int?
 
-        while var op = pendingOps.first {
-            // Stage 1 for check-ins: get the proof photo into Cloud Storage first.
-            // The upload is resumable — proofPath persists on the op, so a retry
-            // after upload success skips straight to the callable.
-            if op.kind == .checkIn, let file = op.proofFile, op.proofPath == nil {
-                let fileURL = Self.proofsDirectory.appendingPathComponent(file)
-                guard let jpeg = try? Data(contentsOf: fileURL) else {
-                    // Proof photo vanished from disk — the server will never accept
-                    // this op, so drop it rather than wedge the queue.
-                    print("[GameState] dropping check-in \(op.id) — proof photo missing")
-                    pendingOps.removeFirst()
-                    continue
-                }
-                do {
-                    op.proofPath = try await StorageService.uploadProof(eventId: op.id, jpeg: jpeg)
-                    pendingOps[0] = op   // persist upload progress
-                } catch {
-                    break   // Storage unreachable (offline / not yet enabled) — retry later
-                }
-            }
-
+        let account = currentUserID
+        while let op = pendingOps.first {
+            // Old installs may still have attendance in their queue. Refuse it
+            // even if inserted after migration; reconnect never replays GPS.
+            guard op.kind == .collect else { pendingOps.removeFirst(); continue }
             do {
-                let result: ServerAwardResult
-                switch op.kind {
-                case .checkIn:
-                    result = try await fx.checkInToEvent(
-                        eventId: op.id, category: op.category, claimedPoints: op.points,
-                        proofPath: op.proofPath, lat: op.lat, lon: op.lon)
-                case .collect:
-                    result = try await fx.collectPlace(
-                        placeId: op.id, claimedPoints: op.points, lat: op.lat, lon: op.lon)
-                }
-                serverConfirmed = true   // a callable really answered → server is live
-                if op.kind == .checkIn, let file = op.proofFile {
-                    try? FileManager.default.removeItem(at: Self.proofsDirectory.appendingPathComponent(file))
-                }
+                let result = try await fx.collectPlace(placeId: op.id, claimedPoints: op.points, lat: op.lat, lon: op.lon)
+                guard currentUserID == account, pendingOps.first == op else { return }
+                serverConfirmed = true
                 pendingOps.removeFirst()
                 if let b = result.newBalance { lastBalance = b }
                 if let l = result.newLifetime { lastLifetime = l }
-            } catch ServerCallError.offline {
-                break   // transient — keep queued, retry later
-            } catch ServerCallError.notSignedIn {
-                break   // auth hiccup — keep queued, retry after re-auth
-            } catch {
-                // Permanently rejected op (bad ID, failed proximity, etc.) — drop it
-                // so the queue can't wedge. The optimistic local points for it get
-                // corrected the next time a server balance is adopted.
-                print("[GameState] dropping rejected op \(op.kind.rawValue):\(op.id) — \(error.localizedDescription)")
+            } catch ServerCallError.offline { break }
+            catch ServerCallError.notSignedIn { break }
+            catch {
+                guard currentUserID == account, pendingOps.first == op else { return }
                 pendingOps.removeFirst()
             }
         }
@@ -429,12 +396,9 @@ final class GameStateManager {
         self.redeemedRewardIDs = Self.loadSet(forKey: "redeemedRewardIDs")
         self.savedEventIDs = Self.loadSet(forKey: "savedEventIDs")
         self.savedPlaceIDs = Self.loadSet(forKey: "savedPlaceIDs")
-        if let data = UserDefaults.standard.data(forKey: "pendingServerOps"),
-           let ops = try? JSONDecoder().decode([PendingOp].self, from: data) {
-            self.pendingOps = ops
-        } else {
-            self.pendingOps = []
-        }
+        let loadedOps = UserDefaults.standard.data(forKey: "pendingServerOps")
+            .flatMap { try? JSONDecoder().decode([PendingOp].self, from: $0) } ?? []
+        self.pendingOps = loadedOps.filter { $0.kind == .collect }
         if let data = UserDefaults.standard.data(forKey: "earnHistory"),
            let records = try? JSONDecoder().decode([EarnRecord].self, from: data) {
             self.earnHistory = records
@@ -453,6 +417,24 @@ final class GameStateManager {
             self.earnedBadges = [:]
         }
 
+        // Cancel legacy offline attendance, its optimistic credit and local
+        // proof files. Confirmed server attendance is restored by cloud sync.
+        do {
+            let attendance = loadedOps.filter { $0.kind == .checkIn }
+            let ids = Set(attendance.map(\.id))
+            let unconfirmed = attendance.reduce(0) { $0 + max(0, $1.points) }
+            checkedInEventIDs.subtract(ids)
+            pointsBalance = max(0, pointsBalance - unconfirmed)
+            lifetimePoints = max(0, lifetimePoints - unconfirmed)
+            earnHistory.removeAll { $0.kind == .event && ids.contains($0.id) }
+            for op in attendance {
+                if let file = op.proofFile, file == URL(fileURLWithPath: file).lastPathComponent {
+                    try? FileManager.default.removeItem(at: Self.proofsDirectory.appendingPathComponent(file))
+                }
+            }
+            UserDefaults.standard.set(try? JSONEncoder().encode(pendingOps), forKey: "pendingServerOps")
+        }
+
         // Seed demo data on first launch
         if !UserDefaults.standard.bool(forKey: "gameStateSeeded_v2") {
             seedDemoData()
@@ -462,51 +444,56 @@ final class GameStateManager {
 
     // MARK: - Event Check-in (primary points source)
 
-    /// Check in to an event. Applies instantly (optimistic + offline-friendly) and
-    /// queues the server call — the server is the final authority on points and
-    /// silently no-ops double check-ins.
-    ///
-    /// `proofPhoto` (JPEG) is spooled to disk and uploaded to Cloud Storage during
-    /// flush; `userCoordinate` is the GPS fix at the moment of check-in. The server
-    /// REJECTS check-ins without both, so callers must gate on them (see
-    /// EventDetailSheet's proximity + photo requirements).
+    private var checkInsInFlight: Set<String> = []
+
+    /// No optimistic award, proof spool, retry queue or later replay. A failed
+    /// upload/request leaves the event unchecked and requires a new live visit.
     @discardableResult
     func checkInEvent(_ event: Event, proofPhoto: Data? = nil,
-                      userCoordinate: CLLocationCoordinate2D? = nil) -> Int {
-        guard !isCheckedIn(event.id) else { return 0 }
-        // Fixture content can never earn — not even under the QA harness.
-        guard !SampleData.isSample(id: event.id) else { return 0 }
-        checkedInEventIDs.insert(event.id)
-        let pts = event.pointValue
-        pointsBalance += pts
-        lifetimePoints += pts
-
-        // Spool the proof photo locally so offline check-ins survive relaunches.
-        var proofFile: String? = nil
-        if let proofPhoto {
-            let name = StorageService.proofFileName(for: event.id)
-            if (try? proofPhoto.write(to: Self.proofsDirectory.appendingPathComponent(name))) != nil {
-                proofFile = name
-            }
+                      userLocation: CLLocation? = nil,
+                      network: NetworkStatus = .shared) async throws -> Int {
+        guard network.isOnline else { throw ServerCallError.offline }
+        guard let fx = functionsService, let uid = currentUserID,
+              Auth.auth().currentUser?.uid == uid else { throw ServerCallError.notSignedIn }
+        guard !SampleData.isSample(id: event.id), !isCheckedIn(event.id),
+              !checkInsInFlight.contains(event.id) else { return 0 }
+        guard let proofPhoto, !proofPhoto.isEmpty, proofPhoto.count <= 8 * 1024 * 1024 else {
+            throw ServerCallError.server("Attach a proof photo to check in.")
         }
+        guard let location = userLocation, CLLocationCoordinate2DIsValid(location.coordinate),
+              location.horizontalAccuracy >= 0, location.horizontalAccuracy <= 100,
+              abs(location.timestamp.timeIntervalSinceNow) <= 30 else {
+            throw ServerCallError.server("Wait for a fresh, accurate GPS fix to check in.")
+        }
+        checkInsInFlight.insert(event.id)
+        defer { checkInsInFlight.remove(event.id) }
+        let path = try await StorageService.uploadProof(eventId: event.id, jpeg: proofPhoto)
+        guard network.isOnline else { throw ServerCallError.offline }
+        guard currentUserID == uid, Auth.auth().currentUser?.uid == uid else { throw ServerCallError.notSignedIn }
+        guard abs(location.timestamp.timeIntervalSinceNow) <= 120 else {
+            throw ServerCallError.server("Your GPS fix expired during upload. Try again at the venue.")
+        }
+        let result = try await fx.checkInToEvent(eventId: event.id, category: event.category.rawValue,
+            claimedPoints: event.pointValue, proofPath: path,
+            lat: location.coordinate.latitude, lon: location.coordinate.longitude)
+        guard currentUserID == uid, Auth.auth().currentUser?.uid == uid else { throw ServerCallError.notSignedIn }
+        return acceptConfirmedAttendance(event, result: result)
+    }
 
-        enqueue(PendingOp(kind: .checkIn, id: event.id,
-                          category: event.category.rawValue, points: pts,
-                          lat: userCoordinate?.latitude, lon: userCoordinate?.longitude,
-                          proofFile: proofFile))
-        record(EarnRecord(kind: .event, id: event.id, category: event.category.rawValue,
-                          rarity: nil, points: pts, date: Date()))
-        // Q1 outcome. Logged here rather than at the server confirmation
-        // because the question is about the USER's action; whether the pending
-        // op later drains is a different question with a different answer.
-        Analytics.log(event: .checkinSucceeded, params: [
-            "category": event.category.rawValue,
-            "points": pts,
-            "hadProof": proofPhoto != nil,
-        ])
-        NotificationManager.shared.push(AppNotification(
-            kind: .points, title: "+\(pts) points earned",
-            message: "Thanks for checking in to \(event.title).", timeAgo: "now"))
+    private func acceptConfirmedAttendance(_ event: Event, result: ServerAwardResult) -> Int {
+        guard !SampleData.isSample(id: event.id), !isCheckedIn(event.id) else { return 0 }
+        serverConfirmed = true
+        checkedInEventIDs.insert(event.id)
+        if let balance = result.newBalance { pointsBalance = balance + unsyncedPointsCount }
+        if let lifetime = result.newLifetime { lifetimePoints = lifetime + unsyncedPointsCount }
+        let pts = result.alreadyDone ? 0 : result.awarded
+        if pts > 0 {
+            record(EarnRecord(kind: .event, id: event.id, category: event.category.rawValue,
+                              rarity: nil, points: pts, date: Date()))
+            Analytics.log(event: .checkinSucceeded, params: ["category": event.category.rawValue, "points": pts, "hadProof": true])
+            NotificationManager.shared.push(AppNotification(kind: .points, title: "+\(pts) points earned",
+                message: "Thanks for checking in to \(event.title).", timeAgo: "now"))
+        }
         return pts
     }
 
@@ -613,6 +600,7 @@ final class GameStateManager {
             // points and delivers nothing, which is a fabricated reward.
             return RedeemOutcome(result: .signInRequired)
         }
+        guard NetworkStatus.shared.isOnline else { return RedeemOutcome(result: .failed("Perk redemption is available when you're back online.")) }
 
         // Land any queued earns first so the server balance is current.
         await flushPendingOps()
@@ -754,6 +742,14 @@ final class GameStateManager {
     #if DEBUG
     func applyCloudStateForTesting(_ cloud: CloudGameState) { mergeCloudState(cloud) }
     func markServerConfirmedForTesting() { serverConfirmed = true }
+    /// Models a server reply for gamification units; never used to verify live attendance.
+    @discardableResult
+    func acceptAttendanceForTesting(_ event: Event, awarded: Int? = nil) -> Int {
+        let points = awarded ?? event.pointValue
+        return acceptConfirmedAttendance(event, result: ServerAwardResult(alreadyDone: false, awarded: points,
+            newBalance: pointsBalance - unsyncedPointsCount + points,
+            newLifetime: lifetimePoints - unsyncedPointsCount + points))
+    }
     #endif
 
     /// Reset all game state (for testing)
