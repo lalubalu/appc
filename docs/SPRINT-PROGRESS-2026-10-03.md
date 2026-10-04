@@ -10,7 +10,7 @@ synonym map remain untouched; `CLAUDE.md` deploy status remains untouched.
 
 | Item | Required outcome | Current evidence |
 | --- | --- | --- |
-| D1 | Internship → Program; source-metadata mappings; fixed-input before/after confidence overall/per source/reason; regenerated 200-row sample; finishing commit and classifier freeze | Code/measurement/sample verified: 12,165 fixed inputs; 32.77% → 11.68%; 200 rows with blank human labels. 274 Functions units and 103 iOS units passed. Freeze commit pending. See CLASSIFICATION-AUDIT.md. |
+| D1 | Internship → Program; source-metadata mappings; fixed-input before/after confidence overall/per source/reason; regenerated 200-row sample; finishing commit and classifier freeze | Complete at `d4b7150`: 12,165 fixed inputs; 32.77% → 11.68%; 200 rows with blank human labels. 274 Functions units and 103 iOS units passed. Hash guard records frozen classifier/source mappings. See CLASSIFICATION-AUDIT.md. |
 | A1 | No partners in organic For You/Everything; allowed map/near_you surfaces; regression | Pending |
 | A2 | Distinct partner map pins; per-user persistent default-on toggle; detail/distance/dismissal | Pending |
 | A3 | One walking-distance/time-appropriate Discover card; When-In-Use only; persistent dismissal; no far fallback | Pending |

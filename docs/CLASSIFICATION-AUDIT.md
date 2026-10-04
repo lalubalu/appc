@@ -71,8 +71,12 @@ ingestion 136, ranking 52, notification 28, partner 22, planner 13 (274 total,
 zero failures). The focused ingestion suite includes internship non-volunteer,
 structured-type mapping, audience truncation, gaming/fitness and audience
 eligibility regressions. Ranking code and its tuning inputs are untouched.
-The finishing classifier commit and hash manifest are recorded below after
-the D1 code commit; no classifier changes are permitted afterward this sprint.
+**Finishing classifier commit: `d4b7150`. Frozen for the rest of this sprint.**
+The [hash manifest](audits/classifier-freeze-2026-10-03.json) records the full
+commit and six classifier/source-mapping hashes. `npm run check:classifier`
+checks both the current files and the committed bytes; Functions unit runs
+execute this guard first. The ranking reviewer can use this exact post-D1
+snapshot. D3 curation and new volunteer supply must use this frozen classifier.
 
 Fresh iOS build and `VerdureTests`: **103 passed, zero failures** using
 `xcodebuild -project Verdure.xcodeproj -scheme Verdure -destination 'platform=iOS Simulator,name=iPhone 16 Plus' -only-testing:VerdureTests test`
