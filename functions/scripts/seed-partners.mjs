@@ -17,7 +17,7 @@
  */
 
 const host = process.env.FIRESTORE_EMULATOR_HOST;
-if (!host) {
+if (!/^(127\.0\.0\.1|localhost):\d+$/.test(host ?? "")) {
   console.error("Refusing to run: FIRESTORE_EMULATOR_HOST is not set.");
   console.error("These are placeholder partners and must never reach production.");
   process.exit(1);
@@ -35,7 +35,7 @@ const PERKS = [
   {
     id: "dev-roastery-coffee",
     title: "Free drip coffee with any pastry",
-    partner: "[PLACEHOLDER] San Pedro Square Roastery",
+    partner: "Fictional Test Coffee Shop",
     description: "Show this code at the counter. One per customer.",
     kind: "discount",
     pointCost: 500,
@@ -52,7 +52,7 @@ const PERKS = [
   {
     id: "dev-trail-outfitter",
     title: "15% off trail gear",
-    partner: "[PLACEHOLDER] Almaden Outfitters",
+    partner: "Fictional Test Trail Shop",
     description: "In-store only, on full-price items.",
     kind: "discount",
     pointCost: 1500,
@@ -68,7 +68,7 @@ const PERKS = [
   {
     id: "dev-museum-early",
     title: "Two-for-one admission",
-    partner: "[PLACEHOLDER] Guadalupe River Museum",
+    partner: "Fictional Test Activity Center",
     description: "Bring a friend. Members get this a week before everyone else.",
     kind: "experience",
     pointCost: 2000,
@@ -86,8 +86,15 @@ const PERKS = [
 ];
 
 for (const { codes, ...perk } of PERKS) {
+  const partnerId = `${perk.id}-partner`;
+  await db.doc(`partners/${partnerId}`).set({
+    name: perk.partner, category: perk.id.includes("coffee") ? "coffee" : perk.id.includes("museum") ? "activities" : "retail",
+    latitude: perk.latitude, longitude: perk.longitude, active: true, isPlaceholder: true,
+    agreement: { agreedBy: "Fictional fixture owner", agreedAt: Timestamp.fromMillis(now),
+      reference: "Emulator fixture only; not a real business agreement" },
+  });
   await db.collection("partnerPerks").doc(perk.id).set({
-    ...perk,
+    ...perk, partnerId, expiresAt: Timestamp.fromMillis(now + 30 * DAY),
     codePoolCount: codes.length,
     redeemedCount: 0,
     impressions: 0,

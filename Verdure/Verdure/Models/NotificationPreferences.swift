@@ -20,6 +20,7 @@ final class NotificationPreferences {
     struct Prefs: Equatable, Sendable {
         var eventSuggestions = true
         var friendActivity = true
+        var rsvpPartnerOffers = false
         /// Local hour (0–23). Start may be greater than end — the window wraps.
         var quietStart = 21
         var quietEnd = 8
@@ -58,6 +59,7 @@ final class NotificationPreferences {
             let result = try await Functions.functions().httpsCallable("setNotificationPrefs").call([
                 "eventSuggestions": next.eventSuggestions,
                 "friendActivity": next.friendActivity,
+                "rsvpPartnerOffers": next.rsvpPartnerOffers,
                 "quietStart": next.quietStart,
                 "quietEnd": next.quietEnd,
                 "timeZone": next.timeZone,
@@ -76,6 +78,7 @@ final class NotificationPreferences {
         var p = Prefs()
         if let v = d["eventSuggestions"] as? Bool { p.eventSuggestions = v }
         if let v = d["friendActivity"] as? Bool { p.friendActivity = v }
+        if let v = d["rsvpPartnerOffers"] as? Bool { p.rsvpPartnerOffers = v }
         if let v = d["quietStart"] as? Int, (0...23).contains(v) { p.quietStart = v }
         if let v = d["quietEnd"] as? Int, (0...23).contains(v) { p.quietEnd = v }
         if let v = d["timeZone"] as? String, !v.isEmpty { p.timeZone = v }

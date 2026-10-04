@@ -73,6 +73,14 @@ enum QA {
         ]
         try app.performAccessibilityAudit(for: structural) { issue in
             let element = issue.element.map { "\($0)" } ?? "?"
+            // MapKit owns the Legal attribution link and exposes its text-sized
+            // frame. Keep it visible and actionable; exclude only that native
+            // link's hit-region finding, never Verdure pins or controls.
+            if screen == "partner-map-layer", issue.auditType == .hitRegion,
+               issue.element?.label == "Legal" {
+                XCTContext.runActivity(named: "AUDIT-NOTE [\(screen)] native MapKit Legal link; physical VoiceOver check remains required") { _ in }
+                return true
+            }
             // Known SwiftUI limitation: a TextField's audit frame is its text rect
             // even when the surrounding container focuses it on tap (ours are ≥44pt
             // clay wells wired via FocusState). Note it; don't fail.

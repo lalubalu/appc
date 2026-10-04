@@ -30,3 +30,6 @@ functions/lib/
 *-debug.log
 firebase-export-*/
 .firebase/
+/.sprint-firebase.json
+
+.sprint-regression-firebase.json

@@ -45,6 +45,7 @@ export const SUGGESTION_HORIZON_DAYS = 10;
 export interface NotificationPrefs {
   eventSuggestions: boolean;
   friendActivity: boolean;
+  rsvpPartnerOffers: boolean;
   /** Local hour (0-23) quiet hours begin / end. Start may be > end (overnight). */
   quietStart: number;
   quietEnd: number;
@@ -54,6 +55,7 @@ export interface NotificationPrefs {
 export const DEFAULT_PREFS: NotificationPrefs = {
   eventSuggestions: true,
   friendActivity: true,
+  rsvpPartnerOffers: false,
   quietStart: 21,
   quietEnd: 8,
   timeZone: "America/Los_Angeles",
@@ -68,6 +70,7 @@ export function readPrefs(data: FirebaseFirestore.DocumentData | undefined): Not
   return {
     eventSuggestions: p.eventSuggestions !== false,
     friendActivity: p.friendActivity !== false,
+    rsvpPartnerOffers: p.rsvpPartnerOffers === true,
     quietStart: hour(p.quietStart, DEFAULT_PREFS.quietStart),
     quietEnd: hour(p.quietEnd, DEFAULT_PREFS.quietEnd),
     timeZone: typeof p.timeZone === "string" && p.timeZone.length < 64 ? p.timeZone : DEFAULT_PREFS.timeZone,
@@ -78,7 +81,7 @@ export function readPrefs(data: FirebaseFirestore.DocumentData | undefined): Not
 export function localHour(atMs: number, timeZone: string): number {
   try {
     return Number(new Intl.DateTimeFormat("en-US", {
-      timeZone, hour: "2-digit", hour12: false,
+      timeZone, hour: "2-digit", hourCycle: "h23",
     }).format(new Date(atMs)));
   } catch {
     return new Date(atMs).getUTCHours();
@@ -299,6 +302,7 @@ export const setNotificationPrefs = onCall(async (req) => {
   const next: NotificationPrefs = {
     eventSuggestions: d.eventSuggestions === undefined ? current.eventSuggestions : safeBool(d.eventSuggestions),
     friendActivity: d.friendActivity === undefined ? current.friendActivity : safeBool(d.friendActivity),
+    rsvpPartnerOffers: d.rsvpPartnerOffers === undefined ? current.rsvpPartnerOffers : safeBool(d.rsvpPartnerOffers),
     quietStart: hour(d.quietStart, current.quietStart),
     quietEnd: hour(d.quietEnd, current.quietEnd),
     timeZone: safeText(d.timeZone, 60) || current.timeZone,

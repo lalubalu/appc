@@ -88,6 +88,14 @@ struct NotificationSettingsView: View {
                 var next = prefs.prefs; next.friendActivity = on
                 Task { await prefs.save(next) }
             }
+            toggleRow(
+                title: "Offers near events I'm going to",
+                detail: "Send a partner offer before an event I RSVP to, using its venue location. No background location. Counts toward the same two-per-week limit.",
+                isOn: prefs.prefs.rsvpPartnerOffers
+            ) { on in
+                var next = prefs.prefs; next.rsvpPartnerOffers = on
+                Task { await prefs.save(next) }
+            }
         }
     }
 

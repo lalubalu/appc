@@ -31,6 +31,8 @@ import {
 import { LAUNCH_AREAS, isInsideArea } from "./ingest/areas.js";
 import { CATEGORY_ICON, CATEGORY_POINTS, type EventCategory } from "./ingest/types.js";
 import { titleKey, venueKey, startBucket, cleanUrl } from "./ingest/normalize.js";
+import { appendStaffAudit, auditStaffRead, staffReason } from "./staff-audit.js";
+import { staffPage } from "./staff-page.js";
 
 /** The manual-review window. Approval beyond this needs a deliberate policy change. */
 export const MAX_MANUALLY_APPROVED = 50;
@@ -40,6 +42,20 @@ export const ORGANIZER_CATEGORIES = [
 ] as const;
 
 type OrganizerStatus = "pending" | "approved" | "rejected" | "suspended";
+
+const approvalCounter = db.doc("staffCounters/manualOrganizerApprovals");
+
+// Bootstrap from historical approvals once. Rejection/suspension never gives
+// back a manual-review slot; reinstating an already reviewed organization does
+// not consume another. The counter is read/written in the decision transaction.
+async function approvalUsage(tx?: FirebaseFirestore.Transaction): Promise<number> {
+  const snap = tx ? await tx.get(approvalCounter) : await approvalCounter.get();
+  if (snap.exists) return Number(snap.data()?.used) || 0;
+  const queries = [db.collection("organizers").where("status", "==", "approved"),
+    db.collection("organizers").where("approvedAt", ">", Timestamp.fromMillis(0))];
+  const rows = await Promise.all(queries.map((q) => tx ? tx.get(q) : q.get()));
+  return new Set(rows.flatMap((q) => q.docs.map((d) => d.id))).size;
+}
 
 async function organizerOwnedBy(uid: string) {
   const snap = await db.collection("organizers").where("ownerUid", "==", uid).limit(1).get();
@@ -94,49 +110,70 @@ export const approveOrganizer = onCall(async (req) => {
   const staff = await requireAdmin(req.auth);
   const organizerId = safeText(req.data?.organizerId, 128);
   const action = safeString(req.data?.action, "approve");
+  const reason = staffReason(req.data?.reason);
   if (!organizerId || organizerId.includes("/")) throw new HttpsError("invalid-argument", "Missing organizerId.");
   if (!["approve", "reject", "suspend", "reinstate"].includes(action)) throw new HttpsError("invalid-argument", "Unknown action.");
 
   const ref = db.collection("organizers").doc(organizerId);
-  const snap = await ref.get();
-  if (!snap.exists) throw new HttpsError("not-found", "No such organizer.");
-
   const status: OrganizerStatus = action === "approve" || action === "reinstate" ? "approved"
     : action === "reject" ? "rejected" : "suspended";
-
-  if (status === "approved" && snap.data()?.status !== "approved") {
-    const approved = await db.collection("organizers").where("status", "==", "approved").count().get();
-    if (approved.data().count >= MAX_MANUALLY_APPROVED) {
+  const approval = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new HttpsError("not-found", "No such organizer.");
+    const before = snap.data()!;
+    const used = await approvalUsage(tx);
+    const counted = before.manualApprovalCounted === true || before.status === "approved" || !!before.approvedAt;
+    const consumesSlot = status === "approved" && !counted;
+    if (consumesSlot && used >= MAX_MANUALLY_APPROVED) {
       throw new HttpsError("resource-exhausted",
         `The manual approval window (${MAX_MANUALLY_APPROVED} organizers) is full. Decide the next policy before approving more.`);
     }
-  }
+    const now = Timestamp.now(), nextUsed = used + (consumesSlot ? 1 : 0);
+    const change = { status, reviewedAt: now, reviewedBy: staff, reviewReason: reason, updatedAt: now,
+      ...(status === "approved" ? { approvedAt: before.approvedAt ?? now, manualApprovalCounted: true } : {}) };
+    tx.set(ref, change, { merge: true });
+    tx.set(approvalCounter, { used: nextUsed, limit: MAX_MANUALLY_APPROVED, updatedAt: now });
+    appendStaffAudit(tx, staff, `organizer:${action}`, ref.path,
+      { organizer: before, approvalsUsed: used }, { organizer: { ...before, ...change }, approvalsUsed: nextUsed }, reason);
+    return { used: nextUsed, remaining: Math.max(0, MAX_MANUALLY_APPROVED - nextUsed), limit: MAX_MANUALLY_APPROVED };
+  });
 
-  const now = Timestamp.now();
-  await ref.set({
-    status, reviewedAt: now, reviewedBy: staff, updatedAt: now,
-    ...(status === "approved" ? { approvedAt: now } : {}),
-  }, { merge: true });
-
-  // Approval state is enforced on every event the organizer owns.
+  // Bounded, audited transactions apply the CURRENT status, so concurrent staff
+  // decisions cannot leave an older decision's broadcast flag behind. New event
+  // creation reads the same organizer document transactionally below.
   const events = await db.collection("events").where("organizerId", "==", organizerId).get();
   let flipped = 0;
-  let batch = db.batch();
-  for (const ev of events.docs) {
-    batch.set(ev.ref, { broadcast: status === "approved" }, { merge: true });
-    if (++flipped % 400 === 0) { await batch.commit(); batch = db.batch(); }
+  for (let offset = 0; offset < events.size; offset += 200) {
+    const group = events.docs.slice(offset, offset + 200);
+    flipped += await db.runTransaction(async (tx) => {
+      const current = await tx.get(ref);
+      const freshEvents = await tx.getAll(...group.map((d) => d.ref));
+      const broadcast = current.data()?.status === "approved";
+      const changed = freshEvents.filter((d) => d.exists && d.data()?.broadcast !== broadcast);
+      if (!changed.length) return 0;
+      for (const ev of changed) tx.update(ev.ref, { broadcast });
+      appendStaffAudit(tx, staff, "organizer:event-visibility", ref.path,
+        changed.map((d) => ({ eventId: d.id, broadcast: d.data()?.broadcast ?? null })),
+        changed.map((d) => ({ eventId: d.id, broadcast })), reason);
+      return changed.length;
+    });
   }
-  if (flipped % 400) await batch.commit();
-  return { organizerId, status, eventsUpdated: events.size };
+  return { organizerId, status: (await ref.get()).data()?.status, eventsUpdated: flipped, approvalCap: approval };
 });
 
 /** Staff view of pending applications. */
 export const listOrganizerApplications = onCall(async (req) => {
-  await requireAdmin(req.auth);
+  const staff = await requireAdmin(req.auth);
   const status = safeString(req.data?.status, "pending");
-  const snap = await db.collection("organizers").where("status", "==", status).orderBy("createdAt", "asc").limit(100).get();
+  if (!["pending", "approved", "rejected", "suspended"].includes(status)) throw new HttpsError("invalid-argument", "Unknown organizer status.");
+  const page = await staffPage(db.collection("organizers").where("status", "==", status).orderBy("createdAt", "asc"), "organizers", req.data);
+  const used = await approvalUsage();
+  await auditStaffRead(staff, "organizer:list", "organizers", { status, ids: page.docs.map((d) => d.id), afterId: req.data?.afterId ?? null });
   return {
-    organizers: snap.docs.map((d) => ({ id: d.id, ...pick(d.data(), ["ownerUid", "displayName", "category", "description", "website", "status", "eventCount", "followerCount"]) })),
+    nextCursor: page.nextCursor,
+    organizers: page.docs.map((d) => ({ id: d.id, ...pick(d.data(), ["ownerUid", "displayName", "category", "description", "website", "status", "eventCount", "followerCount", "reviewReason", "reviewedBy"]),
+      createdAtMs: d.data().createdAt?.toMillis?.() ?? null, reviewedAtMs: d.data().reviewedAt?.toMillis?.() ?? null })),
+    approvalCap: { used, remaining: Math.max(0, MAX_MANUALLY_APPROVED - used), limit: MAX_MANUALLY_APPROVED },
   };
 });
 
@@ -244,18 +281,26 @@ export const createEvent = onCall(async (req) => {
   };
   if (lat !== undefined) doc.latitude = lat;
   if (lng !== undefined) doc.longitude = lng;
-  await ref.set(doc);
-  await org.ref.set({ eventCount: FieldValue.increment(1), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-
-  // Followers' activity feed: a new event from an organizer they follow.
-  await db.collection("activity").add({
+  const activityRef = db.collection("activity").doc();
+  const committedBroadcast = await db.runTransaction(async (tx) => {
+    const current = await tx.get(org.ref);
+    const data = current.data();
+    if (!data || data.hidden === true || data.removed === true || ["suspended", "rejected"].includes(data.status)) {
+      throw new HttpsError("permission-denied", "This organizer account can't publish events right now.");
+    }
+    const currentBroadcast = data.status === "approved";
+    tx.set(ref, { ...doc, broadcast: currentBroadcast });
+    tx.set(org.ref, { eventCount: FieldValue.increment(1), updatedAt: now }, { merge: true });
+    tx.create(activityRef, {
     kind: "organizer-event", actorUid: uid, actorName: safeText(orgData.displayName, 80),
     actorInitials: safeText(orgData.displayName, 80).slice(0, 2).toUpperCase(),
     organizerId: org.id, visibility: "public",
-    eventId: ref.id, eventTitle: title, eventDate: doc.date, broadcast,
+    eventId: ref.id, eventTitle: title, eventDate: doc.date, broadcast: currentBroadcast,
     createdAt: FieldValue.serverTimestamp(),
+    });
+    return currentBroadcast;
   });
-  return { eventId: ref.id, broadcast, organizerStatus: orgData.status };
+  return { eventId: ref.id, broadcast: committedBroadcast, organizerStatus: committedBroadcast ? "approved" : "pending" };
 });
 
 /** The caller's own organizer profile (or null). */

@@ -29,7 +29,7 @@
  */
 
 import { onCall, HttpsError } from "firebase-functions/v2/https";
-import { FieldValue } from "firebase-admin/firestore";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { getMessaging } from "firebase-admin/messaging";
 import {
   db, inEmulator, requireUid, enforceRateLimit, assertNotSuspended,
@@ -37,6 +37,7 @@ import {
 } from "./common.js";
 import { mayPush } from "./notifications.js";
 import { areFriends, friendIds } from "./friendships.js";
+import { rsvpAlertRef, rsvpAlertDueAt } from "./rsvp-partners.js";
 
 const MAX_INVITES_PER_CALL = 20;
 const MAX_FRIENDS_GOING_EVENTS = 50;
@@ -64,9 +65,9 @@ async function follows(follower: string, target: string): Promise<boolean> {
 /** Write an in-app notification and (outside the emulator) a push. */
 export async function notify(uid: string, payload: {
   kind: string; title: string; body: string; actorUid?: string; eventId?: string; extra?: Record<string, unknown>;
-}): Promise<void> {
-  const ref = db.collection(`users/${uid}/notifications`).doc();
-  await ref.set({
+}, delivery?: { notificationId: string; alreadyStored: boolean }): Promise<void> {
+  const ref = delivery ? db.doc(`users/${uid}/notifications/${delivery.notificationId}`) : db.collection(`users/${uid}/notifications`).doc();
+  if (!delivery?.alreadyStored) await ref.set({
     kind: payload.kind, title: payload.title, body: payload.body,
     actorUid: payload.actorUid ?? null, eventId: payload.eventId ?? null,
     ...(payload.extra ?? {}),
@@ -185,10 +186,12 @@ export const rsvpToEvent = onCall(async (req) => {
   const me = await profileBits(uid);
   const attendeeRef = eventRef.collection("attendees").doc(uid);
   const userRef = db.collection("users").doc(uid);
+  const alertRef = rsvpAlertRef(uid, eventId);
 
   const outcome = await db.runTransaction(async (tx) => {
     const existing = await tx.get(attendeeRef);
     const evNow = await tx.get(eventRef);
+    const alert = await tx.get(alertRef);
     const count = Number(evNow.data()?.attendeeCount) || 0;
     if (going) {
       if (existing.exists) return { going: true, changed: false, attendeeCount: count };
@@ -198,12 +201,18 @@ export const rsvpToEvent = onCall(async (req) => {
       });
       tx.set(eventRef, { attendeeCount: count + 1 }, { merge: true });
       tx.set(userRef, { rsvpEventIDs: FieldValue.arrayUnion(eventId), lastUpdated: FieldValue.serverTimestamp() }, { merge: true });
+      if (alert.data()?.status !== "sent") tx.set(alertRef, {
+        uid, eventId, status: "queued",
+        dueAt: Timestamp.fromMillis(rsvpAlertDueAt(evNow.data()?.date?.toMillis?.() ?? 0, Date.now())),
+        createdAt: FieldValue.serverTimestamp(),
+      });
       return { going: true, changed: true, attendeeCount: count + 1 };
     }
     if (!existing.exists) return { going: false, changed: false, attendeeCount: count };
     tx.delete(attendeeRef);
     tx.set(eventRef, { attendeeCount: Math.max(0, count - 1) }, { merge: true });
     tx.set(userRef, { rsvpEventIDs: FieldValue.arrayRemove(eventId), lastUpdated: FieldValue.serverTimestamp() }, { merge: true });
+    if (alert.exists && alert.data()?.status !== "sent") tx.update(alertRef, { status: "cancelled" });
     return { going: false, changed: true, attendeeCount: Math.max(0, count - 1) };
   });
 

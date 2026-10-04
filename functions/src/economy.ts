@@ -42,6 +42,10 @@
 
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
+import { appendStaffAudit, auditedStaffJob, staffReason } from "./staff-audit.js";
+import { loadSurfacablePerks, partnerHasAgreement } from "./partners.js";
+import { PERK_MIN_COST, PERK_MAX_COST } from "./staff-partners.js";
+export { PERK_MIN_COST, PERK_MAX_COST, upsertPartnerPerk, seedPartnerPerks, SEED_PERKS } from "./staff-partners.js";
 import {
   db, requireUid, requireAdmin, enforceRateLimit, assertNotSuspended,
   safeString, safeText, plusActiveFrom, utcMonthKey, docIdFrom,
@@ -89,11 +93,8 @@ export const CASH_CATALOG: Record<string, CashReward> = {
 // transaction — no vendor call, no dollars committed. The partner funds the
 // perk; our cost is zero.
 
-export const PERK_MIN_COST = 500;
-export const PERK_MAX_COST = 2000;
-
 interface PerkDoc {
-  title: string; partner: string; description: string; kind: string; pointCost: number;
+  title: string; partner: string; partnerId?: string; hidden?: boolean; description: string; kind: string; pointCost: number;
   active: boolean; earlyAccessUntil?: Timestamp | null; terms?: string; expiresAt?: Timestamp | null;
   codePoolCount?: number; redeemedCount?: number;
 }
@@ -238,6 +239,7 @@ export const redeemReward = onCall(async (req) => {
   return db.runTransaction(async (tx) => {
     const [userSnap, tSnap] = await Promise.all([tx.get(userRef), tx.get(tRef)]);
     const user = userSnap.data() ?? {};
+    if (user.suspended === true) throw new HttpsError("permission-denied", "This account is suspended.");
     const treasury = tSnap.data() ?? {};
     const isPlus = plusActiveFrom(user, now);
     const redeemed: string[] = user.redeemedRewardIDs ?? [];
@@ -301,7 +303,15 @@ export const redeemReward = onCall(async (req) => {
     }
 
     // ── Partner perk ──
-    const perk = perkSnap!.data() as PerkDoc;
+    const currentPerk = await tx.get(perkRef);
+    if (!currentPerk.exists) throw new HttpsError("failed-precondition", "This perk is no longer available.");
+    const perk = currentPerk.data() as PerkDoc;
+    if (!perk.partnerId || perk.partnerId.includes("/")) throw new HttpsError("failed-precondition", "This offer has no verified partner.");
+    const partner = await tx.get(db.doc(`partners/${perk.partnerId}`));
+    if (!partnerHasAgreement(partner.data()) || perk.hidden === true || !perk.expiresAt || perk.expiresAt.toMillis() <= now ||
+        !Number.isInteger(perk.pointCost) || perk.pointCost < PERK_MIN_COST || perk.pointCost > PERK_MAX_COST) {
+      throw new HttpsError("failed-precondition", "This partner offer isn't available right now.");
+    }
     if (!perkVisibleTo(perk, isPlus, now)) {
       throw new HttpsError(perk.active && perk.earlyAccessUntil && perk.earlyAccessUntil.toMillis() > now
         ? "permission-denied" : "failed-precondition",
@@ -310,7 +320,7 @@ export const redeemReward = onCall(async (req) => {
           : "This perk isn't available right now.");
     }
     if (redeemed.includes(rewardId)) throw new HttpsError("already-exists", "Already redeemed.");
-    const cost = Math.min(PERK_MAX_COST, Math.max(PERK_MIN_COST, Number(perk.pointCost) || PERK_MIN_COST));
+    const cost = perk.pointCost;
     if (balance < cost) throw new HttpsError("failed-precondition", "Not enough points.");
 
     // Claim one unclaimed code from the pool. The pool is server-only.
@@ -328,7 +338,7 @@ export const redeemReward = onCall(async (req) => {
     }, { merge: true });
     // The member's copy of the code (owner-readable); the master stays server-only.
     tx.set(userRef.collection("perkCodes").doc(rewardId), {
-      perkId: rewardId, title: perk.title, partner: perk.partner, code,
+      perkId: rewardId, title: perk.title, partner: partner.data()!.name, code,
       terms: perk.terms ?? null, expiresAt: perk.expiresAt ?? null, redeemedAt: Timestamp.now(),
     });
     tx.set(tRef, {
@@ -337,7 +347,7 @@ export const redeemReward = onCall(async (req) => {
       updatedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
 
-    return { redeemed: true, kind: "perk", remaining: balance - cost, code, title: perk.title, partner: perk.partner };
+    return { redeemed: true, kind: "perk", remaining: balance - cost, code, title: perk.title, partner: partner.data()!.name };
   });
   }
 });
@@ -361,11 +371,13 @@ export const listRewardsCatalog = onCall(async (req) => {
   ]);
   const user = userSnap.data() ?? {};
   const isPlus = plusActiveFrom(user, now);
+  const trustedOffers = new Map((await loadSurfacablePerks(isPlus, now, perksSnap, false)).map((p) => [p.id, p]));
   const perks = perksSnap.docs
     .map((d) => ({ id: d.id, ...(d.data() as PerkDoc) }))
+    .filter((p) => trustedOffers.has(p.id))
     .filter((p) => perkVisibleTo(p, isPlus, now) || (p.active && p.earlyAccessUntil && p.earlyAccessUntil.toMillis() > now))
     .map((p) => ({
-      id: p.id, title: p.title, partner: p.partner, description: p.description, kind: p.kind,
+      id: p.id, title: p.title, partner: trustedOffers.get(p.id)!.partner, description: p.description, kind: p.kind,
       pointCost: Math.min(PERK_MAX_COST, Math.max(PERK_MIN_COST, Number(p.pointCost) || PERK_MIN_COST)),
       earlyAccessUntilMs: p.earlyAccessUntil ? p.earlyAccessUntil.toMillis() : null,
       plusOnlyUntilOpens: !!(p.earlyAccessUntil && p.earlyAccessUntil.toMillis() > now),
@@ -373,6 +385,8 @@ export const listRewardsCatalog = onCall(async (req) => {
       codesLeft: Number(p.codePoolCount) || 0,
       terms: p.terms ?? null,
       expiresAtMs: p.expiresAt ? p.expiresAt.toMillis() : null,
+      latitude: trustedOffers.get(p.id)?.latitude ?? null,
+      longitude: trustedOffers.get(p.id)?.longitude ?? null,
     }));
   const cash = Object.entries(CASH_CATALOG).map(([id, c]) => ({ id, name: c.name, usd: c.usd, cost: c.cost, active: c.active }));
   const spent = rollingSpendUsd(user, now);
@@ -390,74 +404,6 @@ export const listRewardsCatalog = onCall(async (req) => {
 });
 
 // ── Staff: perks + treasury ─────────────────────────────────────────────────
-
-/** Load (or replace) a perk with a code pool. */
-export const upsertPartnerPerk = onCall(async (req) => {
-  await requireAdmin(req.auth);
-  const perkId = safeText(req.data?.perkId, 64);
-  if (!perkId || !/^[a-z0-9-]+$/.test(perkId)) throw new HttpsError("invalid-argument", "perkId must be kebab-case.");
-  const title = safeText(req.data?.title, 80);
-  const partner = safeText(req.data?.partner, 80);
-  if (!title || !partner) throw new HttpsError("invalid-argument", "title and partner are required.");
-  const kind = safeString(req.data?.kind, "local-offer");
-  if (!["percent-off", "free-item", "local-offer"].includes(kind)) throw new HttpsError("invalid-argument", "Unknown perk kind.");
-  const pointCost = Math.min(PERK_MAX_COST, Math.max(PERK_MIN_COST, Math.floor(Number(req.data?.pointCost) || PERK_MIN_COST)));
-  const codes: string[] = Array.isArray(req.data?.codes) ? (req.data.codes as unknown[]).map((c) => safeText(c, 64)).filter(Boolean).slice(0, 500) : [];
-  const earlyMs = Number(req.data?.earlyAccessUntilMs);
-  const expiresMs = Number(req.data?.expiresAtMs);
-
-  const ref = db.collection("partnerPerks").doc(perkId);
-  const batch = db.batch();
-  batch.set(ref, {
-    title, partner, kind, pointCost,
-    description: safeText(req.data?.description, 400),
-    terms: safeText(req.data?.terms, 400) || null,
-    active: req.data?.active !== false,
-    earlyAccessUntil: Number.isFinite(earlyMs) && earlyMs > 0 ? Timestamp.fromMillis(earlyMs) : null,
-    expiresAt: Number.isFinite(expiresMs) && expiresMs > 0 ? Timestamp.fromMillis(expiresMs) : null,
-    codePoolCount: FieldValue.increment(codes.length),
-    redeemedCount: FieldValue.increment(0),
-    hidden: false,
-    updatedAt: FieldValue.serverTimestamp(),
-  }, { merge: true });
-  for (const code of codes) {
-    batch.set(ref.collection("codes").doc(docIdFrom(code)), { code, claimedBy: null, claimedAt: null, addedAt: FieldValue.serverTimestamp() });
-  }
-  await batch.commit();
-  return { perkId, codesAdded: codes.length };
-});
-
-/**
- * Seed PLACEHOLDER perks for development and the emulator. Partner names are
- * obviously fictional; never run this against production — real perks come from
- * signed partners through upsertPartnerPerk.
- */
-export const SEED_PERKS = [
-  { perkId: "placeholder-coffee-20", title: "20% off any drink", partner: "Placeholder Coffee Co.", kind: "percent-off", pointCost: 500,
-    description: "Show the code at the counter. One per visit.", terms: "Placeholder partner — replace before launch." },
-  { perkId: "placeholder-trail-shop-10", title: "$10 off trail gear", partner: "Placeholder Outfitters", kind: "local-offer", pointCost: 1200,
-    description: "Any purchase over $40.", terms: "Placeholder partner — replace before launch." },
-  { perkId: "placeholder-free-scoop", title: "Free scoop", partner: "Placeholder Creamery", kind: "free-item", pointCost: 800,
-    description: "One free single scoop.", terms: "Placeholder partner — replace before launch." },
-];
-
-export const seedPartnerPerks = onCall(async (req) => {
-  await requireAdmin(req.auth);
-  let added = 0;
-  for (const p of SEED_PERKS) {
-    const ref = db.collection("partnerPerks").doc(p.perkId);
-    if ((await ref.get()).exists) continue;
-    const batch = db.batch();
-    batch.set(ref, { ...p, active: true, earlyAccessUntil: null, expiresAt: null, codePoolCount: 5, redeemedCount: 0, hidden: false, updatedAt: FieldValue.serverTimestamp() });
-    for (let i = 1; i <= 5; i++) {
-      const code = `${p.perkId.toUpperCase().slice(0, 8)}-${String(i).padStart(3, "0")}`;
-      batch.set(ref.collection("codes").doc(docIdFrom(code)), { code, claimedBy: null, claimedAt: null, addedAt: FieldValue.serverTimestamp() });
-    }
-    await batch.commit();
-    added++;
-  }
-  return { added };
-});
 
 /**
  * reconcileTreasury — the month's treasury against /fulfillments. Sums what was
@@ -502,15 +448,22 @@ export async function reconcile(month: string) {
 }
 
 export const reconcileTreasury = onCall(async (req) => {
-  await requireAdmin(req.auth);
+  const staff = await requireAdmin(req.auth);
   const month = /^\d{4}-\d{2}$/.test(safeString(req.data?.month)) ? safeString(req.data?.month) : utcMonthKey();
-  return reconcile(month);
+  return auditedStaffJob(staff, "treasury:reconcile", treasuryRef(month).path, (await treasuryRef(month).get()).data() ?? null,
+    req.data?.reason ? staffReason(req.data.reason) : "Manual treasury reconciliation", () => reconcile(month));
 });
 
 /** Staff: lift the kill switch after review (it never lifts itself within the month). */
 export const resetTreasuryKillSwitch = onCall(async (req) => {
   const staff = await requireAdmin(req.auth);
   const month = /^\d{4}-\d{2}$/.test(safeString(req.data?.month)) ? safeString(req.data?.month) : utcMonthKey();
-  await treasuryRef(month).set({ killSwitch: false, killSwitchResetBy: staff, killSwitchResetAt: FieldValue.serverTimestamp() }, { merge: true });
+  const reason = req.data?.reason ? staffReason(req.data.reason) : "Staff reviewed and reset treasury kill switch";
+  await db.runTransaction(async (tx) => {
+    const ref = treasuryRef(month), snap = await tx.get(ref), before = snap.data() ?? {};
+    const change = { killSwitch: false, killSwitchResetBy: staff, killSwitchResetAt: Timestamp.now() };
+    tx.set(ref, change, { merge: true });
+    appendStaffAudit(tx, staff, "treasury:reset", ref.path, before, { ...before, ...change }, reason);
+  });
   return { month, killSwitch: false };
 });

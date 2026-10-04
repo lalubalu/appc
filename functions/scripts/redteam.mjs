@@ -15,6 +15,7 @@
 // `VULNERABLE`    = the attack worked. Fix the system, never the test.
 
 import http from "node:http";
+import { EMULATORS } from "./local-emulator-targets.mjs";
 import { initializeApp as adminInit } from "firebase-admin/app";
 import { getFirestore as adminFirestore } from "firebase-admin/firestore";
 import { initializeApp as clientInit } from "firebase/app";
@@ -27,21 +28,20 @@ import {
 
 const PROJECT = "connectify-19dd8";
 const REGION = "us-central1";
-const AUTH = `http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1`;
-const FN = `http://127.0.0.1:${process.env.FUNCTIONS_EMULATOR_PORT || "5001"}/${PROJECT}/${REGION}`;
+const AUTH = `${EMULATORS.auth.url}/identitytoolkit.googleapis.com/v1`;
+const FN = `${EMULATORS.functions.url}/${PROJECT}/${REGION}`;
 const BUCKET = process.env.STORAGE_BUCKET || `${PROJECT}.firebasestorage.app`;
-const STORAGE = `http://127.0.0.1:9199/v0/b/${BUCKET}/o`;
+const STORAGE = `${EMULATORS.storage.url}/v0/b/${BUCKET}/o`;
 
-process.env.FIRESTORE_EMULATOR_HOST = "127.0.0.1:8899";
 
 adminInit({ projectId: PROJECT });
 const db = adminFirestore();
 
 const capp = clientInit({ projectId: PROJECT, apiKey: "fake-api-key" });
 const cauth = getAuth(capp);
-connectAuthEmulator(cauth, "http://127.0.0.1:9099", { disableWarnings: true });
+connectAuthEmulator(cauth, EMULATORS.auth.url, { disableWarnings: true });
 const cdb = clientFirestore(capp);
-connectFirestoreEmulator(cdb, "127.0.0.1", 8899);
+connectFirestoreEmulator(cdb, EMULATORS.firestore.host, EMULATORS.firestore.port);
 
 let blocked = 0;
 const vulns = [];

@@ -14,6 +14,7 @@
 import { getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
+import { getAuth } from "firebase-admin/auth";
 
 if (!getApps().length) initializeApp();
 export const db = getFirestore();
@@ -196,17 +197,17 @@ export async function hasActivePlus(uid: string): Promise<boolean> {
 // ── Admin gate ──────────────────────────────────────────────────────────────
 //
 // Moderation actions, organizer approval and manual ingestion runs are staff
-// operations. An admin is either a token carrying the `admin` custom claim
-// (set with the Admin SDK) or a uid listed in `/admins` — a server-only
-// collection no client can read or write. Both are set out-of-band; nothing a
-// client sends can make it an admin.
+// operations. Only an admin custom claim grants access. staff-admin.mjs is the
+// out-of-band management path; legacy /admins rows confer no authority.
+// Re-read Auth to refuse a revoked claim even while an old token still exists.
 
 export async function isAdmin(auth: { uid?: string; token?: Record<string, unknown> } | undefined): Promise<boolean> {
   const uid = auth?.uid;
-  if (!uid) return false;
-  if (auth?.token?.admin === true) return true;
-  const snap = await db.collection("admins").doc(uid).get();
-  return snap.exists;
+  if (!uid || auth?.token?.admin !== true) return false;
+  try {
+    const user = await getAuth().getUser(uid);
+    return !user.disabled && user.customClaims?.admin === true;
+  } catch { return false; }
 }
 
 export async function requireAdmin(auth: { uid?: string; token?: Record<string, unknown> } | undefined): Promise<string> {

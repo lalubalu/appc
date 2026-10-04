@@ -34,6 +34,9 @@ targets:
         UIBackgroundModes:
           - remote-notification
         CFBundleDisplayName: Verdure
+        CFBundleURLTypes:
+          - CFBundleURLSchemes:
+              - verdure
         NSLocationWhenInUseUsageDescription: "Verdure uses your location to find nearby events and outdoor places you can check in to."
         # CMMotionManager drives the decorative parallax tilt on clay cards.
         # Device-motion isn't permission-prompted the way motion *activity* is,
@@ -41,10 +44,6 @@ targets:
         # we cannot otherwise rule out without real-device testing.
         NSMotionUsageDescription: "Verdure uses motion to gently tilt cards as you move your phone. This is purely decorative and no motion data ever leaves your device."
         UIAppFonts:
-          - Fredoka-Regular.ttf
-          - Fredoka-Medium.ttf
-          - Fredoka-SemiBold.ttf
-          - Fredoka-Bold.ttf
           - Rubik-Light.ttf
           - Rubik-Regular.ttf
           - Rubik-Medium.ttf

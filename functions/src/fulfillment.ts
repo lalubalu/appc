@@ -48,6 +48,8 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret, defineString } from "firebase-functions/params";
 import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
 import { recordDollarsFulfilled, releaseCashCommitment } from "./economy.js";
+import { requireAdmin } from "./common.js";
+import { appendStaffAudit, auditedStaffJob, staffReason } from "./staff-audit.js";
 
 const db = () => getFirestore();
 
@@ -396,20 +398,27 @@ export const sweepFulfilments = onSchedule(
 export const runFulfilment = onCall(
   { secrets: [TREMENDOUS_API_KEY, TREMENDOUS_FUNDING_SOURCE_ID, TREMENDOUS_CATALOG] },
   async (req) => {
-    if (req.auth?.token?.admin !== true) {
-      throw new HttpsError("permission-denied", "Admins only.");
-    }
+    const staff = await requireAdmin(req.auth);
     const id = typeof req.data?.fulfilmentId === "string" ? req.data.fulfilmentId : "";
-    if (!id) throw new HttpsError("invalid-argument", "Missing fulfilmentId.");
+    if (!id || id.includes("/") || id.length > 1000) throw new HttpsError("invalid-argument", "Missing fulfilmentId.");
+    const ref = db().collection("fulfillments").doc(id), before = await ref.get();
+    if (!before.exists) throw new HttpsError("not-found", "No such fulfilment.");
+    const reason = req.data?.reason ? staffReason(req.data.reason) : "Manual fulfilment review/retry by staff";
 
-    if (req.data?.approve === true) {
-      await db().collection("fulfillments").doc(id).set(
-        { status: "approved", approvedBy: req.auth?.uid ?? null }, { merge: true }
-      );
-    }
-    await processFulfilment(id);
-    const after = await db().collection("fulfillments").doc(id).get();
-    return { status: after.data()?.status ?? "unknown" };
+    return auditedStaffJob(staff, "fulfilment:run", ref.path, before.data(), reason, async () => {
+      if (req.data?.approve === true) await db().runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists) throw new HttpsError("not-found", "No such fulfilment.");
+        if (snap.data()?.status === "approved") return;
+        if (snap.data()?.status !== "awaiting_approval") throw new HttpsError("failed-precondition", "Only a held card can be approved.");
+        const change = { status: "approved", approvedBy: staff, approvedAt: Timestamp.now() };
+        tx.set(ref, change, { merge: true });
+        appendStaffAudit(tx, staff, "fulfilment:approve", ref.path, snap.data(), { ...snap.data(), ...change }, reason);
+      });
+      await processFulfilment(id);
+      const after = await ref.get();
+      return { status: after.data()?.status ?? "unknown", fulfilment: after.data() ?? null };
+    });
   }
 );
 

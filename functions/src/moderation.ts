@@ -36,6 +36,9 @@ import {
   docIdFrom, isBlockedEitherWay,
 } from "./common.js";
 
+import { appendStaffAudit, auditStaffRead, auditedStaffJob, staffReason } from "./staff-audit.js";
+import { staffPage } from "./staff-page.js";
+
 export const MODERATION_CONTACT = "support@verdure-app.com";
 
 /** Distinct reporters needed before content is hidden automatically. */
@@ -169,71 +172,82 @@ export const reportContent = onCall(async (req) => {
   });
 });
 
-type ModerationAction = "remove" | "dismiss" | "restore" | "suspend";
+type ModerationAction = "remove" | "dismiss" | "restore" | "suspend" | "warn";
 
-/** Apply a moderation decision to a queue item and its target. Shared by staff + sweep. */
+/** Decision, affected records and before/after audit share one transaction. */
 async function applyDecision(queueId: string, action: ModerationAction, by: string, resolution: string) {
-  const queueRef = db.collection("moderationQueue").doc(queueId);
-  const queueSnap = await queueRef.get();
-  if (!queueSnap.exists) throw new HttpsError("not-found", "No such moderation item.");
-  const q = queueSnap.data()!;
-  const targetType = q.targetType as TargetType;
-  const targetRef = db.collection(TARGET_COLLECTIONS[targetType]).doc(String(q.targetId));
-  const now = Timestamp.now();
-
-  const batch = db.batch();
-  let targetUpdate: Record<string, unknown> | null = null;
-  let status: string;
-
-  switch (action) {
-    case "remove":
+  const queueRef = db.doc(`moderationQueue/${queueId}`);
+  const decision = await db.runTransaction(async (tx) => {
+    const queue = await tx.get(queueRef);
+    if (!queue.exists) throw new HttpsError("not-found", "No such moderation item.");
+    const q = queue.data()!;
+    if (by === "system" && q.status !== "open") return { queueId, status: q.status, resolution: q.resolution };
+    const type = q.targetType as TargetType;
+    if (!TARGET_COLLECTIONS[type]) throw new HttpsError("failed-precondition", "Unknown reported content type.");
+    const targetRef = db.doc(`${TARGET_COLLECTIONS[type]}/${q.targetId}`);
+    const authorRef = q.authorUid ? db.doc(`users/${q.authorUid}`) : null;
+    const [target, author] = await Promise.all([
+      tx.get(targetRef),
+      authorRef ? tx.get(authorRef) : Promise.resolve(null),
+    ]);
+    const now = Timestamp.now();
+    let update: Record<string, unknown> = {};
+    let status = "dismissed";
+    const original = q.originalContent ?? {
+      ...(typeof target.data()?.content === "string" ? { content: target.data()!.content } : {}),
+      ...(typeof target.data()?.description === "string" ? { description: target.data()!.description } : {}),
+    };
+    if (action === "remove" || action === "suspend") {
       status = "removed";
-      if (targetType === "user") {
-        targetUpdate = { suspended: true, suspendedAt: now };
-      } else {
-        targetUpdate = { hidden: true, removed: true, removedAt: now };
-        // Redact user-authored prose so it cannot be recovered through any other path.
-        if (targetType === "post") targetUpdate.content = "[removed by moderation]";
-        if (targetType === "event") targetUpdate.description = "[removed by moderation]";
-      }
-      break;
-    case "suspend":
-      status = "removed";
-      if (q.authorUid) {
-        batch.set(db.collection("users").doc(String(q.authorUid)),
-          { suspended: true, suspendedAt: now }, { merge: true });
-      }
-      if (targetType !== "user") targetUpdate = { hidden: true, removed: true, removedAt: now };
-      break;
-    case "dismiss":
-      status = "dismissed";
-      if (targetType !== "user") targetUpdate = { hidden: false };
-      break;
-    case "restore":
-      status = "dismissed";
-      targetUpdate = targetType === "user"
-        ? { suspended: false }
-        : { hidden: false, removed: false };
-      break;
-  }
-
-  // Content that has since been deleted needs no update; a USER must be updated
-  // even when they have no profile document yet, or the suspension would
-  // silently fail to stick for exactly the accounts that never finished setup.
-  if (targetUpdate && (targetType === "user" || (await targetRef.get()).exists)) {
-    batch.set(targetRef, targetUpdate, { merge: true });
-  }
-  batch.set(queueRef, {
-    status, hidden: status === "removed" ? true : false,
-    resolution, reviewedAt: now, reviewedBy: by, updatedAt: FieldValue.serverTimestamp(),
-  }, { merge: true });
-
+      update = type === "user" ? { suspended: true, suspendedAt: now } : { hidden: true, removed: true, removedAt: now };
+      if (action === "remove" && type === "post") update.content = "[removed by moderation]";
+      if (action === "remove" && type === "event") update.description = "[removed by moderation]";
+    } else if (action === "restore") {
+      update = type === "user" ? { suspended: false } : { hidden: false, removed: false, ...original };
+    } else if (action === "dismiss") {
+      if (type !== "user") update = { hidden: false };
+    } else {
+      status = "warned";
+      if (type !== "user") update = { hidden: false };
+    }
+    const after = { ...q, status, hidden: status === "removed", resolution,
+      reviewedAt: now, reviewedBy: by, updatedAt: now,
+      ...((action === "remove" || action === "suspend") ? { originalContent: original } : {}),
+    };
+    if (Object.keys(update).length && (target.exists || type === "user")) tx.set(targetRef, update, { merge: true });
+    const authorUpdate = action === "suspend" && authorRef ? { suspended: true, suspendedAt: now } : null;
+    if (authorUpdate && authorRef) tx.set(authorRef, authorUpdate, { merge: true });
+    tx.set(queueRef, after);
+    if (action === "warn" && authorRef) tx.create(authorRef.collection("notifications").doc(), {
+      kind: "moderation-warning", title: "A note from Verdure staff", body: resolution, read: false,
+      createdAt: now, actorUid: by, eventId: null,
+    });
+    appendStaffAudit(tx, by, `moderation:${action}`, targetRef.path,
+      { queue: q, target: target.data() ?? null, author: author?.data() ?? null },
+      { queue: after, target: { ...(target.data() ?? {}), ...update },
+        author: authorUpdate ? { ...(author?.data() ?? {}), ...authorUpdate } : author?.data() ?? null }, resolution);
+    return { queueId, status, resolution };
+  });
+  // The queue/target decision and its audit are atomic. Individual reports are
+  // derived records: reconcile in bounded transactions against the CURRENT
+  // decision, so thousands of reporters cannot prevent staff from acting and
+  // concurrent restore/remove cannot apply an obsolete status.
   const reports = await db.collection("reports").where("queueId", "==", queueId).get();
-  reports.forEach((r) => batch.set(r.ref, {
-    status: status === "removed" ? "actioned" : "dismissed", reviewedAt: now,
-  }, { merge: true }));
-  await batch.commit();
-  return { queueId, status, resolution };
+  for (let offset = 0; offset < reports.size; offset += 200) {
+    const group = reports.docs.slice(offset, offset + 200);
+    await db.runTransaction(async (tx) => {
+      const queue = await tx.get(queueRef);
+      const rows = await tx.getAll(...group.map((d) => d.ref));
+      const q = queue.data()!;
+      const status = q.status === "open" ? "open" : ["removed", "warned"].includes(q.status) ? "actioned" : "dismissed";
+      const changed = rows.filter((d) => d.exists && d.data()?.status !== status);
+      for (const row of changed) tx.update(row.ref, { status, reviewedAt: q.reviewedAt ?? null });
+      if (changed.length) appendStaffAudit(tx, by, "moderation:report-status", queueRef.path,
+        changed.map((d) => ({ id: d.id, status: d.data()?.status ?? null })),
+        changed.map((d) => ({ id: d.id, status })), resolution);
+    });
+  }
+  return decision;
 }
 
 /**
@@ -247,11 +261,11 @@ export const moderateContent = onCall(async (req) => {
   const staff = await requireAdmin(req.auth);
   const queueId = safeText(req.data?.queueId, 900);
   const action = safeString(req.data?.action) as ModerationAction;
-  if (!queueId) throw new HttpsError("invalid-argument", "Missing queueId.");
-  if (!["remove", "dismiss", "restore", "suspend"].includes(action)) {
+  if (!queueId || queueId.includes("/")) throw new HttpsError("invalid-argument", "Missing queueId.");
+  if (!["remove", "dismiss", "restore", "suspend", "warn"].includes(action)) {
     throw new HttpsError("invalid-argument", "Unknown moderation action.");
   }
-  return applyDecision(queueId, action, staff, `staff:${action}`);
+  return applyDecision(queueId, action, staff, staffReason(req.data?.reason));
 });
 
 /**
@@ -283,8 +297,10 @@ export const moderationSweep = onSchedule("every 60 minutes", async () => {
 
 /** Manual trigger for the sweep (staff / E2E — schedules don't fire in the emulator). */
 export const runModerationSweep = onCall(async (req) => {
-  await requireAdmin(req.auth);
-  return sweepModerationQueue();
+  const staff = await requireAdmin(req.auth);
+  const open = await db.collection("moderationQueue").where("status", "==", "open").count().get();
+  return auditedStaffJob(staff, "moderation:sweep", "moderationQueue", { pending: open.data().count },
+    req.data?.reason ? staffReason(req.data.reason) : "Manual moderation SLA sweep", () => sweepModerationQueue());
 });
 
 /**
@@ -292,23 +308,45 @@ export const runModerationSweep = onCall(async (req) => {
  * so this is the only window into it — and it is admin-gated.
  */
 export const listModerationQueue = onCall(async (req) => {
-  await requireAdmin(req.auth);
+  const staff = await requireAdmin(req.auth);
   const status = safeString(req.data?.status, "open");
-  const snap = await db.collection("moderationQueue")
-    .where("status", "==", status)
-    .orderBy("slaDeadline", "asc")
-    .limit(100)
-    .get();
+  if (!["open", "removed", "dismissed", "warned", "resolved"].includes(status)) throw new HttpsError("invalid-argument", "Unknown queue status.");
+  const type = safeString(req.data?.targetType);
+  if (type && !TARGET_COLLECTIONS[type as TargetType]) throw new HttpsError("invalid-argument", "Unknown content type.");
+  let query = status === "resolved" ? db.collection("moderationQueue").where("status", "in", ["removed", "dismissed", "warned"])
+    : db.collection("moderationQueue").where("status", "==", status);
+  if (type) query = query.where("targetType", "==", type);
+  const page = await staffPage(query.orderBy("firstReportedAt", "asc"), "moderationQueue", req.data);
+  const now = Date.now();
+  await auditStaffRead(staff, "moderation:list", "moderationQueue", { status, targetType: type || null,
+    ids: page.docs.map((d) => d.id), afterId: req.data?.afterId ?? null });
   return {
-    items: snap.docs.map((d) => {
+    nextCursor: page.nextCursor,
+    items: await Promise.all(page.docs.map(async (d) => {
       const q = d.data();
+      const collection = TARGET_COLLECTIONS[q.targetType as TargetType];
+      const [target, reports, author] = await Promise.all([
+        db.doc(`${collection}/${q.targetId}`).get(), db.collection("reports").where("queueId", "==", d.id).limit(100).get(),
+        q.authorUid ? db.doc(`users/${q.authorUid}`).get() : Promise.resolve(null),
+      ]);
+      const fields = ["title", "description", "content", "displayName", "name", "authorID", "creatorID", "ownerUid", "organizerId", "location", "locationName", "website", "hidden", "removed", "suspended"];
+      const context = Object.fromEntries(fields.filter((key) => key in (target.data() ?? {})).map((key) => [key, target.data()![key]]));
+      const first = q.firstReportedAt?.toMillis?.() ?? now;
       return {
         queueId: d.id, targetType: q.targetType, targetId: q.targetId,
+        status: q.status, content: context, originalContent: q.originalContent ?? null,
+        author: author?.exists ? { displayName: safeText(author.data()?.displayName, 120),
+          username: safeText(author.data()?.username, 60), suspended: author.data()?.suspended === true } : null,
+        eventDateMs: target.data()?.date?.toMillis?.() ?? null,
+        reports: reports.docs.map((r) => ({ reason: r.data().reason, details: r.data().details })),
         reportCount: q.reportCount, reasons: q.reasons ?? [], snapshot: q.snapshot ?? "",
         hidden: q.hidden === true,
+        firstReportedAtMs: first, hoursSinceFirstReport: Math.max(0, (now - first) / 3_600_000),
+        overdue20Hours: now - first > 20 * 3_600_000, resolution: q.resolution ?? null,
+        reviewedAtMs: q.reviewedAt?.toMillis?.() ?? null, reviewedBy: q.reviewedBy ?? null,
         slaDeadlineMs: q.slaDeadline?.toMillis?.() ?? null,
       };
-    }),
+    })),
   };
 });
 
@@ -320,21 +358,29 @@ export { isBlockedEitherWay };
  * The read rules now REQUIRE `hidden == false`, so a legacy post or event with
  * no flag would silently vanish from every feed. Idempotent; admin-only.
  */
-export const backfillModerationFlags = onCall(async (req) => {
-  await requireAdmin(req.auth);
+export const backfillModerationFlags = onCall({ timeoutSeconds: 540 }, async (req) => {
+  const staff = await requireAdmin(req.auth);
+  const reason = req.data?.reason ? staffReason(req.data.reason) : "Backfill legacy moderation visibility flags";
   let updated = 0;
   for (const coll of ["posts", "events", "organizers"]) {
-    const snap = await db.collection(coll).limit(2000).get();
-    const batch = db.batch();
-    let n = 0;
-    snap.forEach((d) => {
-      if (typeof d.data().hidden !== "boolean") {
-        batch.set(d.ref, { hidden: false }, { merge: true });
-        n++;
-      }
-    });
-    if (n) await batch.commit();
-    updated += n;
+    const query = db.collection(coll).orderBy("__name__").select("hidden");
+    let cursor: FirebaseFirestore.QueryDocumentSnapshot | undefined;
+    for (;;) {
+      const page = await (cursor ? query.startAfter(cursor) : query).limit(200).get();
+      const candidates = page.docs.filter((d) => typeof d.data().hidden !== "boolean");
+      if (candidates.length) updated += await db.runTransaction(async (tx) => {
+        const rows = await tx.getAll(...candidates.map((d) => d.ref));
+        const changed = rows.filter((d) => d.exists && typeof d.data()?.hidden !== "boolean");
+        for (const d of changed) tx.set(d.ref, { hidden: false }, { merge: true });
+        if (changed.length) appendStaffAudit(tx, staff, "moderation:backfill", coll,
+          changed.map((d) => ({ id: d.id, hidden: d.data()?.hidden ?? null })),
+          changed.map((d) => ({ id: d.id, hidden: false })), reason);
+        return changed.length;
+      });
+      if (page.size < 200) break;
+      cursor = page.docs[page.size - 1];
+    }
   }
+  await auditStaffRead(staff, "moderation:backfill-summary", "moderation-flags", { updated });
   return { updated };
 });

@@ -8,6 +8,7 @@
 import {
   MAX_SPONSORED_PER_SESSION, ALLOWED_SURFACES, isAllowedSurface,
   perkRelevance, choosePlacement,
+  nearYouEligible, partnerHasAgreement,
 } from "../lib/partners.js";
 
 let pass = 0, fail = 0;
@@ -25,8 +26,23 @@ ok("the allowlist contains no activity/social surface",
    !ALLOWED_SURFACES.some((s) => /friend|activity|social|feed_social/.test(s)), ALLOWED_SURFACES.join(","));
 ok("unknown surfaces are refused rather than defaulted",
    !isAllowedSurface("") && !isAllowedSurface("anything") && !isAllowedSurface("FRIENDS_ACTIVITY"));
-ok("the four real surfaces are allowed",
-   ["events_feed", "planner", "rewards", "event_detail"].every(isAllowedSurface));
+ok("the five dedicated surfaces are allowed",
+   ["map", "near_you", "planner", "rewards", "event_detail"].every(isAllowedSurface));
+ok("organic For You and Everything surfaces refuse partner content",
+   ["events_feed", "for_you", "everything"].every((s) => !isAllowedSurface(s)));
+const ctx = { lat: 37.3382, lng: -121.8863, localHour: 9 };
+const localCoffee = perk("coffee", { latitude: ctx.lat, longitude: ctx.lng, partnerCategory: "coffee" });
+ok("near you: nearby coffee appears in the morning", nearYouEligible(localCoffee, ctx, 1));
+ok("near you: coffee stays silent in the evening", !nearYouEligible(localCoffee, { ...ctx, localHour: 20 }, 1));
+ok("near you: no location means no card", !nearYouEligible(localCoffee, {}, 1));
+ok("near you: distant coffee never fills an empty card", !nearYouEligible({ ...localCoffee, latitude: 37.4 }, ctx, 1));
+ok("near you: food only appears at meal times", !nearYouEligible({ ...localCoffee, partnerCategory: "food" }, ctx, 1) &&
+  nearYouEligible({ ...localCoffee, partnerCategory: "food" }, { ...ctx, localHour: 12 }, 1));
+ok("near you: activities are weekend offers", !nearYouEligible({ ...localCoffee, partnerCategory: "activities" }, ctx, 1) &&
+  nearYouEligible({ ...localCoffee, partnerCategory: "activities" }, ctx, 6));
+ok("activation: a missing agreement cannot surface", !partnerHasAgreement({ active: true }));
+ok("activation: a complete recorded agreement is required", partnerHasAgreement({ active: true,
+  agreement: { agreedBy: "Fictional fixture owner", reference: "emulator-fixture-agreement", agreedAt: { toMillis: () => 1 } } }));
 
 console.log("\n── rule 3: at most one per session ──");
 ok("the cap is 1", MAX_SPONSORED_PER_SESSION === 1);

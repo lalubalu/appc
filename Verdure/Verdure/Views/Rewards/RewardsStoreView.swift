@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreLocation
 
 // MARK: - Rewards
 //
@@ -16,10 +17,13 @@ import SwiftUI
 // deactivated. The local catalog is now a DEBUG-only offline fallback.
 
 struct RewardsStoreView: View {
+    private enum PerkSort: String, CaseIterable { case nearby = "Nearby", original = "Default" }
+    @State private var perkSort: PerkSort?
     var showsDoneButton = true
     @Environment(GameStateManager.self) private var gameState
     @Environment(StoreService.self) private var store
     @Environment(EconomyService.self) private var economy
+    @Environment(LocationManager.self) private var locationManager
     @Environment(\.dismiss) private var dismiss
 
     @State private var confirmingPerk: PartnerPerk?
@@ -204,11 +208,24 @@ struct RewardsStoreView: View {
 
     // MARK: - Perks (primary)
 
+    private var effectivePerkSort: PerkSort { perkSort ?? (locationManager.userLocation == nil ? .original : .nearby) }
+    private var sortedPerks: [PartnerPerk] {
+        guard effectivePerkSort == .nearby else { return economy.catalog.perks }
+        return PartnerPerk.sortedNearby(economy.catalog.perks, origin: locationManager.userLocation)
+    }
+
     @ViewBuilder
     private var perksSection: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
             sectionHeader(icon: "sparkles", kind: .teal, title: "Partner Perks",
                           subtitle: "Local offers — reachable in a week or two")
+            Picker("Sort partner perks", selection: Binding(get: { effectivePerkSort }, set: { perkSort = $0 })) {
+                ForEach(PerkSort.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+            }.pickerStyle(.segmented).padding(.horizontal, Spacing.md)
+            if effectivePerkSort == .nearby && locationManager.userLocation == nil {
+                Text("Location unavailable · using the default order")
+                    .font(VType.scaledBody(12)).foregroundStyle(Palette.inkSoft).padding(.horizontal, Spacing.md)
+            }
 
             if economy.isLoading && economy.catalog.perks.isEmpty {
                 loadingRow
@@ -219,7 +236,7 @@ struct RewardsStoreView: View {
                 EmptyPerksCard()
             } else {
                 VStack(spacing: 12) {
-                    ForEach(economy.catalog.perks) { perk in perkCard(perk) }
+                    ForEach(sortedPerks) { perk in perkCard(perk) }
                 }
                 .padding(.horizontal, Spacing.md)
             }

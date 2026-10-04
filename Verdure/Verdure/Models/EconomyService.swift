@@ -1,4 +1,5 @@
 import Foundation
+import CoreLocation
 import Observation
 @preconcurrency import FirebaseFirestore
 @preconcurrency import FirebaseAuth
@@ -45,8 +46,27 @@ struct PartnerPerk: Identifiable, Equatable, Sendable {
     let codesLeft: Int
     let terms: String?
     let expiresAt: Date?
+    var latitude: Double? = nil
+    var longitude: Double? = nil
+    var coordinate: CLLocationCoordinate2D? {
+        guard let latitude, let longitude, latitude.isFinite, longitude.isFinite,
+              abs(latitude) <= 90, abs(longitude) <= 180 else { return nil }
+        return .init(latitude: latitude, longitude: longitude)
+    }
 
     var isSoldOut: Bool { codesLeft <= 0 }
+
+    static func sortedNearby(_ perks: [PartnerPerk], origin: CLLocation?) -> [PartnerPerk] {
+        guard let origin else { return perks }
+        func distance(_ perk: PartnerPerk) -> Double {
+            guard let coordinate = perk.coordinate else { return .infinity }
+            return origin.distance(from: CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude))
+        }
+        return perks.enumerated().sorted { a, b in
+            let left = distance(a.element), right = distance(b.element)
+            return left == right ? a.offset < b.offset : left < right
+        }.map(\.element)
+    }
 }
 
 /// A cash gift card. Members-only, and priced at `usd × pointsPerDollar`.
@@ -150,7 +170,9 @@ final class EconomyService {
                 redeemable: p["redeemable"] as? Bool ?? false,
                 codesLeft: intValue(p["codesLeft"]) ?? 0,
                 terms: nonEmpty(Sanitize.text(p["terms"] as? String, max: 240)),
-                expiresAt: msDate(p["expiresAtMs"])
+                expiresAt: msDate(p["expiresAtMs"]),
+                latitude: p["latitude"] as? Double,
+                longitude: p["longitude"] as? Double
             )
         }
 

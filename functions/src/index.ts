@@ -463,7 +463,7 @@ export { manageGroupPlan } from "./groupPlans.js";
 // Partner surfacing. Separate from ranking.ts on purpose: that module has no
 // partner input and this one cannot reach into it, so a paid placement is
 // structurally incapable of moving an organic result.
-export { sponsoredPlacement, dismissPerk, recordPerkTap } from "./partners.js";
+export { sponsoredPlacement, dismissPerk, recordPerkTap, nearbyPartners } from "./partners.js";
 
 // ── Content moderation ──────────────────────────────────────────────────────
 // Report flow, auto-hide threshold, 24-hour SLA sweep and staff decisions.
@@ -490,6 +490,7 @@ export {
 // Every write is a callable so blocks are enforced server-side and counts stay
 // honest; rules deny clients all writes to these subcollections. See social.ts.
 export { followUser, rsvpToEvent, inviteToEvent, respondToInvite, friendsGoing, friendsUpcoming, friendsLeaderboard } from "./social.js";
+export { sendRsvpPartnerAlerts } from "./rsvp-partners.js";
 export { sendFriendRequest, respondToFriendRequest, removeFriend, myFriendInvite,
          claimUsername, findFriendByUsername, sharedPastEventMembers, registerAgeBand } from "./friendships.js";
 
@@ -506,3 +507,8 @@ export {
   redeemReward, listRewardsCatalog, upsertPartnerPerk, seedPartnerPerks,
   reconcileTreasury, resetTreasuryKillSwitch,
 } from "./economy.js";
+
+// Staff-managed partners: authorization and immutable audits are server-side.
+export { savePartner, importPartnerCodes, deactivatePartnerOffer, listStaffPartners } from "./staff-partners.js";
+export { staffSession } from "./staff-session.js";
+export { staffOperations } from "./staff-operations.js";

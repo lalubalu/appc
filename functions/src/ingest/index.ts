@@ -33,8 +33,10 @@ import { fetchLegistar } from "./sources/legistar.js";
 import { fetchNps } from "./sources/nps.js";
 import { fetchSerpApi, serpApiBudgetAllows, SERPAPI_MONTHLY_CAP } from "./sources/serpapi.js";
 import { cleanText, cleanUrl, cleanCoord, classify, formatLocalTime } from "./normalize.js";
+import { recordSourceHealth } from "./health.js";
+import { auditedStaffJob, staffReason } from "../staff-audit.js";
 
-const SOURCES: SourceId[] = ["ticketmaster", "libcal", "bibliocommons", "localist", "livewhale", "legistar", "nps", "midpen", "ics", "serpapi"];
+export const SOURCES: SourceId[] = ["ticketmaster", "libcal", "bibliocommons", "localist", "livewhale", "legistar", "nps", "midpen", "ics", "serpapi"];
 const TICKETED: SourceId[] = ["ticketmaster"];
 const CIVIC: SourceId[] = ["libcal", "bibliocommons", "localist", "livewhale", "legistar", "nps", "midpen", "ics", "serpapi"];
 
@@ -151,6 +153,7 @@ export async function runSource(source: SourceId, area: LaunchArea, keys: Keys, 
   await db.collection("ingestRuns").doc(`${runStart.toISOString()}_${source}_${area.id}`).set({
     ...result, runAt: Timestamp.fromDate(runStart),
   });
+  await recordSourceHealth(result, Timestamp.fromDate(runStart));
   // Supply telemetry per month: records seen per source.
   await db.collection("treasury").doc(utcMonthKey()).set({
     supply: { [`${source}.fetched`]: FieldValue.increment(result.fetched), [`${source}.runs`]: FieldValue.increment(1) },
@@ -227,9 +230,10 @@ export function coercePayloadRecord(raw: unknown, area: LaunchArea): NormalizedE
 export const runIngest = onCall(
   { secrets: [TICKETMASTER_KEY, NPS_API_KEY, SERPAPI_KEY], timeoutSeconds: 540, memory: "512MiB" },
   async (req) => {
-    await requireAdmin(req.auth);
+    const staff = await requireAdmin(req.auth);
     const area = areaById(safeString(req.data?.areaId, LAUNCH_AREAS[0].id));
     if (!area) throw new HttpsError("invalid-argument", "Unknown launch area.");
+    const reason = req.data?.reason ? staffReason(req.data.reason) : "Manual source ingestion requested by staff";
 
     // Payload mode: normalized records, straight into the store.
     if (Array.isArray(req.data?.payload)) {
@@ -238,16 +242,22 @@ export const runIngest = onCall(
       const records = (req.data.payload as unknown[]).slice(0, 2000)
         .map((r) => coercePayloadRecord(r, area))
         .filter((r): r is NormalizedEvent => r !== null && r.source === source);
-      return { results: [await runSource(source, area, {}, records)] };
+      const before = (await db.doc(`sourceHealth/${area.id}_${source}`).get()).data() ?? null;
+      return auditedStaffJob(staff, "ingest:run", `${area.id}/${source}`, before, reason,
+        async () => ({ results: [await runSource(source, area, {}, records)] }));
     }
 
     const requested = Array.isArray(req.data?.sources)
       ? (req.data.sources as unknown[]).map((s) => safeString(s)).filter((s): s is SourceId => SOURCES.includes(s as SourceId))
       : SOURCES;
     const keys = keysFromSecrets();
-    const results: IngestResult[] = [];
-    for (const s of requested) results.push(await runSource(s, area, keys));
-    return { results };
+    const before = await Promise.all(requested.map(async (s) => ({ source: s,
+      health: (await db.doc(`sourceHealth/${area.id}_${s}`).get()).data() ?? null })));
+    return auditedStaffJob(staff, "ingest:run", area.id, before, reason, async () => {
+      const results: IngestResult[] = [];
+      for (const s of requested) results.push(await runSource(s, area, keys));
+      return { results };
+    });
   },
 );
 
@@ -332,10 +342,12 @@ export const supplyReportWeekly = onSchedule("every monday 09:00", async () => {
 });
 
 export const getSupplyReport = onCall(async (req) => {
-  await requireAdmin(req.auth);
+  const staff = await requireAdmin(req.auth);
   const area = areaById(safeString(req.data?.areaId, LAUNCH_AREAS[0].id));
   if (!area) throw new HttpsError("invalid-argument", "Unknown launch area.");
-  return computeSupplyReport(area);
+  const before = (await db.doc(`treasury/${utcMonthKey()}`).get()).data()?.supplyReport ?? null;
+  return auditedStaffJob(staff, "supply:report", area.id, before,
+    req.data?.reason ? staffReason(req.data.reason) : "Recompute event supply report", () => computeSupplyReport(area));
 });
 
 /** Public, read-only: which launch areas exist (the app uses this to explain coverage honestly). */

@@ -6,6 +6,8 @@ struct MapExploreView: View {
     @Environment(LocationManager.self) private var locationManager
     @Environment(PlacesAPIService.self) private var placesService
     @Environment(DiscoveryFilters.self) private var filters
+    @Environment(PartnerDiscoveryService.self) private var partners
+    @State private var selectedPartner: PartnerMapOffer?
     @State private var search = SearchDebouncer()
     @State private var position: MapCameraPosition = .automatic
     @State private var selectedPlace: Place? = nil
@@ -64,6 +66,7 @@ struct MapExploreView: View {
                     .presentationDetents([.medium, .large])
                     .presentationDragIndicator(.visible)
             }
+            .sheet(item: $selectedPartner) { PartnerOfferDetail(offer: $0) }
         }
     }
 
@@ -78,15 +81,33 @@ struct MapExploreView: View {
             }
             ForEach(collectiblePlaces) { collectible in
                 Annotation(collectible.place.name, coordinate: collectible.coordinate) {
-                    ClayMapPin(
-                        collectible: collectible,
-                        isSelected: selectedPlace?.id == collectible.place.id,
-                        isCollected: gameState.isCollected(collectible.id),
-                        isNearby: collectible.isNearby(from: locationManager.userLocation)
-                    )
-                    .onTapGesture { select(collectible) }
+                    Button { select(collectible) } label: {
+                        ClayMapPin(
+                            collectible: collectible,
+                            isSelected: selectedPlace?.id == collectible.place.id,
+                            isCollected: gameState.isCollected(collectible.id),
+                            isNearby: collectible.isNearby(from: locationManager.userLocation)
+                        ).frame(minWidth: 44, minHeight: 48).contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("\(collectible.place.name), \(collectible.place.category.rawValue)")
+                    .accessibilityValue(gameState.isCollected(collectible.id) ? "Collected" : "Uncollected")
+                    .accessibilityHint("Show place details")
                 }
                 .annotationTitles(.hidden)
+            }
+            if partners.layerEnabled {
+                ForEach(partners.offers) { offer in
+                    Annotation(offer.partner, coordinate: offer.coordinate) {
+                        Button { selectedPartner = offer; selectedPlace = nil } label: {
+                            Image(systemName: "storefront.fill").font(.system(size: 20, weight: .bold))
+                                .foregroundStyle(Palette.surface).frame(width: 48, height: 48)
+                                .background(Palette.ink, in: RoundedRectangle(cornerRadius: Radius.sm))
+                                .overlay(RoundedRectangle(cornerRadius: Radius.sm).stroke(Palette.gold.base, lineWidth: 2))
+                        }.buttonStyle(.plain).accessibilityLabel("Partner \(offer.partner), \(offer.title), \(offer.pointCost) points")
+                    }.annotationTitles(.hidden)
+                }
             }
         }
         .mapStyle(.standard(pointsOfInterest: .excludingAll))
@@ -106,6 +127,7 @@ struct MapExploreView: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 10) {
                     ClayIconTile(systemImage: "map.fill", kind: .spruce, size: 40, radius: Radius.chip)
+                        .accessibilityHidden(true)
                         .breathing(scale: 1.05, duration: 3)
                     VStack(alignment: .leading, spacing: 0) {
                         Text("DISCOVERED").font(VType.body(9, .bold)).tracking(1.6).foregroundStyle(Palette.inkSoft)
@@ -125,6 +147,13 @@ struct MapExploreView: View {
                 mapButton(icon: "location.fill") { centerOnUser() }
                 mapButton(icon: "list.bullet") { Haptics.soft(); showList.toggle() }
                 FilterButton(mode: .places)
+                Toggle(isOn: Binding(get: { partners.layerEnabled }, set: { partners.setLayerEnabled($0) })) {
+                    Text("Partners").frame(minWidth: 70, minHeight: 44)
+                }
+                    .font(VType.scaledBody(12, .semibold)).toggleStyle(.button)
+                    .tint(Palette.gold.base).accessibilityLabel("Partners")
+                    .accessibilityHint("Show or hide the partner map layer")
+                    .accessibilityIdentifier("partnerMapLayer")
             }
             .breathing(scale: 1.03, duration: 3.4)
         }
@@ -211,6 +240,7 @@ struct MapExploreView: View {
             NavigationLink(value: place) {
                 HStack(spacing: Spacing.md) {
                     PlacePlaceholder(icon: place.imagePlaceholder, color: place.category.accent.base, height: 70)
+                        .accessibilityHidden(true)
                         .frame(width: 70)
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(spacing: 6) {
@@ -232,6 +262,7 @@ struct MapExploreView: View {
                     Spacer(minLength: 0)
                     Image(systemName: "chevron.right").font(.system(size: 13, weight: .bold))
                         .foregroundStyle(Palette.spruce.base.opacity(0.6))
+                        .accessibilityHidden(true)
                 }
             }
             .buttonStyle(.plain)
@@ -356,6 +387,7 @@ private struct DeckCard: View {
                     .frame(height: 88)
                     .overlay {
                         Image(systemName: collectible.place.category.icon)
+                            .accessibilityHidden(true)
                             .font(.system(size: 38, weight: .semibold))
                             .foregroundStyle(collectible.place.category.accent.onColor.opacity(0.92))
                     }
@@ -365,6 +397,7 @@ private struct DeckCard: View {
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: Radius.sm, style: .continuous))
+            .accessibilityHidden(true)
             .padding(.bottom, 10)
 
             HStack(spacing: 6) {
@@ -385,8 +418,9 @@ private struct DeckCard: View {
                         Spacer()
                         Image(systemName: "arrow.up.right").font(.system(size: 12, weight: .bold)) }
                         .foregroundStyle(Palette.spruce.base)
-                        .padding(.vertical, 11).padding(.horizontal, 4)
+                        .padding(.vertical, 11).padding(.horizontal, 4).frame(minHeight: 44)
                 }
+                .accessibilityLabel("\(collected ? "View" : "Locate") \(collectible.place.name)")
                 .padding(.top, 6)
             }
         }
@@ -495,4 +529,5 @@ private struct Triangle: Shape {
         .environment(LocationManager())
         .environment(PlacesAPIService())
         .environment(DiscoveryFilters())
+        .environment(PartnerDiscoveryService())
 }

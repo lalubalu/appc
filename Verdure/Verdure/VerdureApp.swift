@@ -1,38 +1,56 @@
 import SwiftUI
 import FirebaseCore
-#if DEBUG && targetEnvironment(simulator)
+#if DEBUG
 import FirebaseFirestore
+import FirebaseAuth
+import FirebaseFunctions
+import FirebaseStorage
 #endif
 
 @main
 struct VerdureApp: App {
+    private let unitTestHost: Bool
     // Required for remote push: SwiftUI exposes no hook for the APNs device
     // token callback, and FCM can't route to a token it never sees.
     @UIApplicationDelegateAdaptor(VerdureAppDelegate.self) private var appDelegate
 
     init() {
+        #if DEBUG
+        unitTestHost = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil ||
+            NSClassFromString("XCTestCase") != nil
+        #else
+        unitTestHost = false
+        #endif
         FirebaseApp.configure()
-        #if DEBUG && targetEnvironment(simulator)
-        // Opt-in only for local populated-screen QA. Release builds and normal
-        // simulator launches continue to use the configured Firebase project.
-        let qaEmulator = UserDefaults.standard.bool(forKey: "QAUseFirestoreEmulator")
+        #if DEBUG
+        // Unit-test hosts always stay local. Device QA is explicit opt-in;
+        // all four services use the same LAN host, never a mixed live/local stack.
+        let qaEmulator = unitTestHost || QAData.offline || UserDefaults.standard.bool(forKey: "QAUseFirestoreEmulator")
         if qaEmulator {
+            let host = unitTestHost ? "127.0.0.1" :
+                (UserDefaults.standard.string(forKey: "QAEmulatorHost") ?? "127.0.0.1")
             let firestore = Firestore.firestore()
-            firestore.useEmulator(withHost: "127.0.0.1", port: 8899)
+            firestore.useEmulator(withHost: host, port: 8899)
             // Firebase's iOS useEmulator sets the host but does not disable
             // TLS. The local Firestore emulator serves plaintext gRPC.
             let settings = firestore.settings
             settings.isSSLEnabled = false
             settings.cacheSettings = MemoryCacheSettings()
             firestore.settings = settings
+            Auth.auth().useEmulator(withHost: host, port: 9099)
+            Functions.functions().useEmulator(withHost: host, port: 5002)
+            Storage.storage().useEmulator(withHost: host, port: 9199)
+            print("[Local QA] Auth/Firestore/Functions/Storage → \(host); unit-test host: \(unitTestHost)")
         }
-        #endif
+        if !qaEmulator { PushService.shared.start() }
+        #else
         PushService.shared.start()
+        #endif
     }
 
     var body: some Scene {
         WindowGroup {
-            RootView()
+            if unitTestHost { Color.clear } else { RootView() }
         }
     }
 }
@@ -56,6 +74,7 @@ struct RootView: View {
     @State private var moderationService = ModerationService()
     @State private var socialService = SocialService()
     @State private var economyService = EconomyService()
+    @State private var partnerDiscovery = PartnerDiscoveryService()
     @State private var discoveryFilters = DiscoveryFilters()
     @State private var dailyGemFact: GemFact?
 
@@ -73,6 +92,7 @@ struct RootView: View {
                     .environment(moderationService)
                     .environment(socialService)
                     .environment(economyService)
+                    .environment(partnerDiscovery)
                     .environment(discoveryFilters)
                     .onAppear {
                         locationManager.requestPermission()
@@ -98,6 +118,8 @@ struct RootView: View {
                         gameState.recordActiveDay()   // streak counts foregrounds across days
                         // First foreground of a new day → show the Daily Gem.
                         checkDailyGem()
+                        partnerDiscovery.beginSession()
+                        Task { await partnerDiscovery.refresh(around: locationManager.userLocation) }
                         // Retry any earn-ops queued while offline.
                         Task { await gameState.flushPendingOps() }
                     }

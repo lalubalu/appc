@@ -64,6 +64,19 @@ service cloud.firestore {
     match /admins/{docId} {
       allow read, write: if false;
     }
+    // Append-only through trusted server code. Admin reads go through the
+    // same claim gate as the console; clients, including admins, cannot write.
+    match /staffAudit/{auditId} {
+      allow read: if request.auth != null && request.auth.token.admin == true;
+      allow write: if false;
+    }
+    match /staffJobs/{jobId} {
+      allow read: if request.auth != null && request.auth.token.admin == true;
+      allow write: if false;
+    }
+    match /sourceHealth/{sourceId} {
+      allow read, write: if false;
+    }
     // Ingestion telemetry. Run logs and coverage reports are operational data
     // written by the scheduled jobs; the treasury holds spend + quota counters.
     match /ingestRuns/{docId} {
@@ -605,9 +618,10 @@ service cloud.firestore {
       return !('notificationPrefs' in data) || (
         data.notificationPrefs is map
         && data.notificationPrefs.keys().hasOnly(
-             ['eventSuggestions', 'friendActivity', 'quietStart', 'quietEnd', 'timeZone'])
+             ['eventSuggestions', 'friendActivity', 'rsvpPartnerOffers', 'quietStart', 'quietEnd', 'timeZone'])
         && (!('eventSuggestions' in data.notificationPrefs) || data.notificationPrefs.eventSuggestions is bool)
         && (!('friendActivity' in data.notificationPrefs) || data.notificationPrefs.friendActivity is bool)
+        && (!('rsvpPartnerOffers' in data.notificationPrefs) || data.notificationPrefs.rsvpPartnerOffers is bool)
         && (!('quietStart' in data.notificationPrefs) ||
             (data.notificationPrefs.quietStart is int
              && data.notificationPrefs.quietStart >= 0 && data.notificationPrefs.quietStart <= 23))

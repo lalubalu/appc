@@ -15,6 +15,9 @@
 // Functions (callables), and Storage speak plain HTTP, which works fine.
 
 import http from "node:http";
+import { EMULATORS } from "./local-emulator-targets.mjs";
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { initializeApp as adminInit } from "firebase-admin/app";
 import { getFirestore as adminFirestore } from "firebase-admin/firestore";
 import { getAuth as adminAuth } from "firebase-admin/auth";
@@ -28,18 +31,15 @@ import {
 
 const PROJECT = "connectify-19dd8";
 const REGION = "us-central1";
-const AUTH = `http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1`;
-const FN = `http://127.0.0.1:${process.env.FUNCTIONS_EMULATOR_PORT || "5001"}/${PROJECT}/${REGION}`;
+const AUTH = `${EMULATORS.auth.url}/identitytoolkit.googleapis.com/v1`;
+const FN = `${EMULATORS.functions.url}/${PROJECT}/${REGION}`;
 // Must match PROOF_BUCKET in functions/src/index.ts — the default bucket differs
 // between local and CI environments, so both sides pin it explicitly.
 const BUCKET = process.env.STORAGE_BUCKET || `${PROJECT}.firebasestorage.app`;
-const STORAGE = `http://127.0.0.1:9199/v0/b/${BUCKET}/o`;
+const STORAGE = `${EMULATORS.storage.url}/v0/b/${BUCKET}/o`;
 
-process.env.FIRESTORE_EMULATOR_HOST = "127.0.0.1:8899";
 // Admin Auth + Storage must also point at the emulators (deleteAccount asserts
 // the Auth user and the proof photo are actually gone).
-process.env.FIREBASE_AUTH_EMULATOR_HOST = "127.0.0.1:9099";
-process.env.FIREBASE_STORAGE_EMULATOR_HOST = "127.0.0.1:9199";
 
 // ── admin (gRPC, bypasses rules — for seeding + audit reads) ────────────────
 adminInit({ projectId: PROJECT, storageBucket: BUCKET });
@@ -48,9 +48,9 @@ const db = adminFirestore();
 // ── client SDK (gRPC, rules-checked — for lockdown tests) ───────────────────
 const capp = clientInit({ projectId: PROJECT, apiKey: "fake-api-key" });
 const cauth = getAuth(capp);
-connectAuthEmulator(cauth, "http://127.0.0.1:9099", { disableWarnings: true });
+connectAuthEmulator(cauth, EMULATORS.auth.url, { disableWarnings: true });
 const cdb = clientFirestore(capp);
-connectFirestoreEmulator(cdb, "127.0.0.1", 8899);
+connectFirestoreEmulator(cdb, EMULATORS.firestore.host, EMULATORS.firestore.port);
 
 /**
  * A second rules-checked client context, signed in as a different user.
@@ -60,9 +60,9 @@ connectFirestoreEmulator(cdb, "127.0.0.1", 8899);
 async function clientAs(email, pw, name) {
   const app = clientInit({ projectId: PROJECT, apiKey: "fake-api-key" }, name);
   const auth = getAuth(app);
-  connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
+  connectAuthEmulator(auth, EMULATORS.auth.url, { disableWarnings: true });
   const fdb = clientFirestore(app);
-  connectFirestoreEmulator(fdb, "127.0.0.1", 8899);
+  connectFirestoreEmulator(fdb, EMULATORS.firestore.host, EMULATORS.firestore.port);
   await signInWithEmailAndPassword(auth, email, pw);
   return fdb;
 }
@@ -561,8 +561,16 @@ async function main() {
   const rep1 = await signUp(`e2e-rep1-${Date.now()}@verdure.test`, password);
   const rep2 = await signUp(`e2e-rep2-${Date.now()}@verdure.test`, password);
   const rep3 = await signUp(`e2e-rep3-${Date.now()}@verdure.test`, password);
-  const staff = await signUp(`e2e-staff-${Date.now()}@verdure.test`, password);
-  await db.doc(`admins/${staff.uid}`).set({ role: "moderator", addedAt: new Date() });
+  const staffEmail = `e2e-staff-${Date.now()}@verdure.test`;
+  const staff = await signUp(staffEmail, password);
+  execFileSync(process.execPath, [fileURLToPath(new URL("./staff-admin.mjs", import.meta.url)),
+    "--uid", staff.uid, "--grant", "--reason", "Backend E2E local staff fixture"], { env: process.env });
+  const refreshedStaff = await req(`${AUTH}/accounts:signInWithPassword?key=fake-api-key`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: staffEmail, password, returnSecureToken: true }),
+  });
+  if (!refreshedStaff.json?.idToken) throw new Error("Failed to refresh local staff token");
+  staff.idToken = refreshedStaff.json.idToken;
 
   const postId = `e2e-mod-post-${Date.now()}`;
   await db.doc(`posts/${postId}`).set({
@@ -648,13 +656,13 @@ async function main() {
   }
 
   // Staff gate.
-  r = await call("moderateContent", { queueId: `post_${postId}`, action: "dismiss" }, rep1.idToken);
+  r = await call("moderateContent", { queueId: `post_${postId}`, action: "dismiss", reason: "Backend E2E fixture decision" }, rep1.idToken);
   ok("moderation: a non-staff user cannot moderate", r.error?.status === "PERMISSION_DENIED", JSON.stringify(r));
   r = await call("listModerationQueue", { status: "open" }, staff.idToken);
   ok("moderation: staff can list the open queue",
      Array.isArray(r.result?.items) && r.result.items.some((i) => i.queueId === `post_${postId}`), JSON.stringify(r).slice(0, 200));
 
-  r = await call("moderateContent", { queueId: `post_${postId}`, action: "dismiss" }, staff.idToken);
+  r = await call("moderateContent", { queueId: `post_${postId}`, action: "dismiss", reason: "Backend E2E fixture decision" }, staff.idToken);
   ok("moderation: staff dismiss restores visibility",
      r.result?.status === "dismissed" && (await db.doc(`posts/${postId}`).get()).data()?.hidden === false, JSON.stringify(r));
 
@@ -677,7 +685,7 @@ async function main() {
   // Suspension: a removed *account* can read but not act.
   r = await call("reportContent", { targetType: "user", targetId: author.uid, reason: "harassment" }, rep1.idToken);
   ok("moderation: users can be reported (never auto-hidden)", r.result?.reported === true && r.result?.hidden === false, JSON.stringify(r));
-  r = await call("moderateContent", { queueId: `user_${author.uid}`, action: "remove" }, staff.idToken);
+  r = await call("moderateContent", { queueId: `user_${author.uid}`, action: "remove", reason: "Backend E2E fixture decision" }, staff.idToken);
   const suspended = (await db.doc(`users/${author.uid}`).get()).data();
   ok("moderation: staff can suspend an account", suspended?.suspended === true, JSON.stringify(suspended));
   await uploadProof(`proofs/${author.uid}/p.jpg`, author.idToken);
@@ -921,7 +929,7 @@ async function main() {
   // real events. Everything else about /events stays authenticated.
   const guestApp = clientInit({ projectId: PROJECT, apiKey: "fake-api-key" }, "guest");
   const guestDb = clientFirestore(guestApp);
-  connectFirestoreEmulator(guestDb, "127.0.0.1", 8899);
+  connectFirestoreEmulator(guestDb, EMULATORS.firestore.host, EMULATORS.firestore.port);
   let guestIds = [];
   try {
     guestIds = (await getDocs(query(collection(guestDb, "events"),
@@ -1365,9 +1373,9 @@ async function main() {
   ok("organizer: publishing writes an activity row for followers' feeds", orgAct.size === 1 && orgAct.docs[0].data().kind === "organizer-event");
 
   // Approval is staff-only and mirrors onto the events.
-  r = await call("approveOrganizer", { organizerId, action: "approve" }, orgOwner.idToken);
+  r = await call("approveOrganizer", { organizerId, action: "approve", reason: "Backend E2E fixture decision" }, orgOwner.idToken);
   ok("organizer: a non-staff user cannot approve", r.error?.status === "PERMISSION_DENIED");
-  r = await call("approveOrganizer", { organizerId, action: "approve" }, staff.idToken);
+  r = await call("approveOrganizer", { organizerId, action: "approve", reason: "Backend E2E fixture decision" }, staff.idToken);
   ok("organizer: staff approval flips status and every owned event to broadcast",
      r.result?.status === "approved" && r.result?.eventsUpdated === 1
      && (await db.doc(`events/${orgEventId}`).get()).data()?.broadcast === true
@@ -1393,32 +1401,35 @@ async function main() {
   ok("rules: client cannot erase server-owned ranking feedback", ocode === "permission-denied", `got ${ocode}`);
 
   // Suspension pulls everything back.
-  r = await call("approveOrganizer", { organizerId, action: "suspend" }, staff.idToken);
+  r = await call("approveOrganizer", { organizerId, action: "suspend", reason: "Backend E2E fixture decision" }, staff.idToken);
   ok("organizer: suspension flips every event back to follower-only",
      r.result?.eventsUpdated === 2 && (await db.doc(`events/${approvedEventId}`).get()).data()?.broadcast === false);
   r = await call("createEvent", { title: "Nope", locationName: "X", startMs: Date.now() + 86_400_000 }, orgOwner.idToken);
   ok("organizer: a suspended organizer cannot publish", r.error?.status === "PERMISSION_DENIED");
-  await call("approveOrganizer", { organizerId, action: "reinstate" }, staff.idToken);
+  await call("approveOrganizer", { organizerId, action: "reinstate", reason: "Backend E2E fixture decision" }, staff.idToken);
 
-  // The manual window is capped at 50.
+  // The manual window counts distinct manual approvals, including past approvals.
+  const approvalCounterBefore = (await db.doc("staffCounters/manualOrganizerApprovals").get()).data();
+  await db.doc("staffCounters/manualOrganizerApprovals").set({ used: 50, limit: 50 });
   for (let i = 0; i < 50; i++) await db.doc(`organizers/e2e-approved-${i}`).set({ ownerUid: `seed-${i}`, displayName: `Org ${i}`, category: "other", status: "approved", hidden: false, createdAt: new Date() });
   await db.doc("organizers/e2e-pending-51").set({ ownerUid: "seed-51", displayName: "Fifty-first", category: "other", status: "pending", hidden: false, createdAt: new Date() });
-  r = await call("approveOrganizer", { organizerId: "e2e-pending-51", action: "approve" }, staff.idToken);
+  r = await call("approveOrganizer", { organizerId: "e2e-pending-51", action: "approve", reason: "Backend E2E fixture decision" }, staff.idToken);
   ok("organizer: the 51st approval is refused (manual window is 50)", r.error?.status === "RESOURCE_EXHAUSTED", JSON.stringify(r.error));
   for (let i = 0; i < 50; i++) await db.doc(`organizers/e2e-approved-${i}`).delete();
+  await db.doc("staffCounters/manualOrganizerApprovals").set(approvalCounterBefore);
 
   // Verification exempts nothing: organizer events + profiles are moderatable.
   r = await call("reportContent", { targetType: "event", targetId: orgEventId, reason: "spam" }, nonfan.idToken);
   ok("moderation: an organizer's event can be reported", r.result?.reported === true);
   r = await call("reportContent", { targetType: "organizer", targetId: organizerId, reason: "impersonation" }, nonfan.idToken);
   ok("moderation: an organizer profile can be reported", r.result?.reported === true);
-  r = await call("moderateContent", { queueId: `organizer_${organizerId}`, action: "remove" }, staff.idToken);
+  r = await call("moderateContent", { queueId: `organizer_${organizerId}`, action: "remove", reason: "Backend E2E fixture decision" }, staff.idToken);
   ok("moderation: staff can remove (hide) an organizer profile", (await db.doc(`organizers/${organizerId}`).get()).data()?.hidden === true);
   r = await call("followUser", { targetId: organizerId, kind: "organizer" }, nonfan.idToken);
   ok("moderation: a hidden organizer cannot gain followers", r.error?.status === "NOT_FOUND");
   r = await call("createEvent", { title: "Nope", locationName: "X", startMs: Date.now() + 86_400_000 }, orgOwner.idToken);
   ok("moderation: a hidden organizer cannot publish", r.error?.status === "PERMISSION_DENIED");
-  await call("moderateContent", { queueId: `organizer_${organizerId}`, action: "restore" }, staff.idToken);
+  await call("moderateContent", { queueId: `organizer_${organizerId}`, action: "restore", reason: "Backend E2E fixture decision" }, staff.idToken);
 
   // Deleting the owner leaves no orphaned organizer events.
   r = await call("deleteAccount", {}, orgOwner.idToken);
@@ -1671,7 +1682,8 @@ async function main() {
   ok("treasury: perksRedeemed counted", ((await db.doc(`treasury/${thisMonth}`).get()).data()?.perksRedeemed ?? 0) >= 1);
 
   // earlyAccessUntil: Verdure+ only until the timestamp, everyone after.
-  r = await call("upsertPartnerPerk", { perkId: "early-bird-brunch", title: "Free brunch side", partner: "Placeholder Diner", kind: "free-item",
+  r = await call("upsertPartnerPerk", { perkId: "early-bird-brunch", title: "Free brunch side", partnerId: "placeholder-coffee-20-partner", kind: "free-item",
+    terms: "Local fictional fixture only", expiresAtMs: Date.now() + 30 * 86400000, reason: "Create fictional E2E early-access perk",
     pointCost: 600, codes: ["EB-001", "EB-002", "EB-003"], earlyAccessUntilMs: Date.now() + 86_400_000 }, staff.idToken);
   ok("perks: staff can load a perk with a code pool and an early-access window", r.result?.codesAdded === 3, JSON.stringify(r));
   r = await call("listRewardsCatalog", {}, freeMember.idToken);

@@ -41,8 +41,15 @@ final class NotificationPreferencesTests: XCTestCase {
         let p = NotificationPreferences.parse([:])
         XCTAssertTrue(p.eventSuggestions)
         XCTAssertTrue(p.friendActivity)
+        XCTAssertFalse(p.rsvpPartnerOffers, "Promotional RSVP offers require opt-in")
         XCTAssertEqual(p.quietStart, 21)
         XCTAssertEqual(p.quietEnd, 8)
+    }
+
+    func testRSVPOfferConsentIsReadExactly() {
+        XCTAssertTrue(NotificationPreferences.parse(["rsvpPartnerOffers": true]).rsvpPartnerOffers)
+        XCTAssertFalse(NotificationPreferences.parse(["rsvpPartnerOffers": false]).rsvpPartnerOffers)
+        XCTAssertFalse(NotificationPreferences.parse(["rsvpPartnerOffers": "true"]).rsvpPartnerOffers)
     }
 
     func testWrongTypesDoNotCorruptState() {

@@ -44,6 +44,9 @@ struct MainTabView: View {
     @State private var friendInvite: FriendInviteLink?
     @State private var primerTrigger: NotificationPrimer.Trigger?
     @Environment(GameStateManager.self) private var gameState
+    @Environment(PartnerDiscoveryService.self) private var partners
+    @Environment(LocationManager.self) private var locationManager
+    @Environment(AuthService.self) private var authService
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     /// `sheet(item:)` needs an Identifiable; a bare String isn't one.
@@ -155,6 +158,8 @@ struct MainTabView: View {
 
     private var discoverContent: some View {
         VStack(spacing: 0) {
+            // Dedicated location card, outside both organic event result lists.
+            if let offer = partners.nearYou { NearYouPartnerCard(offer: offer) }
             HStack(spacing: 4) {
                 ForEach(DiscoverMode.allCases, id: \.self) { mode in
                     Button {
@@ -197,6 +202,9 @@ struct MainTabView: View {
                 }
             }
             .id(discoverMode)
+        }
+        .task(id: "\(authService.currentUser?.uid ?? "guest"):\(locationManager.userLocation?.coordinate.latitude ?? 0):\(locationManager.userLocation?.coordinate.longitude ?? 0)") {
+            await partners.refresh(around: locationManager.userLocation)
         }
     }
 }

@@ -23,6 +23,9 @@ ok("quiet hours default to 21:00-08:00 (opt-out, not opt-in)",
    DEFAULT_PREFS.quietStart === 21 && DEFAULT_PREFS.quietEnd === 8);
 ok("the weekly cap is 2", MAX_PUSH_PER_WEEK === 2);
 ok("the qualifying floor is 5", MIN_QUALIFYING_EVENTS === 5);
+ok("RSVP promotional offers default off", DEFAULT_PREFS.rsvpPartnerOffers === false);
+ok("RSVP opt-in requires boolean true", readPrefs({ notificationPrefs: { rsvpPartnerOffers: true } }).rsvpPartnerOffers &&
+  !readPrefs({ notificationPrefs: { rsvpPartnerOffers: "true" } }).rsvpPartnerOffers);
 
 console.log("\n── prefs parsing is defensive ──");
 ok("missing prefs fall back to defaults", (() => {
@@ -49,6 +52,8 @@ ok("a non-wrapping window still works (01:00-06:00)", (() => {
   })());
 ok("start === end means no quiet window, not an always-quiet one",
    !inQuietHours(at(5), prefs({ quietStart: 0, quietEnd: 0 })));
+ok("midnight is hour zero, including a 00:00-01:00 quiet window",
+   localHour(at(7), LA) === 0 && inQuietHours(at(7), prefs({ quietStart: 0, quietEnd: 1 })));
 ok("quiet hours are evaluated in the USER's timezone, not the server's", (() => {
     const ny = { ...prefs(), timeZone: "America/New_York" };
     const la = prefs();
