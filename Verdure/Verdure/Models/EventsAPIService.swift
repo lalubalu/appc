@@ -92,6 +92,7 @@ final class EventsAPIService {
         if QAData.offline { return }   // QA: cached/sample data only
         updateCoverage(for: center)
         await fetchPrograms(around: center)
+        await fetchVolunteerSupply()
         // Remember the follow set across plain refreshes (which pass none).
         if !followedOrganizerIDs.isEmpty { self.followedOrganizerIDs = followedOrganizerIDs }
         if let cached = cachedCenter, let last = lastFetchDate,
@@ -112,8 +113,8 @@ final class EventsAPIService {
                 var merged = fetched
                 let seen = Set(fetched.map(\.id))
                 merged.append(contentsOf: followerOnly.filter { !seen.contains($0.id) })
-                merged.removeAll { $0.isProgram }
-                merged.append(contentsOf: self.storedEvents.filter { $0.isProgram && self.isEligible($0) })
+                merged.removeAll { $0.isProgram || $0.category == .volunteer }
+                merged.append(contentsOf: self.storedEvents.filter { ($0.isProgram && self.isEligible($0)) || $0.category == .volunteer })
                 // A successful read is the truth — including an honest empty list.
                 self.events = merged.sorted { $0.date < $1.date }
                 self.cachedCenter = center
@@ -200,7 +201,7 @@ final class EventsAPIService {
         }
         let area = LaunchArea.nearest(to: center, in: launchAreas)?.id ?? "san-jose-ca"
         if reset || everythingAreaId != area {
-            everythingEvents = events.filter { $0.isProgram }
+            everythingEvents = events.filter { $0.isProgram || $0.category == .volunteer }
             everythingCursor = nil
             everythingHasMore = true
             everythingAreaId = area
@@ -398,7 +399,45 @@ final class EventsAPIService {
 
     // MARK: - Firestore
 
-    /// The app's ONLY event query. Every clause is required by the read rules
+    /// Opportunity thresholds use complete current supply, not the first 80
+    /// chronological discovery cards. Public rule constraints also work signed out.
+    private func fetchVolunteerSupply() async {
+        let now = Timestamp(date: Date())
+        let query = db.collection("events")
+            .whereField("hidden", isEqualTo: false)
+            .whereField("active", isEqualTo: true)
+            .whereField("broadcast", isEqualTo: true)
+            .whereField("category", isEqualTo: "Volunteer")
+            .whereField("date", isGreaterThan: now)
+            .order(by: "date")
+        do {
+            var docs: [QueryDocumentSnapshot] = []
+            var cursor: DocumentSnapshot?
+            while true {
+                let page = try await (cursor.map { query.start(afterDocument: $0) } ?? query)
+                    .limit(to: 250).getDocuments(source: .server)
+                docs.append(contentsOf: page.documents)
+                guard docs.count <= 2000 else {
+                    throw NSError(domain: "VolunteerSupply", code: 1,
+                                  userInfo: [NSLocalizedDescriptionKey: "Volunteer supply exceeds this view's bound."])
+                }
+                if page.documents.count < 250 { break }
+                cursor = page.documents.last
+            }
+            let volunteers = docs.compactMap { Self.mapFirestoreDocument($0) }
+            storedEvents.removeAll { $0.category == .volunteer }
+            storedEvents.append(contentsOf: volunteers)
+            storedEverythingEvents.removeAll { $0.category == .volunteer }
+            storedEverythingEvents.append(contentsOf: volunteers)
+        } catch {
+            // Never retain a stale full count after a failed current-supply read.
+            storedEvents.removeAll { $0.category == .volunteer }
+            storedEverythingEvents.removeAll { $0.category == .volunteer }
+            print("[EventsAPI] Volunteer supply unavailable: \(error.localizedDescription)")
+        }
+    }
+
+    /// The main discovery query. Every clause is required by the read rules
     /// ("rules are not filters"): hidden == false, and either broadcast == true
     /// (public listings — readable signed out) or the caller follows the organizer.
     /// Returns nil when the read fails so callers keep their cache.

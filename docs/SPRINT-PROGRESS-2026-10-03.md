@@ -28,7 +28,7 @@ synonym map remain untouched; `CLAUDE.md` deploy status remains untouched.
 | C3 | Free source-backed trail attributes/overlays/location; official closure link/notice; no navigation | Online overview implemented locally: source attributes and lossless MapKit overlays, user annotation/recenter control, parent/trail status, notice and official closure link. Real County source flow passed in Simulator and screenshot inspected. Physical/outdoor GPS and offline-pack behavior remain pending with G/C4. No cut. |
 | C4 | Plus server entitlement; park/set/area packs; events/thumbnails/places/saves/plans/view-only perks; size preview/hard cap; storage/delete/age; Wi-Fi refresh/7-day expiry; offline overlays/location; no offline writes/check-in/base imagery caching | Implemented locally: server-gated private chunks, exact size preview and 50 MB cap, full snapshots and compressed thumbnails, native account-isolated storage/delete/expiry, Wi-Fi replacement, stored guides/trails/events, online-action refusal and legacy attendance-queue removal. 24 offline units, 32 callable/rules/content/cleanup checks and actual native SDK/UI flows passed. Physical airplane-mode/moving GPS gates remain required with G. See OFFLINE-PACKS-2026-10-04.md. |
 | C5 | Working-feature paywall/listing/website copy: offline park and place packs | Included in the same working feature change, with seven-day/no-base-imagery explanation and matching privacy/App Privacy notes. Fresh website build/lint and 18 production-page/copy-parity checks passed. No publication. |
-| D2 | Existing supply audit; nine volunteer source fingerprints/terms; deduplicated in-radius count >=30; document exclusions | Pending |
+| D2 | Existing supply audit; nine volunteer source fingerprints/terms; deduplicated in-radius count >=30; document exclusions | Minimum local supply and full native threshold verified: 137 classified current public listings in 25 miles, conservative 80 direct-service invitations; 53 classified within 30 days. All nine hosts fingerprinted and dispositions recorded. Native full-supply/29-vs-30 SDK checks passed. New-source permission/venue evaluation remains explicitly pending (including Save The Bay); no silent cut. See VOLUNTEER-SUPPLY-2026-09-27.md. |
 | D3 | Program taxonomy/client; staff curation with required age/cost/location/deadline/official link; >=10 radius threshold; age eligibility and deadline expiry; link-out only | Implemented locally: 34 policy units, 42 actual callable/rules/security checks, 8 actual staff browser checks, canonical age/deadline filtering without ranking tuning, full native supply/account/deep-link checks and a passing Program UI/accessibility journey. Saved eligible Programs work in private offline packs and open details recheck age/expiry. See PROGRAM-CURATION-2026-10-04.md; physical/final gates remain pending. |
 | E1 | Neutral signup age gate; under-13 exits without retaining personal data; preserve 13–17 protections | Implemented locally: neutral blank birth year before account fields, under-13 ends/clears volatile draft, signup age guard precedes credential processing, existing registerAgeBand unchanged. Two actual signup UI flows plus age boundary/persistence units passed. |
 | E2 | Local terms/support pages and restored app link; Supabase support → console; accurate privacy | Implemented locally: build plus 15 production-page/parity checks, 43 submission checks, Swift Terms URL resolves HTTP 200 against explicit local website. Public publication remains outside this sprint. |
@@ -181,3 +181,26 @@ been claimed.
   complete public corpus; a configured-public-source refresh and deduplicated
   volunteer audit are now in progress. No silent cut, production write or
   deployment occurred. See PROGRAM-CURATION-2026-10-04.md.
+
+## October 4 volunteer-supply checkpoint
+
+- The configured public source refresh completed all six adapters, using the
+  frozen classifier and actual deduplicating store. Source outcomes and actual
+  persisted Volunteer IDs are committed as re-runnable evidence. The earlier
+  test-only working corpus is no longer mistaken for the real public supply.
+- Current 25-mile supply: 137 classified public listings, 53 within 30 days.
+  A conservative invitation-evidence subset verifies 80 direct-service listings,
+  including 36 within 30 days. Four apparent classification false positives and
+  53 service-group/orientation records are excluded from that lower bound.
+  Description digests prevent changed facts from inheriting a prior review.
+- Native discovery now pages the whole public Volunteer supply independently
+  of the first 80 chronological cards. A fresh four-test connected run passed
+  full public IDs, 29/30 threshold edges and Program account/eligibility regressions.
+  The new query's index definition is local; H1 and production deployment are
+  not inferred from the emulator pass. Fictional Program fixtures were cleaned.
+- All nine requested organization fingerprints and permission dispositions are
+  recorded. Save The Bay's real feed requires reuse/precise-venue follow-up;
+  several other permissions or supported feeds remain unverified. These source
+  tasks remain pending, rather than being quietly cut after meeting the minimum.
+- F1/F2, A6, remaining partner caches, H1/H2, physical G and final acceptance
+  still remain. No ranking/classifier drift, deployment or optional cut occurred.

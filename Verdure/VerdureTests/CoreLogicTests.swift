@@ -2,12 +2,48 @@ import XCTest
 import CryptoKit
 import CoreLocation
 @preconcurrency import FirebaseAuth
+@preconcurrency import FirebaseFirestore
 @testable import Verdure
 
 // MARK: - Core-logic QA: Daily Gem rotation, sanitizer, personalization mapping
 
 @MainActor
 final class CoreLogicTests: XCTestCase {
+
+    func testVolunteerSupplyReadsCompletePublicCorpusBeyondFirstDiscoveryPage() async throws {
+        try? Auth.auth().signOut()
+        let query = Firestore.firestore().collection("events")
+            .whereField("hidden", isEqualTo: false).whereField("active", isEqualTo: true)
+            .whereField("broadcast", isEqualTo: true).whereField("category", isEqualTo: "Volunteer")
+            .whereField("date", isGreaterThan: Timestamp(date: Date())).order(by: "date")
+        var expected: Set<String> = [], cursor: DocumentSnapshot?
+        while true {
+            let page = try await (cursor.map { query.start(afterDocument: $0) } ?? query).limit(to: 500).getDocuments(source: .server)
+            expected.formUnion(page.documents.map(\.documentID))
+            if page.documents.count < 500 { break }
+            cursor = page.documents.last
+        }
+        XCTAssertGreaterThan(expected.count, 80, "This connected test requires the refreshed public corpus, not synthetic supply")
+        let service = EventsAPIService()
+        await service.refresh(around: CLLocationCoordinate2D(latitude: 37.3382, longitude: -121.8863))
+        XCTAssertEqual(Set(service.events.filter { $0.category == .volunteer }.map(\.id)), expected)
+        XCTAssertEqual(Set(service.everythingEvents.filter { $0.category == .volunteer }.map(\.id)), expected)
+        XCTAssertTrue(DiscoveryFilters.opportunityCategories(service.events, origin: CLLocation(latitude: 37.3382, longitude: -121.8863), radiusMiles: 25).contains(.volunteer))
+    }
+
+    func testVolunteerChipRequiresThirtyUniqueCurrentListingsInRadius() {
+        let now = Date(), origin = CLLocation(latitude: 37.3382, longitude: -121.8863)
+        func volunteer(_ id: String, start: Date = Date().addingTimeInterval(86400), latitude: Double = 37.3382) -> Event {
+            Event(id: id, title: "Fixture service", organizer: "Fixture", date: start, time: "Morning", locationName: "Fixture",
+                  attendeeCount: 0, maxAttendees: nil, category: .volunteer, imagePlaceholder: "leaf", pointValue: 200,
+                  latitude: latitude, longitude: -121.8863)
+        }
+        let twentyNine = (0..<29).map { volunteer("volunteer-\($0)") }
+        XCTAssertFalse(DiscoveryFilters.opportunityCategories(twentyNine + [twentyNine[0]], origin: origin, radiusMiles: 25, now: now).contains(.volunteer))
+        XCTAssertFalse(DiscoveryFilters.opportunityCategories(twentyNine + [volunteer("expired", start: now)], origin: origin, radiusMiles: 25, now: now).contains(.volunteer))
+        XCTAssertFalse(DiscoveryFilters.opportunityCategories(twentyNine + [volunteer("far", latitude: 0)], origin: origin, radiusMiles: 25, now: now).contains(.volunteer))
+        XCTAssertTrue(DiscoveryFilters.opportunityCategories(twentyNine + [volunteer("thirtieth")], origin: origin, radiusMiles: 25, now: now).contains(.volunteer))
+    }
 
     func testSavedProgramRechecksDeadlineAndAgeAsTimeAdvancesOffline() throws {
         let deadline = try XCTUnwrap(ISO8601DateFormatter().date(from: "2027-01-10T00:00:00Z"))
