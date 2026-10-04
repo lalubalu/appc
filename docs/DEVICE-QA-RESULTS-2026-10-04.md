@@ -11,7 +11,7 @@ claimed fixed without such a run.
 
 Device A model: unavailable iPhone 16 Pro Max; iOS/build: unobserved.
 Device B model/iOS/build: no device available.
-Test build commit: not installed. Local Simulator evidence is separate in
+Test build commit: not installed. An unsigned ARM64 iPhone-target build of `16c1bad` passed with matching binary/dSYM UUIDs; it was not signed, uploaded or installed. Local Simulator evidence is separate in
 SPRINT-PROGRESS-2026-10-03.md and docs/evidence.
 
 ## Setup and scope gates

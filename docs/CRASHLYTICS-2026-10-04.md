@@ -23,8 +23,7 @@ evidence only, not proof of readable device reports.
 ## Physical QA procedure still required
 
 1. Connect/unlock a physical iPhone, select the free Personal Team and record
-   its model, iOS version and build SHA. Verify Firebase's configured app/bundle
-   identity; the legacy GoogleService file mismatch is not silently corrected.
+   its model, iOS version and build SHA. The current built app and bundled Firebase configuration both identify `com.vaiybhav.verdure` (verified locally below). Verify the dashboard app association and readable delivery during the physical run; local identifier equality does not establish that external result.
 2. Build with `VERDURE_UPLOAD_CRASH_SYMBOLS=YES` to exercise the configured
    upload phase. Record success/failure and the binary/dSYM UUID match. This is
    an explicit diagnostic upload, not a Functions/rules/index deployment.
@@ -46,3 +45,7 @@ interaction linkage. Exact native/web policy parity passed 18 local page tests.
 The integration follows Firebase's official
 [iOS setup](https://firebase.google.com/docs/crashlytics/ios/get-started) and
 [symbol configuration](https://firebase.google.com/docs/crashlytics/ios/get-deobfuscated-reports).
+
+## Fresh iPhone-target build
+
+The committed source at `16c1bad` also builds for `generic/platform=iOS`, Debug/ARM64, with signing and symbol upload disabled. The binary and device-target dSYM share UUID `D8A92333-2F7F-3789-B264-F6AADA79BFF5`. The built app and bundled Firebase configuration both use `com.vaiybhav.verdure`. Exact command and read-back are in `docs/evidence/crashlytics-device-target-build-2026-10-04.json`. This is stronger than Simulator-only compilation, but is not a Personal Team signing/install, symbol upload, physical test crash or dashboard receipt. H2 remains incomplete.
