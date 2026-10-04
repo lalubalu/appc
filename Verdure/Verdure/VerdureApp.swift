@@ -46,8 +46,10 @@ struct VerdureApp: App {
             Storage.storage().useEmulator(withHost: host, port: 9199)
             print("[Local QA] Auth/Firestore/Functions/Storage → \(host); unit-test host: \(unitTestHost)")
         }
+        CrashReporting.configure(unitTestHost: unitTestHost, localEmulator: qaEmulator)
         if !qaEmulator { PushService.shared.start() }
         #else
+        CrashReporting.configure(unitTestHost: false, localEmulator: false)
         PushService.shared.start()
         #endif
     }
@@ -104,7 +106,7 @@ struct RootView: View {
                     .environment(parkGuides)
                     .environment(offlinePacks)
                     .onAppear {
-                        if authService.isAuthStateResolved { offlinePacks.connect(authService.currentUser?.uid); economyService.connect(authService.currentUser?.uid) }
+                        if authService.isAuthStateResolved { offlinePacks.connect(authService.currentUser?.uid); economyService.connect(authService.currentUser?.uid); LivePartnerAlerts.shared.connect(authService.currentUser?.uid) }
                         locationManager.requestPermission()
                         connectServicesIfNeeded()
                         gameState.recordActiveDay()   // real daily streak
@@ -124,16 +126,17 @@ struct RootView: View {
                         }
                     }
                     .onChange(of: authService.currentUser?.uid) { _, uid in
-                        if authService.isAuthStateResolved { offlinePacks.connect(uid); economyService.connect(uid); refreshOfflinePacks() }
+                        if authService.isAuthStateResolved { offlinePacks.connect(uid); economyService.connect(uid); LivePartnerAlerts.shared.connect(uid); refreshOfflinePacks() }
                     }
                     .onChange(of: authService.isAuthStateResolved) { _, resolved in
-                        if resolved { offlinePacks.connect(authService.currentUser?.uid); economyService.connect(authService.currentUser?.uid); refreshOfflinePacks() }
+                        if resolved { offlinePacks.connect(authService.currentUser?.uid); economyService.connect(authService.currentUser?.uid); LivePartnerAlerts.shared.connect(authService.currentUser?.uid); refreshOfflinePacks() }
                     }
                     .onChange(of: network.isWiFi) { _, wifi in
                         if wifi && scenePhase == .active { refreshOfflinePacks() }
                     }
                     .onChange(of: scenePhase) { _, phase in
                         guard phase == .active else { return }
+                        LivePartnerAlerts.shared.connect(authService.currentUser?.uid)
                         gameState.recordActiveDay()   // streak counts foregrounds across days
                         // First foreground of a new day → show the Daily Gem.
                         checkDailyGem()

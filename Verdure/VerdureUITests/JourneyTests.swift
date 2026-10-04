@@ -360,6 +360,7 @@ final class JourneyTests: XCTestCase {
         let app = QA.launch(tab: "explore")
         let tile = QA.waitFor(app.buttons.matching(NSPredicate(
             format: "label BEGINSWITH 'Today\\'s Gem'")).firstMatch, "gem tile")
+        for _ in 0..<8 where tile.frame.midY > app.frame.height - 160 { app.swipeUp() }
         tile.tap()
         let gem = QA.waitFor(app.staticTexts["Daily Gem"], "gem splash title")
         _ = gem
@@ -377,6 +378,7 @@ final class JourneyTests: XCTestCase {
             "-hasCompletedOnboarding", "YES",
             "-dailyGem.splashDay", "2000-01-01",   // long ago → splash due
             "-QATab", "events",
+            "-QAOfflineData", "YES", // local isolated fixture, never the live project
         ]
         app.launch()
         QA.waitFor(app.staticTexts["Daily Gem"], "auto splash on a new day")
@@ -395,7 +397,7 @@ final class JourneyTests: XCTestCase {
 
     func testOnboardingWalkthroughToAuth() {
         let app = XCUIApplication()
-        app.launchArguments += ["-hasCompletedOnboarding", "NO", "-QADisableMotion", "YES"]
+        app.launchArguments += ["-hasCompletedOnboarding", "NO", "-QADisableMotion", "YES", "-QAOfflineData", "YES"]
         app.launch()
 
         QA.waitFor(app.staticTexts["Step Outside.\nConnect Within."], "page 1")

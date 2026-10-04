@@ -3,6 +3,76 @@ import XCTest
 @MainActor final class PartnerSurfaceTests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
 
+    private func post(_ url: String, _ body: [String: Any], token: String? = nil) async throws -> [String: Any] {
+        var request = URLRequest(url: URL(string: url)!)
+        request.httpMethod = "POST"; request.timeoutInterval = 20
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (bytes, response) = try await URLSession.shared.data(for: request)
+        let result = try XCTUnwrap(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200, "Local fixture request failed: \(result)")
+        return result
+    }
+
+    private func signInToFixture() -> XCUIApplication {
+        let app = QA.launch(tab: "profile", extraArguments: ["-QAOfflineData", "NO", "-QAUseFirestoreEmulator", "YES", "-QAResetAuth", "YES"])
+        let signIn = app.buttons["profileSignIn"]
+        for _ in 0..<20 where !signIn.isHittable { app.swipeUp() }
+        QA.waitFor(signIn, "guest sign-in").tap()
+        let email = QA.waitFor(app.textFields["Email address"], "email")
+        email.tap(); email.typeText("qa-rewards-native-staff@example.test")
+        let password = app.secureTextFields["Password"]
+        password.tap(); password.typeText("local-rewards-native-only")
+        let submit = app.buttons["authSubmit"]
+        for _ in 0..<4 where !submit.isHittable { app.swipeUp() }
+        QA.waitFor(submit, "sign-in submit").tap()
+        QA.waitFor(app.buttons["openOfflinePacks"], "signed-in profile", timeout: 30)
+        return app
+    }
+
+    func testLiveStaffWithdrawalDismissesOpenMapOffer() async throws {
+        // Run with a CLI-set simulated location at 33.2,-114.1 and location
+        // authorization. This proves native sheet behavior, not outdoor GPS.
+        let signedIn = try await post("http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=local",
+            ["email": "qa-rewards-native-staff@example.test", "password": "local-rewards-native-only", "returnSecureToken": true])
+        let token = try XCTUnwrap(signedIn["idToken"] as? String)
+        func call(_ name: String, _ data: [String: Any]) async throws {
+            let response = try await post("http://127.0.0.1:5002/connectify-19dd8/us-central1/\(name)", ["data": data], token: token)
+            XCTAssertNotNil(response["result"], "Local fixture callable failed: \(response)")
+        }
+        let partnerID = "qa-rewards-native-partner", perkID = "qa-rewards-native-map-ui"
+        try await call("savePartner", ["partnerId": partnerID, "name": "Fictional Native Map Business", "category": "retail",
+            "address": "42 Fictional Native Rewards Road", "contactName": "Fictional owner", "contactEmail": "fictional-owner@example.test",
+            "active": true, "agreement": ["agreedBy": "Fictional owner", "agreedAtMs": Date().addingTimeInterval(-10).timeIntervalSince1970 * 1000,
+                                         "reference": "Local fictional QA agreement; no real business"], "reason": "Local map UI fixture"])
+        try await call("upsertPartnerPerk", ["partnerId": partnerID, "perkId": perkID, "title": "Fictional Open Map Offer",
+            "description": "Local QA only", "terms": "Fictional QA only", "pointCost": 500,
+            "expiresAtMs": Date().addingTimeInterval(300).timeIntervalSince1970 * 1000,
+            "codes": ["LOCAL-MAP-UI-\(UUID().uuidString)"], "reason": "Local map UI fixture"])
+        var app = signInToFixture()
+        app.terminate()
+        app = QA.launch(tab: "map", extraArguments: ["-QAOfflineData", "NO", "-QAUseFirestoreEmulator", "YES"])
+        let pin = app.buttons["partner-pin:\(perkID)"]
+        QA.waitFor(pin, "real callable-backed partner pin", timeout: 40)
+        XCTAssertTrue(app.frame.contains(pin.frame), "The actual map annotation must be on screen.")
+        // MapKit annotations can reject XCTest's AX scroll-to-visible action
+        // despite being visible. Tap the current annotation's measured centre.
+        pin.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        let detail = app.scrollViews["partnerOfferDetail"]
+        QA.waitFor(detail, "open partner detail")
+        XCTAssertTrue(app.staticTexts["Fictional Open Map Offer"].exists)
+        let before = XCTAttachment(screenshot: app.screenshot())
+        before.name = "Live partner detail before withdrawal"; before.lifetime = .keepAlways; add(before)
+        try await call("deactivatePartnerOffer", ["kind": "partner", "targetId": partnerID, "reason": "Withdraw fictional open map business"])
+        let closed = NSPredicate { _, _ in !detail.exists && !pin.exists }
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: closed, object: nil)], timeout: 15), .completed,
+                       "The open sheet and pin must disappear without dismissal, movement or manual refresh.")
+        let after = XCTAttachment(screenshot: app.screenshot())
+        after.name = "Live map after partner withdrawal"; after.lifetime = .keepAlways; add(after)
+        app.terminate()
+    }
+
     func testSeparateMapLayerControlCanBeToggled() throws {
         let app = QA.launch(tab: "map")
         let toggle = QA.waitFor(app.descendants(matching: .any).matching(identifier: "partnerMapLayer").firstMatch,
@@ -26,17 +96,6 @@ import XCTest
     func testActualStaffWithdrawalClosesPendingRewardsConfirmation() async throws {
         // Only the local Auth/Functions endpoints are used. The grant itself
         // comes from rewards-native-fixture.mjs using staff-admin.mjs.
-        func post(_ url: String, _ body: [String: Any], token: String? = nil) async throws -> [String: Any] {
-            var request = URLRequest(url: URL(string: url)!)
-            request.httpMethod = "POST"; request.timeoutInterval = 20
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            if let token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
-            request.httpBody = try JSONSerialization.data(withJSONObject: body)
-            let (bytes, response) = try await URLSession.shared.data(for: request)
-            let result = try XCTUnwrap(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
-            XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200, "Local fixture request failed: \(result)")
-            return result
-        }
         let signedIn = try await post("http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=local",
             ["email": "qa-rewards-native-staff@example.test", "password": "local-rewards-native-only", "returnSecureToken": true])
         let token = try XCTUnwrap(signedIn["idToken"] as? String)
@@ -55,19 +114,8 @@ import XCTest
         try await call("upsertPartnerPerk", ["partnerId": partnerID, "perkId": perkID, "title": "Fictional UI Withdrawal Offer",
             "description": "Local QA only", "terms": "Fictional QA only", "pointCost": 500,
             "expiresAtMs": Date().addingTimeInterval(300).timeIntervalSince1970 * 1000,
-            "codes": ["LOCAL-UI-WITHDRAWAL"], "reason": "Local UI fixture"])
-        var app = QA.launch(tab: "profile", extraArguments: ["-QAOfflineData", "NO", "-QAUseFirestoreEmulator", "YES", "-QAResetAuth", "YES"])
-        let signIn = app.buttons["profileSignIn"]
-        for _ in 0..<20 where !signIn.isHittable { app.swipeUp() }
-        QA.waitFor(signIn, "guest sign-in").tap()
-        let email = QA.waitFor(app.textFields["Email address"], "email")
-        email.tap(); email.typeText("qa-rewards-native-staff@example.test")
-        let password = app.secureTextFields["Password"]
-        password.tap(); password.typeText("local-rewards-native-only")
-        let submit = app.buttons["authSubmit"]
-        for _ in 0..<4 where !submit.isHittable { app.swipeUp() }
-        QA.waitFor(submit, "sign-in submit").tap()
-        QA.waitFor(app.buttons["openOfflinePacks"], "signed-in profile", timeout: 30)
+            "codes": ["LOCAL-UI-\(UUID().uuidString)"], "reason": "Local UI fixture"])
+        var app = signInToFixture()
         app.terminate()
         app = QA.launch(tab: "rewards", extraArguments: ["-QAOfflineData", "NO", "-QAUseFirestoreEmulator", "YES"])
         let redeem = app.buttons["redeem-perk:\(perkID)"]

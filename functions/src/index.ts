@@ -516,7 +516,11 @@ export { staffSession } from "./staff-session.js";
 export { staffOperations } from "./staff-operations.js";
 export { placeDataWeekly } from "./parks/index.js";
 export { nearbyParkGuides, parksAtCoordinate, parkGuide } from "./parks/api.js";
+export { setPlaceStoryOwnership, listStaffStoryPlaces, getPlaceStory, savePlaceStory, myStoryPlaces,
+  updateOrganizerStoryStatus, updateStoryAuthorStatus, recordStoryEngagement } from "./place-stories.js";
 
 export { offlinePack, expireOfflinePackStages } from "./offline/packs.js";
 
 export { saveProgram, deactivateProgram, listStaffPrograms, programListings, expireProgramListings } from "./programs.js";
+
+export { getLivePartnerConsent, setLivePartnerConsent, livePartnerRegions, livePartnerEntry } from "./live-partner-alerts.js";

@@ -165,6 +165,12 @@ final class DiscoveryFilters {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        #if DEBUG
+        if defaults.bool(forKey: "QAResetDiscoveryFilters") {
+            state = DiscoveryFilterState()
+            return
+        }
+        #endif
         if let data = defaults.data(forKey: Self.storageKey),
            let saved = try? JSONDecoder().decode(DiscoveryFilterState.self, from: data) {
             state = saved

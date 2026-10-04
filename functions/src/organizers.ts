@@ -33,6 +33,7 @@ import { CATEGORY_ICON, CATEGORY_POINTS, type EventCategory } from "./ingest/typ
 import { titleKey, venueKey, startBucket, cleanUrl } from "./ingest/normalize.js";
 import { appendStaffAudit, auditStaffRead, staffReason } from "./staff-audit.js";
 import { staffPage } from "./staff-page.js";
+import { stageOrganizerStoryGate } from "./place-stories.js";
 
 /** The manual-review window. Approval beyond this needs a deliberate policy change. */
 export const MAX_MANUALLY_APPROVED = 50;
@@ -132,6 +133,7 @@ export const approveOrganizer = onCall(async (req) => {
     const change = { status, reviewedAt: now, reviewedBy: staff, reviewReason: reason, updatedAt: now,
       ...(status === "approved" ? { approvedAt: before.approvedAt ?? now, manualApprovalCounted: true } : {}) };
     tx.set(ref, change, { merge: true });
+    stageOrganizerStoryGate(tx, organizerId, { ...before, ...change });
     tx.set(approvalCounter, { used: nextUsed, limit: MAX_MANUALLY_APPROVED, updatedAt: now });
     appendStaffAudit(tx, staff, `organizer:${action}`, ref.path,
       { organizer: before, approvalsUsed: used }, { organizer: { ...before, ...change }, approvalsUsed: nextUsed }, reason);

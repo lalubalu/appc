@@ -16,7 +16,7 @@ let user;
 try { user = await getAuth().getUser(uid); }
 catch (error) { if (error.code !== "auth/user-not-found") throw error; }
 if (user) assert.equal(user.email, email, "Refuse to overwrite an unrelated account");
-for (const id of ["qa-rewards-native-stocked", "qa-rewards-native-soldout", "qa-rewards-native-window", "qa-rewards-native-ui"]) {
+for (const id of ["qa-rewards-native-stocked", "qa-rewards-native-soldout", "qa-rewards-native-window", "qa-rewards-native-ui", "qa-rewards-native-map-ui"]) {
   const perk = await db.doc(`partnerPerks/${id}`).get();
   if (perk.exists) assert.equal(perk.data().partnerId, partnerId, "Refuse to remove an unrelated offer");
   await db.recursiveDelete(perk.ref);

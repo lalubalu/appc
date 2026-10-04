@@ -23,7 +23,8 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { FieldValue } from "firebase-admin/firestore";
 import { getAuth } from "firebase-admin/auth";
 import { getStorage } from "firebase-admin/storage";
-import { db, requireUid, enforceRateLimit, deleteQueryBatched } from "./common.js";
+import { db, requireUid, enforceRateLimit, deleteQueryBatched, docIdFrom } from "./common.js";
+import { stageStoryStatus } from "./place-stories.js";
 
 const PROOF_BUCKET = process.env.STORAGE_BUCKET || "connectify-19dd8.firebasestorage.app";
 
@@ -88,6 +89,30 @@ const cleanOrganizers: Cleaner = async (uid, counts) => {
   bump(counts, "organizers", orgs.size);
 };
 
+/** Run after organizer deletion: a concurrent writer can no longer publish.
+ * Transfers are rechecked so deleting a former owner cannot revoke a successor. */
+const cleanPlaceStories: Cleaner = async (uid, counts) => {
+  const stories = await db.collection("placeStories").where("ownerUid", "==", uid).get();
+  for (const story of stories.docs) await db.runTransaction(async (tx) => {
+    const current = await tx.get(story.ref);
+    if (!current.exists || current.data()?.ownerUid !== uid) return;
+    const queueRef = db.doc(`moderationQueue/${docIdFrom("place_story", story.id)}`);
+    const queue = await tx.get(queueRef);
+    tx.delete(story.ref);
+    if (queue.exists) tx.update(queueRef, { authorUid: "deleted-account", snapshot: "[deleted by author]",
+      originalContent: FieldValue.delete(), status: "dismissed", resolution: "Author deleted their account" });
+  });
+  bump(counts, "placeStories", stories.size);
+  const assignments = await db.collection("placeStoryOwnership").where("ownerUid", "==", uid).get();
+  for (const assignment of assignments.docs) await db.runTransaction(async (tx) => {
+    const current = await tx.get(assignment.ref);
+    if (!current.exists || current.data()?.ownerUid !== uid) return;
+    tx.delete(assignment.ref); stageStoryStatus(tx, assignment.id, undefined);
+  });
+  bump(counts, "placeStoryOwnership", assignments.size);
+  const gate = db.batch(); gate.set(db.doc(`storyAuthorStatus/${uid}`), { allowed: false }); await gate.commit();
+};
+
 /** RSVPs the user made on OTHER people's events (events/{id}/attendees/{uid}). */
 const cleanAttendeeRecords: Cleaner = async (uid, counts) => {
   const rows = await db.collectionGroup("attendees").where("uid", "==", uid).get();
@@ -140,6 +165,7 @@ const cleanServerRecords: Cleaner = async (uid, counts) => {
     await deleteQueryBatched(db.collection("attendance").where("uid", "==", uid)));
   bump(counts, "rateLimits",
     await deleteQueryBatched(db.collection("rateLimits").where("uid", "==", uid)));
+  bump(counts, "storyEngagementKeys", await deleteQueryBatched(db.collection("storyEngagementKeys").where("uid", "==", uid)));
   bump(counts, "analytics",
     await deleteQueryBatched(db.collectionGroup("events").where("uid", "==", uid)));
   bump(counts, "plannerRuns",
@@ -218,7 +244,7 @@ const cleanUserDocument: Cleaner = async (uid, counts) => {
 };
 
 const CLEANERS: Cleaner[] = [
-  cleanPosts, cleanEvents, cleanOrganizers, cleanAttendeeRecords, cleanSocialGraph,
+  cleanPosts, cleanEvents, cleanOrganizers, cleanPlaceStories, cleanAttendeeRecords, cleanSocialGraph,
   cleanServerRecords, cleanFulfilments, cleanModeration, cleanStorage, cleanUserDocument,
 ];
 

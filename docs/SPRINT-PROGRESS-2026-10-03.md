@@ -16,31 +16,31 @@ synonym map remain untouched; `CLAUDE.md` deploy status remains untouched.
 | A3 | One walking-distance/time-appropriate Discover card; When-In-Use only; persistent dismissal; no far fallback | Implemented locally; 800 m, server local-time rules, one session slot, dismissal and hour expiry; focused checks. Stationary card invalidation, real timed expiry and account clearing tested with SDK listeners. Physical venue QA pending. |
 | A4 | Nearby default rewards sort with location; existing fallback | Implemented locally; distance/fallback/tie tests and scoped Rewards UI checked. 502-fixture Rewards catalog returned in full. Live stock/price/business/withdrawal/expiry/account updates pass real SDK tests, including legacy metadata compatibility. 30 catalog/listener/rules checks and ten focused native tests passed. Actual live withdrawal closes the Rewards confirmation; offline-pack UI regression passed. See PARTNER-SURFACES-2026-10-04.md. |
 | A5 | One partner alert per RSVP; event venue proximity; shared weekly cap/quiet hours/preference; emulator proof | Implemented and locally checked: 19 RSVP-job checks, atomic shared budget and once-only notice; device push explicitly untested/excluded. |
-| A6 | Opt-in adult-only live promotional alerts; consent/Always toggle; nearest 20 regions; shared cap/privacy | Pending; optional, no cut decision yet |
+| A6 | Opt-in adult-only live promotional alerts; consent/Always toggle; nearest 20 regions; shared cap/privacy | Implemented locally, not cut: default-off adult-only dedicated consent, Always permission only in its flow, nearest-20 region/significant-change monitoring, no continuous GPS, shared atomic weekly cap and local opt-out/retry. 27 actual backend/SDK checks and actual consent/cancel UI passed. Physical region delivery remains untested. See OPTIONAL-EXPLORATION-2026-10-04.md. |
 | B0 | Firebase admin claim CLI only; every endpoint server-gated; immutable admin-only before/after audit; red-team per path | Implemented locally: claim CLI, canonical Auth server checks, immutable audits for reads/mutations and intent/outcome for long jobs. 29 access checks and 12 legacy-job checks; see STAFF-CONSOLE-2026-10-04.md. |
 | B1 | Contextual moderation queue/history/filters/age, >20h highlight; reason-required remove/restore/warn/suspend | Implemented locally: 19 server workflow checks, 14 pagination/601-report checks, browser removal/restoration and >100 rows. Detailed reports show a bounded preview plus all reasons/count. |
 | B2 | Organizer approval/rejection reasons, 50-cap used/remaining | Implemented locally: 20 server checks including concurrent final-slot approvals; browser approval/cap and >100 application rows. |
-| B3 | Geocoded partners; activation requires recorded agreement; perks 500–2,000; CSV duplicate checks/counts; stock <10; immediate deactivation with reason | Implemented locally: 47 management checks and browser geocoded partner/perk/CSV/deactivation/map proof. Agreement and price/stock constraints enforced server-side. Stationary map/card and Rewards invalidation pass connected tests, including withdrawing sold-out offers; historical issued codes are retained. Actual pending confirmation withdrawal and offline UI regressions passed. Open-detail visible dismissal proof remains. No real business activated. |
+| B3 | Geocoded partners; activation requires recorded agreement; perks 500–2,000; CSV duplicate checks/counts; stock <10; immediate deactivation with reason | Implemented locally: 47 management checks and actual browser geocoding/agreement/perk/CSV/deactivation. Canonical stock/withdrawal listeners and actual Rewards/open-map-sheet withdrawal UI passed. Historical codes retained; no real business activated. Final saved simulated-location wrapper ran successfully (1/1); before/after screenshots inspected. See PARTNER-SURFACES-2026-10-04.md. |
 | B4 | Support/organizer/merchant submissions; handled status/note | Implemented locally: 43 browser/server/database checks, canonical Firebase authorization for all 3 actions, Supabase immutable read/mutation audits and rollback proof. See WEBSITE-SUBMISSIONS-2026-10-04.md. |
 | B5 | Per-source ingestion failures/last success/count; duplicate rate; queue age; organizer count; treasury/planner/SerpApi spend | Implemented locally: persistent source failures/history, full current supply/duplicate heuristic, aggregated queues, recorded spend estimates. 14 server checks and actual adapter failure visible in browser; invoice reconciliation is not claimed. |
 | C1 | Separate weekly official place pipeline; licenses recorded before ingestion; geometry joins; loud console-visible failures | Backend implemented locally: five permission-checked sources, Tuesday schedule, complete atomic catalog, exact geometry/hole joins, source health and actual browser outage/recovery. 59 new units + 33 pipeline/browser checks; 5,507 real usable features read back with every geometry checksum. Native coordinate joins and public park-week events are now integrated with C2; see PARK-GUIDE-2026-10-04.md as well as PARK-PIPELINE-2026-10-04.md. |
-| C2 | Free parks: confirmed amenities/ages/events/trails/story/hours/access/status; filters; required attribution | Online guide implemented and locally checked: signed-out/free access, geometry joins, status-labelled amenities, published ages/access/entrances, park-week events, attribution and shared filters. 80 park units, 29 actual callable checks, 7 focused native checks plus earlier 12 filter regressions. F1 story integration and full device gates remain pending. See PARK-GUIDE-2026-10-04.md. |
+| C2 | Free parks: confirmed amenities/ages/events/trails/story/hours/access/status; filters; required attribution | Implemented locally: free canonical guide, geometry/events/confirmed amenities/ages/access/status/attribution and shared filters; 80 units, 29 callables and native SDK/UI source-backed flows. F1 story display and authorized pack payloads are integrated and separately tested. Physical park/device acceptance remains pending. See PARK-GUIDE-2026-10-04.md and PLACE-STORIES-2026-10-04.md. |
 | C3 | Free source-backed trail attributes/overlays/location; official closure link/notice; no navigation | Online overview implemented locally: source attributes and lossless MapKit overlays, user annotation/recenter control, parent/trail status, notice and official closure link. Real County source flow passed in Simulator and screenshot inspected. Physical/outdoor GPS and offline-pack behavior remain pending with G/C4. No cut. |
 | C4 | Plus server entitlement; park/set/area packs; events/thumbnails/places/saves/plans/view-only perks; size preview/hard cap; storage/delete/age; Wi-Fi refresh/7-day expiry; offline overlays/location; no offline writes/check-in/base imagery caching | Implemented locally: server-gated private chunks, exact size preview and 50 MB cap, full snapshots and compressed thumbnails, native account-isolated storage/delete/expiry, Wi-Fi replacement, stored guides/trails/events, online-action refusal and legacy attendance-queue removal. 24 offline units, 32 callable/rules/content/cleanup checks and actual native SDK/UI flows passed. Physical airplane-mode/moving GPS gates remain required with G. See OFFLINE-PACKS-2026-10-04.md. |
 | C5 | Working-feature paywall/listing/website copy: offline park and place packs | Included in the same working feature change, with seven-day/no-base-imagery explanation and matching privacy/App Privacy notes. Fresh website build/lint and 18 production-page/copy-parity checks passed. No publication. |
-| D2 | Existing supply audit; nine volunteer source fingerprints/terms; deduplicated in-radius count >=30; document exclusions | Minimum local supply and full native threshold verified: 137 classified current public listings in 25 miles, conservative 80 direct-service invitations; 53 classified within 30 days. All nine hosts fingerprinted and dispositions recorded. Native full-supply/29-vs-30 SDK checks passed. New-source permission/venue evaluation remains explicitly pending (including Save The Bay); no silent cut. See VOLUNTEER-SUPPLY-2026-09-27.md. |
+| D2 | Existing supply audit; nine volunteer source fingerprints/terms; deduplicated in-radius count >=30; document exclusions | Required local survey and minimum complete: nine hosts fingerprinted with explicit permission/feed/venue exclusion reasons; existing licensed feeds ingested through the frozen classifier. Final deduplicated radius read-back: 137 classified current listings, 80 reviewed direct-service invitations (36 within 30 days). Full native supply/29-vs-30 checks passed. Save The Bay is excluded until reuse permission and official venue geometry exist; no fabricated ingestion or outreach. See VOLUNTEER-SUPPLY-2026-09-27.md. |
 | D3 | Program taxonomy/client; staff curation with required age/cost/location/deadline/official link; >=10 radius threshold; age eligibility and deadline expiry; link-out only | Implemented locally: 34 policy units, 42 actual callable/rules/security checks, 8 actual staff browser checks, canonical age/deadline filtering without ranking tuning, full native supply/account/deep-link checks and a passing Program UI/accessibility journey. Saved eligible Programs work in private offline packs and open details recheck age/expiry. See PROGRAM-CURATION-2026-10-04.md; physical/final gates remain pending. |
 | E1 | Neutral signup age gate; under-13 exits without retaining personal data; preserve 13–17 protections | Implemented locally: neutral blank birth year before account fields, under-13 ends/clears volatile draft, signup age guard precedes credential processing, existing registerAgeBand unchanged. Two actual signup UI flows plus age boundary/persistence units passed. |
 | E2 | Local terms/support pages and restored app link; Supabase support → console; accurate privacy | Implemented locally: build plus 15 production-page/parity checks, 43 submission checks, Swift Terms URL resolves HTTP 200 against explicit local website. Public publication remains outside this sprint. |
 | E3 | Organizer/calendar and merchant interest forms; Supabase → console | Implemented locally: both native browser forms save exact fields in real local Supabase and appear in staff inbox; no partner activation from interest. 43 checks passed. |
-| F1 | Approved place-owner-only <=400-char stories; report/moderation; shown/read engagement | Pending; optional, no cut decision yet |
-| F2 | Optional free beta camera/GPS/compass view; permission only on open; no frames saved/transmitted; matching privacy; no pricing claim | Pending; optional, no cut decision yet |
-| G1 | Free-team installs on two real iPhones; local populated emulator via DEBUG opt-in | Pending; no hardware evidence collected |
-| G2 | Full DEVICE-QA and all sprint additions, outdoor offline trail/GPS test, two-phone flows, a11y/network/power/performance/StoreKit | Pending |
-| G3 | Dated device/iOS/item results; defects fixed/regressed; committed; membership/deploy-dependent behavior explicitly untested | Pending |
-| H1 | All app/backend/console compound queries inventoried and mapped to matching indexes with locations; missing indexes added; undocumented-query regression check | Complete locally: 109 source variants (37 compound mappings, 72 simpler queries), 92 distinct shapes; nine composite definitions and four group overrides added. Source-aware guard runs in backend CI and test:units; 49 positive/negative checks plus 424 existing backend checks passed with a fresh build and D1 freeze check. See FIRESTORE-INDEXES.md and docs/evidence/firestore-index-audit-2026-10-04.json. No indexes deployed or live readiness inferred. |
-| H2 | Crashlytics integration/symbol upload; physical readable test crash; accurate privacy/App Privacy in same change | Pending |
-| Final gate | Fresh iOS/backend unit/E2E/red-team checks green; every scope item audited; no deploy/status change | Pending |
+| F1 | Approved place-owner-only <=400-char stories; report/moderation; shown/read engagement | Implemented locally: staff-verified approved owner editing, 400 Unicode code points/version conflicts, reporting/moderation/deletion, canonical native display and historical pack warning, consent-aware shown/expanded/end-visible telemetry. 34 policy, 61 connected story/offline/engagement, 19 moderation, 7 browser and native SDK/UI checks passed separately. Full-suite draft independence and exact native telemetry read-back passed; one shown, one expanded and one end-visible event for the current story/version. See PLACE-STORIES-2026-10-04.md. |
+| F2 | Optional free beta camera/GPS/compass view; permission only on open; no frames saved/transmitted; matching privacy; no pricing claim | Implemented locally, not cut: optional free Explore view (beta), camera permission only on open, GPS/compass labels, list/map fallback and no saved/transmitted frames. Fresh two projection units + one actual Simulator UI passed. Privacy/listing changed; no pricing claim. Physical camera/heading/moving GPS untested. See OPTIONAL-EXPLORATION-2026-10-04.md. |
+| G1 | Free-team installs on two real iPhones; local populated emulator via DEBUG opt-in | UNTESTED: October 4 inventory still has one unavailable iPhone 16 Pro Max and no second connected iPhone; no free-team physical installation. See DEVICE-QA-RESULTS-2026-10-04.md. |
+| G2 | Full DEVICE-QA and all sprint additions, outdoor offline trail/GPS test, two-phone flows, a11y/network/power/performance/StoreKit | UNTESTED: every legacy/device addition explicitly recorded (73 items), including outdoor offline GPS, accessibility/network/power/corpus/StoreKit and two-phone flows. Simulator evidence does not close this gate. |
+| G3 | Dated device/iOS/item results; defects fixed/regressed; committed; membership/deploy-dependent behavior explicitly untested | Dated item-by-item result artifact created with unavailable-device identity and honest reasons; no physical pass/fix claimed. Required successful device runs/results still pending. See DEVICE-QA-RESULTS-2026-10-04.md. |
+| H1 | All app/backend/console compound queries inventoried and mapped to matching indexes with locations; missing indexes added; undocumented-query regression check | Complete locally: final 114 source variants, 38 compound mappings and 97 distinct shapes; 32 composite definitions and 13 field overrides. Regenerated file/line mappings and 49 positive/negative guard checks pass; six-file D1 freeze passes. No live index deployment/readiness claim. See FIRESTORE-INDEXES.md. |
+| H2 | Crashlytics integration/symbol upload; physical readable test crash; accurate privacy/App Privacy in same change | SDK/build phase/dSYM settings/runtime gating/privacy implemented locally. Fresh Simulator binary/dSYM UUID match proved; collection/upload disabled in local tests. Physical symbol upload and readable dashboard test crash remain UNTESTED, so H2 is incomplete. See CRASHLYTICS-2026-10-04.md. |
+| Final gate | Fresh iOS/backend unit/E2E/red-team checks green; every scope item audited; no deploy/status change | Local software checks complete: 465 backend units, 49 index checks, 337 E2E and 49 attacks blocked; website production build and 18 legal/parity checks passed. Native latest outcomes: 177 unique tests passed across the broad and focused runs, including final map withdrawal. Broad r2 itself was 175 pass/1 audit timeout; focused fixes/reruns are separately recorded. Physical G/H2 still incomplete. |
 
 ## Evidence discipline
 
@@ -251,9 +251,84 @@ been claimed.
   journey now uses its own offer, rather than erasing redemption history.
 - Downloaded perks remain view-only snapshots offline with an availability
   warning. Online, those rows use the current canonical catalog for pack IDs.
-  The newly added open partner detail dismissal still needs actual UI proof.
+  The open-detail dismissal was subsequently verified by the actual pin/open-sheet/staff-withdrawal UI journey; see the next checkpoint.
   Rewards/offline disposable accounts and offers were cleaned; immutable local
   staff audits remain. No real business was activated.
 - Remaining: open-detail UI proof, A6, F1/F2 (including C2 stories), D2 reuse/
   precise-venue follow-up, H2, all physical G gates and final complete-sprint
   regression/audit. No optional cut, ranking/classifier drift or deployment.
+
+
+## October 4 story-foundation and open-detail checkpoint
+
+- Actual map pin/open-detail withdrawal passed a fresh native build/test with
+  streaming simulated location. Its saved before/after screenshots were viewed.
+  Prior AX, duplicate-code and fallback-location failures remain in evidence;
+  the separate Rewards helper regression passed in the recorded mixed attempt.
+  Simulator location was cleared and known fictional Rewards fixtures cleaned.
+- Place-story ownership is staff-verified and audited. Only its canonical approved
+  organizer can publish up to 400 Unicode code points. Transfers create distinct
+  moderation targets, stale edits fail, and public reads enforce ownership,
+  approval, suspension, moderation and blocks. Account deletion removes old prose
+  and queue excerpts while preserving a successor's ownership.
+- The existing report/queue/remove/restore/suspend flow includes place stories.
+  Minimal live story/publisher metadata is protected against enumeration/writes;
+  triggers read current state to avoid old decisions restoring stale eligibility.
+  Free park guides and private pack payloads use canonical story visibility.
+- Fresh local evidence: 465 backend units plus 49 index-guard cases; 51 connected
+  story checks, 19 existing moderation regressions and 7 real staff-form checks.
+  The index inventory is now 113 variants / 38 compound mappings / 96 shapes,
+  with the new owner paging index defined locally. D1 freeze passed.
+- Matching app/website privacy text covers stories and private ownership records,
+  and now correctly states that first-party usage rows may include account UID.
+  No story engagement instrumentation is claimed yet. Native F1 editing/display,
+  online/offline cache handling, engagement and full native proof remain pending.
+- A6, F2, D2 reuse/venue follow-up, H2, physical G and final full-sprint gates
+  remain required. No optional cut, ranking/classifier edit, deploy or completion
+  claim was made. The sprint remains active and incomplete.
+
+## October 4 final feature implementation checkpoint
+
+The requirement ledger above is current; earlier chronological checkpoints
+retain their historical pending work and do not override it. No optional
+feature was cut. Stories, A6 and Explore beta are now implemented, and H2's
+SDK/symbol/privacy integration is in the same local change. D2's required
+fingerprint/exclusion survey is closed with final count evidence; unsupported
+future source onboarding is not represented as ingestion.
+
+A fresh isolated backend run passed 465 units, 49 index-guard cases, 337 E2E
+checks and 49 blocked attacks. The later A6 venue-clock and nested-consent
+rules correction passed 27 actual callable/SDK cases, including shared-cap
+concurrency and ordinary profile editing after consent. The first final native
+run passed 170 and failed five: the Program journey exposed an actual duplicate
+ID dictionary crash, while cached live data/filter leakage, an offscreen Gem tap
+and a nonempty story fixture broke four other journeys. Crash stack and failed
+result summary are retained; event-ID deduplication, a regression unit, isolated
+fixture/filter initialization, a reachable tap and explicit owner draft setup
+were added. A fresh full rerun is the next required gate.
+
+Physical availability has not changed. DEVICE-QA.md now runs against the local
+LAN emulators and updates obsolete offline attendance expectations to C4's
+prohibition. DEVICE-QA-RESULTS-2026-10-04.md records all 73 physical checklist
+items as UNTESTED, plus free-team setup, excluded membership/cellular behavior
+and the missing readable physical crash. The full sprint remains incomplete.
+
+## October 4 native final follow-up
+
+The fresh full r2 run passed 175 and failed one Program structural-audit timeout
+(176 total, zero skips). Its actual Program detail/official-link journey reached
+the screen without crashing. A six-check follow-up passed four and failed the
+same audit plus a consent wrapper tap; both failures remain in evidence. A fresh
+simulator/audit-service restart and native-switch targeting passed the consent
+check, while the combined Program audit still timed out. Running the SAME three
+structural types separately then passed the actual Program journey with zero
+failures/skips. Timeouts were never treated as passes or actual findings hidden.
+
+The latest per-test outcomes now pass all 176 tests covered by the broad run;
+this is a union of the named broad and focused receipts, not a claim that the
+failed full run was entirely green. Manual onboarding/Daily Gem launches now
+explicitly use the local QA path. The duplicate feed crash has a passing
+regression; the story UI has exactly one shown/expanded/end-visible record.
+The final saved simulated-GPS map wrapper passed (1 test, zero failures/skips), freshly compiling the latest source. Before/after screenshots were inspected; the wrapper cleared simulated GPS and cleaned its reserved fixture. The final native aggregation now contains 177 unique tests with latest Passed outcomes, retaining every broad/focused run count and provenance. Known fictional Program/offline/story fixtures were also cleaned; actual public corpus and park catalog remain populated.
+
+Local implementation and verification are complete and ready for the finishing commit. Physical G/H2 remain incomplete: two real iPhones, outdoor/offline GPS, the full 73-item device checklist and readable physical Crashlytics report have no passing evidence.

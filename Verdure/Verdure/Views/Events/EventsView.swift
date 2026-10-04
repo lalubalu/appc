@@ -51,7 +51,7 @@ struct EventsView: View {
     /// Upcoming events matching the user's interests — soonest first, not yet attended.
     private var forYouEvents: [Event] {
         if !eventsService.rankedEventIDs.isEmpty {
-            let byID = Dictionary(uniqueKeysWithValues: sourceEvents.map { ($0.id, $0) })
+            let byID = Dictionary(sourceEvents.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
             return Array(eventsService.rankedEventIDs.compactMap { byID[$0] }.prefix(6))
         }
         guard !preferredEventCategories.isEmpty else { return [] }
@@ -76,7 +76,7 @@ struct EventsView: View {
     private var displayEvents: [Event] {
         let base = (filteredEvents.isEmpty && categoryFallbackEligible) ? sourceEvents : filteredEvents
         guard !eventsService.rankedEventIDs.isEmpty else { return base }
-        let order = Dictionary(uniqueKeysWithValues: eventsService.rankedEventIDs.enumerated().map { ($0.element, $0.offset) })
+        let order = Dictionary(eventsService.rankedEventIDs.enumerated().map { ($0.element, $0.offset) }, uniquingKeysWith: { first, _ in first })
         // Keep local cards outside the server's top 50 reachable. Ranking is
         // an order, not a hidden filter; Everything remains chronological.
         return base.sorted { left, right in

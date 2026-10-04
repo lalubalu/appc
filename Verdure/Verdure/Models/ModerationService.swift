@@ -57,6 +57,7 @@ enum ReportReason: String, CaseIterable, Identifiable {
 /// What kind of thing is being reported. Mirrors TargetType on the server.
 enum ReportTarget: String {
     case post, event, user, organizer
+    case placeStory = "place_story"
 }
 
 @MainActor @Observable

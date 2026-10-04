@@ -146,6 +146,7 @@ struct ParkGuide: Codable, Sendable {
     let generation: String, publishedAtMs: Double?, refreshDelayed: Bool
     let park: ParkSummary, amenities: [ParkAmenity], trails: [ParkTrail], events: [ParkEvent], credits: [ParkCredit]
     let hours: String?, accessibility: [String], entrances: [ParkAmenity]
+    var story: PlaceStory? = nil
 }
 
 @MainActor @Observable

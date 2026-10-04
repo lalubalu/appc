@@ -1,0 +1,20 @@
+PASS actual report enters staff queue
+PASS queue exposes full context, reasons and report count
+PASS queue exposes prominent age and 20-hour flag
+PASS queue is oldest first
+PASS non-admin cannot remove
+PASS remove requires a reason
+PASS non-admin cannot restore
+PASS restore requires a reason
+PASS non-admin cannot warn
+PASS warn requires a reason
+PASS non-admin cannot suspend
+PASS suspend requires a reason
+PASS remove hides and redacts content
+PASS restore recovers original prose and visibility
+PASS warn records the staff reason in an author notice
+PASS suspend removes content and suspends its author
+PASS every action has an immutable actor/time/before/after/reason record
+PASS audit preserves exact original and resulting redaction
+PASS resolved history retains the decision and reason
+19 moderation server emulator checks passed; browser proof is in staff-console-e2e.mjs

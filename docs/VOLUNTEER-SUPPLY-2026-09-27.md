@@ -105,16 +105,18 @@ No contact, signup or permission request was sent.
 | [Our City Forest](https://www.ourcityforest.org/volunteers) | Official page directs dated listings to Eventbrite; standard feed probes 404. [robots](https://www.ourcityforest.org/robots.txt) disallows Squarespace JSON/iCal format routes. | No supported permission-reviewed feed found; no Squarespace format-route workaround or Eventbrite scraper added. |
 | [Guadalupe River Park Conservancy](https://grpg.org/get-involved/volunteer/) | WordPress; apparent feed-shaped 200s are HTML. [Published terms](https://grpg.org/terms/) prohibit scraping/data mining. They contain template text, which is recorded rather than treated as permission to ignore the restriction. | Excluded from automated ingestion pending an authorized feed/organizer path. Preregistration and minor/chaperone conditions remain relevant. |
 | [Grassroots Ecology](https://www.grassrootsecology.org/calendar) | Public calendar; standard feed probes 404. [robots](https://www.grassrootsecology.org/robots.txt) disallows JSON/iCal format routes. No separately verified reuse permission discovered. | No adapter added; permission/official feed remains unresolved. Do not use prohibited format routes. |
-| [Save The Bay](https://savesfbay.org/calendar/) | Actual published iCalendar and Tribe JSON endpoints found beyond the standard probes. iCal carries `X-Robots-Tag:noindex`; neither feed supplies venue coordinates. [robots](https://savesfbay.org/robots.txt) requests a 10-second crawl delay. [Privacy policy](https://savesfbay.org/privacy-policy/) is not a republication license. | **Further source work pending**, not cut: confirm reuse/indexing permission and obtain precise official venue metadata before automatic in-radius ingestion. No coordinate guesses or unsupported permission claim. |
+| [Save The Bay](https://savesfbay.org/calendar/) | Actual published iCalendar and Tribe JSON endpoints found beyond the standard probes. iCal carries `X-Robots-Tag:noindex`; neither feed supplies venue coordinates. [robots](https://savesfbay.org/robots.txt) requests a 10-second crawl delay. [Privacy policy](https://savesfbay.org/privacy-policy/) is not a republication license. | Excluded from automatic ingestion: the inspected policies do not establish reuse permission and the feeds do not provide precise official venue geometry. A supported permission/venue source is required before onboarding. No coordinate guesses or unsupported permission claim. |
 | [Keep Coyote Creek Beautiful](https://www.keepcoyotecreekbeautiful.org/creek-cleanups) | Wix; official cleanup page links to Eventbrite. Standard feeds return 404 or CivicPlus 400. No independently verified ingestion permission. | No supported feed added; organizer/feed permission remains unresolved. |
 | [San José Parks Foundation](https://www.sanjoseparks.org/volunteer) | Wix page offers a volunteer signup form, not dated occurrences. Standard feed probes return 404/400. No published feed/license found by this survey. | No listings fabricated from a signup form; authorized dated source remains unresolved. |
 | [HandsOn Bay Area](https://www.handsonbayarea.org/calendar) | Home identifies HandsOn Connect; feed probes 404, robots 404. [Privacy policy](https://www.handsonbayarea.org/privacy-policy) references HandsOn Connect terms; the attempted `/terms-of-use` path is 404. | Permission is **unverified**, not declared forbidden or granted; no unsupported API/HTML adapter added. |
 | [United Way Bay Area](https://uwba.org/get-involved/volunteer/) | Current page offers a volunteer newsletter rather than dated local listings. Standard feeds 404. [Published policy/terms](https://uwba.org/privacy-policy/) describes site/user data, not a dated export. | No dated supply to ingest from the inspected page; future calendar/feed candidate remains open. |
 | [JustServe](https://www.justserve.org/) | SPA; standard API probe 404, RSS-shaped 200 is HTML. [robots](https://www.justserve.org/robots.txt) allows projects while excluding account/admin routes. The [official terms](https://www.churchofjesuschrist.org/legal/justserve-terms-of-use?lang=eng) retrieval returned 503. | Terms/feed permission remains **unverified**; no account access, private API guess or scraper added. A terms-search result alone was not treated as permission. |
 
-The minimum local supply is met by existing feeds. The remaining new-source
-permission/venue evaluation is explicitly pending; it has not been silently
-cut or represented as a completed new-source rollout. The native threshold
+The minimum local supply is met by existing permission-reviewed feeds. D2's
+required fingerprint/disposition survey is complete: supported licensed feeds
+continue through the existing pipeline; all nine additional hosts have explicit
+exclusion reasons where permission, a supported dated feed or venue facts are
+missing. This is not a claim that excluded organizations were ingested. The native threshold
 does not depend on activating any fictional organization or sending outreach.
 
 ## Re-run current local evidence
@@ -133,3 +135,15 @@ production hosts/project mismatch. A changed dataset may require a new review
 rather than editing old evidence to manufacture a pass. Count receipts and
 source provenance, not API fetch totals, prove the supply result. Physical
 device behavior, production indexes and deployment remain untested.
+
+## Final October 4 read-back
+
+The final read-only audit again found 137 classified listings in 25 miles,
+80 reviewed direct-service invitations, and 36 reviewed invitations within
+30 days. See `docs/evidence/volunteer-supply-final-2026-10-04.json`. Changed
+description digests cannot reuse prior review. Save The Bay's current official
+calendar and privacy policy were rechecked and its robots receipt retained
+(`save-the-bay-robots-2026-10-04.txt`): crawl permission is not a republication
+license. No permission outreach, private API guessing or venue coordinate
+guessing was performed. Future source onboarding remains conditional on facts
+that the published pages currently do not establish.

@@ -142,19 +142,26 @@ websites, which is what Apple's "tracking" means.
 
 | Data type | Collected | Linked to user | Tracking | Purpose |
 |---|---|---|---|---|
-| Product Interaction | Yes | **No** | No | Analytics |
+| Crash Data | Yes | No | No | App Functionality |
+| Other Diagnostic Data | Yes | No | No | App Functionality |
+| Product Interaction | Yes | Yes | No | Analytics |
 | Precise Location | Yes | Yes | No | App Functionality |
 | Email Address | Yes | Yes | No | App Functionality |
 | Name | Yes | Yes | No | App Functionality |
 | User ID | Yes | Yes | No | App Functionality |
 | Photos or Videos | Yes | Yes | No | App Functionality |
-| Other User Content | Yes | Yes | No | App Functionality |
+| Other User Content (including organizer-written place stories) | Yes | Yes | No | App Functionality |
 | Purchase History | Yes | Yes | No | App Functionality |
 | Device ID | Yes | Yes | No | App Functionality |
 | Other Data Types (birth year, optional student status and school) | Yes | Yes | No | App Functionality |
-| Other Usage Data (saved events, recommendation feedback and feed analytics) | Yes | Yes | No | App Functionality and Analytics |
+| Other Usage Data (saved events, recommendation feedback, feed analytics and story engagement) | Yes | Yes | No | App Functionality and Analytics |
 
-The app does not collect an address book, health or browsing history, payment card details, billing or shipping addresses, or advertising identifiers. Crashlytics is not integrated yet; H2 must update diagnostics disclosures with that feature. Website forms and web analytics are described separately in the shared privacy policy.
+The app does not collect an address book, health or browsing history, payment card details, billing or shipping addresses, or advertising identifiers. Firebase Crashlytics is integrated for crash and device diagnostics. Verdure attaches no account identifier, email, prose or location and adds no Google Analytics breadcrumbs. Crash Reports in Profile controls new diagnostics. Physical-device report receipt and readable-symbol proof remain pending. Website forms and web analytics are described separately in the shared privacy policy.
+
+Nearby deal alerts use the existing Precise Location and account categories above.
+Consent, weekly budget and delivered offer identifiers are account records;
+alert coordinate samples are not retained. Explore preview pixels are not collected,
+so it adds no uploaded photo/video category beyond existing attendance evidence.
 
 Offline packs use the existing account, saved-event/plan and location data
 categories above. A selected park or search area and existing provider place
@@ -266,7 +273,13 @@ switch it off in Profile › Settings › Product Analytics.
 >
 > **Location usage**
 > Used for finding nearby places, the collection proximity check, and verifying
-> event attendance. There is no background location and no tracking.
+> event attendance. Optional adult-only nearby deal alerts use Always location,
+> region monitoring and significant location changes after explicit promotional
+> consent; they are off by default and share the weekly notification cap.
+> Location samples for alerts are evaluated without persistent location history.
+> There is no cross-app tracking. Explore view (beta) is optional and free;
+> camera access is requested only when opened. Preview frames are not stored
+> or transmitted, and labels use approximate GPS/compass positioning.
 
 ---
 

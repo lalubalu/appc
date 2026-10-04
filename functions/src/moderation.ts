@@ -38,6 +38,7 @@ import {
 
 import { appendStaffAudit, auditStaffRead, auditedStaffJob, staffReason } from "./staff-audit.js";
 import { staffPage } from "./staff-page.js";
+import { stageStoryStatus, stageOrganizerStoryGate, stageAuthorStoryGate } from "./place-stories.js";
 
 export const MODERATION_CONTACT = "support@verdure-app.com";
 
@@ -53,13 +54,14 @@ export const REPORT_REASONS = [
 ] as const;
 type ReportReason = typeof REPORT_REASONS[number];
 
-export type TargetType = "post" | "event" | "user" | "organizer";
+export type TargetType = "post" | "event" | "user" | "organizer" | "place_story";
 
 const TARGET_COLLECTIONS: Record<TargetType, string> = {
   post: "posts",
   event: "events",
   user: "users",
   organizer: "organizers",
+  place_story: "placeStories",
 };
 
 /** Which field on the target names its author (owner). */
@@ -69,6 +71,7 @@ function authorOf(type: TargetType, data: FirebaseFirestore.DocumentData | undef
     case "post": return safeString(data.authorID) || null;
     case "event": return safeString(data.creatorID) || null;
     case "organizer": return safeString(data.ownerUid) || null;
+    case "place_story": return safeString(data.ownerUid) || null;
     case "user": return id;
   }
 }
@@ -79,6 +82,7 @@ function snapshotOf(type: TargetType, data: FirebaseFirestore.DocumentData | und
   const raw = type === "post" ? data.content
     : type === "event" ? `${data.title ?? ""} — ${data.description ?? ""}`
     : type === "organizer" ? `${data.displayName ?? ""} — ${data.description ?? ""}`
+    : type === "place_story" ? `${data.placeName ?? ""} — ${data.content ?? ""}`
     : data.displayName ?? "";
   return safeText(raw, 280);
 }
@@ -104,7 +108,7 @@ export const reportContent = onCall(async (req) => {
   const reason = safeString(req.data?.reason, "other") as ReportReason;
   const details = safeText(req.data?.details, 1000);
 
-  if (!TARGET_COLLECTIONS[targetType]) throw new HttpsError("invalid-argument", "Unknown content type.");
+  if (!Object.hasOwn(TARGET_COLLECTIONS, targetType)) throw new HttpsError("invalid-argument", "Unknown content type.");
   if (!targetId || targetId.includes("/")) throw new HttpsError("invalid-argument", "Missing content id.");
   if (!REPORT_REASONS.includes(reason)) throw new HttpsError("invalid-argument", "Unknown report reason.");
 
@@ -122,6 +126,8 @@ export const reportContent = onCall(async (req) => {
       throw new HttpsError("not-found", "That content no longer exists.");
     }
     const target = targetSnap.data();
+    const storyOwnership = targetType === "place_story" && target?.placeId
+      ? (await tx.get(db.doc(`placeStoryOwnership/${target.placeId}`))).data() : undefined;
     const author = authorOf(targetType, target, targetId);
     if (author === uid) {
       throw new HttpsError("failed-precondition", "You can't report your own content.");
@@ -167,6 +173,9 @@ export const reportContent = onCall(async (req) => {
 
     if (shouldHide && targetSnap.exists && target?.hidden !== true) {
       tx.set(targetRef, { hidden: true, hiddenAt: now }, { merge: true });
+      if (targetType === "place_story" && storyOwnership?.storyId === targetId)
+        stageStoryStatus(tx, target!.placeId, storyOwnership, { ...target, hidden: true });
+      if (targetType === "organizer") stageOrganizerStoryGate(tx, targetId, { ...target, hidden: true });
     }
     return { reported: true, alreadyReported: false, hidden: shouldHide || q.hidden === true, queueId };
   });
@@ -183,13 +192,15 @@ async function applyDecision(queueId: string, action: ModerationAction, by: stri
     const q = queue.data()!;
     if (by === "system" && q.status !== "open") return { queueId, status: q.status, resolution: q.resolution };
     const type = q.targetType as TargetType;
-    if (!TARGET_COLLECTIONS[type]) throw new HttpsError("failed-precondition", "Unknown reported content type.");
+    if (!Object.hasOwn(TARGET_COLLECTIONS, type)) throw new HttpsError("failed-precondition", "Unknown reported content type.");
     const targetRef = db.doc(`${TARGET_COLLECTIONS[type]}/${q.targetId}`);
     const authorRef = q.authorUid ? db.doc(`users/${q.authorUid}`) : null;
     const [target, author] = await Promise.all([
       tx.get(targetRef),
       authorRef ? tx.get(authorRef) : Promise.resolve(null),
     ]);
+    const storyOwnership = type === "place_story" && target.data()?.placeId
+      ? (await tx.get(db.doc(`placeStoryOwnership/${target.data()!.placeId}`))).data() : undefined;
     const now = Timestamp.now();
     let update: Record<string, unknown> = {};
     let status = "dismissed";
@@ -200,7 +211,7 @@ async function applyDecision(queueId: string, action: ModerationAction, by: stri
     if (action === "remove" || action === "suspend") {
       status = "removed";
       update = type === "user" ? { suspended: true, suspendedAt: now } : { hidden: true, removed: true, removedAt: now };
-      if (action === "remove" && type === "post") update.content = "[removed by moderation]";
+      if (action === "remove" && (type === "post" || type === "place_story")) update.content = "[removed by moderation]";
       if (action === "remove" && type === "event") update.description = "[removed by moderation]";
     } else if (action === "restore") {
       update = type === "user" ? { suspended: false } : { hidden: false, removed: false, ...original };
@@ -217,6 +228,11 @@ async function applyDecision(queueId: string, action: ModerationAction, by: stri
     if (Object.keys(update).length && (target.exists || type === "user")) tx.set(targetRef, update, { merge: true });
     const authorUpdate = action === "suspend" && authorRef ? { suspended: true, suspendedAt: now } : null;
     if (authorUpdate && authorRef) tx.set(authorRef, authorUpdate, { merge: true });
+    if (type === "place_story" && storyOwnership?.storyId === q.targetId)
+      stageStoryStatus(tx, target.data()!.placeId, storyOwnership, { ...target.data(), ...update });
+    if (type === "organizer") stageOrganizerStoryGate(tx, q.targetId, { ...target.data(), ...update });
+    if (authorUpdate && q.authorUid) stageAuthorStoryGate(tx, q.authorUid, { ...author?.data(), ...authorUpdate });
+    if (type === "user") stageAuthorStoryGate(tx, q.targetId, { ...target.data(), ...update });
     tx.set(queueRef, after);
     if (action === "warn" && authorRef) tx.create(authorRef.collection("notifications").doc(), {
       kind: "moderation-warning", title: "A note from Verdure staff", body: resolution, read: false,
@@ -312,7 +328,7 @@ export const listModerationQueue = onCall(async (req) => {
   const status = safeString(req.data?.status, "open");
   if (!["open", "removed", "dismissed", "warned", "resolved"].includes(status)) throw new HttpsError("invalid-argument", "Unknown queue status.");
   const type = safeString(req.data?.targetType);
-  if (type && !TARGET_COLLECTIONS[type as TargetType]) throw new HttpsError("invalid-argument", "Unknown content type.");
+  if (type && !Object.hasOwn(TARGET_COLLECTIONS, type)) throw new HttpsError("invalid-argument", "Unknown content type.");
   let query = status === "resolved" ? db.collection("moderationQueue").where("status", "in", ["removed", "dismissed", "warned"])
     : db.collection("moderationQueue").where("status", "==", status);
   if (type) query = query.where("targetType", "==", type);
@@ -329,7 +345,7 @@ export const listModerationQueue = onCall(async (req) => {
         db.doc(`${collection}/${q.targetId}`).get(), db.collection("reports").where("queueId", "==", d.id).limit(100).get(),
         q.authorUid ? db.doc(`users/${q.authorUid}`).get() : Promise.resolve(null),
       ]);
-      const fields = ["title", "description", "content", "displayName", "name", "authorID", "creatorID", "ownerUid", "organizerId", "location", "locationName", "website", "hidden", "removed", "suspended"];
+      const fields = ["title", "description", "content", "placeName", "placeId", "displayName", "name", "authorID", "creatorID", "ownerUid", "organizerId", "location", "locationName", "website", "hidden", "removed", "suspended"];
       const context = Object.fromEntries(fields.filter((key) => key in (target.data() ?? {})).map((key) => [key, target.data()![key]]));
       const first = q.firstReportedAt?.toMillis?.() ?? now;
       return {

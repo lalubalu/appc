@@ -93,6 +93,11 @@ struct OrganizerVerificationView: View {
                         .padding(Spacing.md).frame(maxWidth: .infinity, alignment: .leading)
                         .claySurface(.surface, radius: Radius.md)
                 }
+                if o.isApproved {
+                    NavigationLink { MyPlaceStoriesView() } label: {
+                        Label("My place stories", systemImage: "text.book.closed").frame(minHeight: 44)
+                    }.accessibilityIdentifier("myPlaceStories")
+                }
                 ClayButton("Publish an event", systemImage: "plus.circle.fill", kind: .spruce, fullWidth: true) { dismiss() }
                     .disabled(!o.canPublish).opacity(o.canPublish ? 1 : 0.5)
             }

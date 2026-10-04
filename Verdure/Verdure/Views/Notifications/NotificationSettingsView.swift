@@ -9,6 +9,8 @@ import SwiftUI
 struct NotificationSettingsView: View {
 
     @State private var prefs = NotificationPreferences()
+    @State private var liveAlerts = LivePartnerAlerts.shared
+    @State private var showLiveConsent = false
     @State private var systemAuthorized = NotificationManager.shared.permissionGranted
     @Environment(\.dismiss) private var dismiss
 
@@ -22,6 +24,7 @@ struct NotificationSettingsView: View {
                     VStack(alignment: .leading, spacing: Spacing.lg) {
                         if !systemAuthorized { systemOffBanner }
                         whatWeSend
+                        if liveAlerts.eligible { liveLocationConsent }
                         quietHours
                         promise
                         if let err = prefs.lastError { errorNote(err) }
@@ -39,10 +42,42 @@ struct NotificationSettingsView: View {
             }
             .task {
                 await prefs.load()
+                await liveAlerts.load()
                 NotificationManager.shared.refreshPermissionStatus()
                 systemAuthorized = NotificationManager.shared.permissionGranted
             }
         }
+        .sheet(isPresented: $showLiveConsent) {
+            NavigationStack {
+                VStack(alignment: .leading, spacing: Spacing.md) {
+                    Text("Deals as you walk nearby").font(VType.display(25, .semibold))
+                    Text("Allow Verdure to send promotional notifications when you walk near a participating partner. This optional feature needs Always location so iOS can notice nearby regions while the app is closed. It monitors up to 20 nearby partners using region monitoring and significant location changes, without continuous GPS. A recent location is sent to Verdure to check proximity; it isn't saved or shared with partners. Alerts count toward the same two-per-week limit and respect quiet hours. You can switch them off here at any time.")
+                        .font(VType.scaledBody(16, relativeTo: .body))
+                    ClayButton("I agree — enable nearby deals", systemImage: "location", kind: .spruce, fullWidth: true) {
+                        showLiveConsent = false; Task { await liveAlerts.optIn() }
+                    }.accessibilityIdentifier("confirmLivePartnerConsent")
+                    Button("Not now") { showLiveConsent = false }.frame(minHeight: 44)
+                    Spacer()
+                }.padding(Spacing.lg).navigationTitle("Nearby deals")
+            }
+        }
+    }
+
+    private var liveLocationConsent: some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            Toggle("Tell me about deals near me", isOn: Binding(get: { liveAlerts.enabled }, set: { on in
+                if on { showLiveConsent = true } else { Task { await liveAlerts.optOut() } }
+            })).tint(Palette.spruce.base).accessibilityIdentifier("livePartnerAlertsToggle")
+            Text("Optional promotional alerts as you walk near a partner. Off by default; uses Always location. Counts toward the same two-per-week limit.")
+                .font(VType.scaledBody(13)).foregroundStyle(Palette.inkSoft)
+            if liveAlerts.enabled, liveAlerts.authorization != .authorizedAlways {
+                Text("Alerts are paused until Always location is allowed. All other features work with your usual location permission.")
+                    .font(VType.body(13)).foregroundStyle(Palette.inkSoft)
+                Button("Finish location permission setup") { showLiveConsent = true }.frame(minHeight: 44)
+                Button("Open iOS Settings") { if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) } }.frame(minHeight: 44)
+            }
+            if let error = liveAlerts.error { Text(error).font(VType.body(13)).foregroundStyle(Palette.danger) }
+        }.padding(Spacing.md).claySurface(.surface, radius: Radius.md)
     }
 
     /// If iOS permission is off, every switch below is inert. Saying so is the

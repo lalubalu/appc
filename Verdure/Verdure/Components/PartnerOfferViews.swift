@@ -67,6 +67,7 @@ struct PartnerOfferDetail: View {
                     if let error = partners.error { Text(error).foregroundStyle(Palette.terracotta.base) }
                 }.padding(Spacing.lg).frame(maxWidth: .infinity, alignment: .leading)
             }
+            .accessibilityIdentifier("partnerOfferDetail")
             .background(VerdureBackground()).foregroundStyle(Palette.ink)
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } } }
             .sheet(isPresented: $showRewards) { RewardsStoreView() }

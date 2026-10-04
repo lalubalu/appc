@@ -1,0 +1,25 @@
+PASS guest consent denied
+PASS off by default
+PASS minor or unknown age entirely ineligible
+PASS minor or unknown age entirely ineligible
+PASS explicit promotional consent required
+PASS adult explicitly opts in
+PASS ordinary preference save preserves consent
+PASS exactly nearest 20 unique eligible partners
+PASS no coordinates persisted in consent profile
+PASS old location refused
+PASS inaccurate location refused
+PASS distant location cannot authorize alert
+PASS nearby opted-in adult receives alert payload
+PASS same partner retried once only
+PASS second distinct partner uses remaining shared slot
+PASS third partner refused by shared weekly cap
+PASS organic/friend push also sees exhausted cap
+PASS concurrent alert and ordinary push cannot exceed cap
+PASS withdrawn partner never produces stale alert
+PASS quiet hours respected
+PASS opt-out saved
+PASS opted-out account gets no monitored regions
+PASS opted-out account gets no alert
+PASS notification records contain no location fields
+24 local live-partner alert checks passed

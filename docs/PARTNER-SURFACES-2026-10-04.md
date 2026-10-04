@@ -142,7 +142,7 @@ codes remain available after an offer is withdrawn, until account clearing.
 Rewards drops a pending redemption confirmation when its exact offer snapshot
 changes and checks the current snapshot again before sending a redemption.
 An open map/card offer detail dismisses when its snapshot is withdrawn or
-replaced. That detail's visible dismissal is still awaiting an actual UI test.
+replaced. The fresh actual MapKit-pin/open-sheet journey now passes: a staff partner withdrawal removes the pin, Near you card and open detail without a gesture or manual refresh. Before/after screenshots were visually inspected. This uses a stream of CLI simulated location fixes, not physical GPS.
 
 Downloaded packs continue to preserve immutable view-only snapshots offline,
 with a visible warning that availability may have changed. Online, their perk
@@ -206,3 +206,26 @@ FIRESTORE_EMULATOR_HOST=127.0.0.1:8899 FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:909
 
 Physical venue/GPS/two-phone gates, the full final regression and the other
 unfinished sprint sections remain required. No deployment or optional cut.
+
+
+### Open-detail UI receipt
+
+Run `zsh functions/scripts/partner-detail-native.sh` with local Auth/Firestore/Functions
+listening at 9099/8899/5002 and the named iOS simulator booted. Override
+`VERDURE_QA_SIMULATOR` / `VERDURE_QA_RESULT` as needed. The wrapper freshly builds,
+streams simulated location, clears that simulation and cleans only the known
+fictional Rewards fixtures. The saved wrapper itself subsequently passed end to end on October 4, with a fresh build and one passing test (zero failures/skips). Receipt: `docs/evidence/native-map-final-2026-10-04.json`; result bundle: `/tmp/verdure-final-map-detail-20261004.xcresult`. It cleared simulated location and cleaned its reserved Rewards fixture on exit. Its final before/after screenshots were inspected and saved as `partner-detail-final-{before,after}-withdrawal-2026-10-04.png`.
+
+The actual recorded source build passed one test at
+`/tmp/verdure-partner-open-detail-stream-2026-10-04.xcresult`; summary and screenshots
+are in `docs/evidence/partner-open-detail-summary-2026-10-04.json` and
+`partner-detail-{before,after}-withdrawal-2026-10-04.png`. The refactored Rewards
+helper also passed its named UI regression in the mixed two-test attempt.
+
+Three failed attempts are retained: XCTest's AX scroll-to-visible failure on a
+visible annotation; a repeated fixed-code fixture rejected as duplicate; and a
+one-shot-location attempt which displayed the launch-area fallback with no pin.
+The final test taps the measured on-screen annotation and generates a new
+fictional code for each run. A live simulated location stream passed; stale
+one-shot location is the likely reason for the fallback, not a proved physical
+GPS defect. None of these results establishes outdoor/device behavior.

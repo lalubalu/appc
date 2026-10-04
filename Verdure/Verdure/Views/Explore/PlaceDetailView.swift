@@ -59,6 +59,7 @@ struct PlaceDetailView: View {
                     hero
                     quickStats
                     aboutSection
+                    PlaceStorySection(placeID: place.id)
                     parkGuideLinks
                     actions
                     eventsSection

@@ -8,6 +8,7 @@ struct ProfileView: View {
     static let signOutRed = Color(red: 0.82, green: 0.28, blue: 0.25)
     @AppStorage("prefersDarkMode") private var prefersDarkMode = false
     @State private var analyticsEnabled = Analytics.isEnabled
+    @State private var crashReportsEnabled = CrashReporting.isEnabled
     @State private var showStats = false
     @AppStorage("profileImageData") private var profileImageData = Data()
     @State private var photoItem: PhotosPickerItem?
@@ -398,6 +399,22 @@ struct ProfileView: View {
                 .accessibilityValue(analyticsEnabled ? "On" : "Off")
                 .accessibilityHint("App-use and ranked-feed analytics. Feed actions are linked to your account; no precise location is recorded here.")
                 rowDivider
+                if CrashReporting.permitsCollection {
+                    settingsRow(icon: "stethoscope", label: "Crash reports", accent: .teal) {
+                        Toggle("", isOn: Binding(get: { crashReportsEnabled }, set: { on in
+                            crashReportsEnabled = on; CrashReporting.setEnabled(on)
+                        })).tint(Palette.spruce.base).labelsHidden()
+                    }.accessibilityLabel("Crash reports").accessibilityValue(crashReportsEnabled ? "On" : "Off")
+                        .accessibilityHint("Send crash stacks and device diagnostics to Firebase. No account ID, text or precise location is attached by Verdure.")
+                    rowDivider
+                }
+                #if DEBUG
+                if CrashReporting.canRunPhysicalQACrash {
+                    Button("Run physical-device QA test crash") { CrashReporting.runPhysicalQACrash() }
+                        .frame(minHeight: 44).accessibilityIdentifier("physicalQATestCrash")
+                    rowDivider
+                }
+                #endif
                 if let org = social.organizer {
                     Button { Haptics.tap(); showOrganizerVerify = true } label: {
                         settingsRow(icon: org.isApproved ? "checkmark.seal.fill" : "clock.badge.checkmark.fill",

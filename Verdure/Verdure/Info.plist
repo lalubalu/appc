@@ -29,6 +29,12 @@
 	</array>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>FirebaseCrashlyticsCollectionEnabled</key>
+	<false/>
+	<key>NSCameraUsageDescription</key>
+	<string>Verdure uses the camera only when you open Explore view (beta), to display nearby labels over a live preview. No preview frames are stored or transmitted.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Only if you enable nearby deal alerts, Verdure uses background region monitoring to notify you as you walk near a participating partner. This is optional and can be switched off in Notifications.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Verdure uses your location to find nearby events and outdoor places you can check in to.</string>
 	<key>NSMotionUsageDescription</key>

@@ -27,7 +27,7 @@ final class EventsAPIService {
     private var storedEvents: [Event] = []
     var events: [Event] {
         get { storedEvents.filter { isEligible($0) } }
-        set { storedEvents = newValue }
+        set { storedEvents = Self.uniqueEvents(newValue) }
     }
     private var programOwnerID: String?
     private var eligibleProgramIDs: Set<String> = []
@@ -41,7 +41,7 @@ final class EventsAPIService {
     private var storedEverythingEvents: [Event] = []
     private(set) var everythingEvents: [Event] {
         get { storedEverythingEvents.filter { isEligible($0) } }
-        set { storedEverythingEvents = newValue }
+        set { storedEverythingEvents = Self.uniqueEvents(newValue) }
     }
     private(set) var everythingHasMore = true
     private(set) var everythingLoading = false
@@ -79,8 +79,15 @@ final class EventsAPIService {
     // MARK: - Init
 
     init() {
-        loadCachedEvents()
-        if events.isEmpty { useSampleFallback() }
+        if QAData.offline { useSampleFallback() }
+        else { loadCachedEvents() }
+    }
+
+    /// Overlapping async feed/opportunity reads can return the same document.
+    /// Preserve the first occurrence and its order without duplicating cards.
+    static func uniqueEvents(_ input: [Event]) -> [Event] {
+        var seen: Set<String> = []
+        return input.filter { seen.insert($0.id).inserted }
     }
 
     // MARK: - Public API

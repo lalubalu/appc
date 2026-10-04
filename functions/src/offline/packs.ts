@@ -113,7 +113,7 @@ export async function buildOfflinePack(uid: string, selection: Selection, profil
   const week = await weekEvents(uid, now), guides: Awaited<ReturnType<typeof buildParkGuide>>[] = [];
   let guideBytes = 0;
   for (const id of parkIds) {
-    const guide = await buildParkGuide(state, index, id, week);
+    const guide = await buildParkGuide(state, index, id, week, uid);
     guideBytes += Buffer.byteLength(JSON.stringify(guide));
     if (guideBytes > MAX_PACK_BYTES) throw new HttpsError("resource-exhausted", "These guides exceed 50 MB. Choose fewer parks.");
     guides.push(guide);

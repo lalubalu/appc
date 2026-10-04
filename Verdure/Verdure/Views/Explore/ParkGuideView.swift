@@ -92,6 +92,7 @@ struct ParkGuideView: View {
                     header(guide)
                     amenities(guide)
                     visitDetails(guide)
+                    PlaceStorySection(placeID: parkID, offlineStory: snapshot == nil ? nil : guide.story)
                     events(guide)
                     trails(guide)
                     credits(guide)

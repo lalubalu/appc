@@ -7,6 +7,7 @@ const PROJECT = "connectify-19dd8";
 export const STAFF_FUNCTIONS = new Set([
   "staffSession", "staffOperations", "listModerationQueue", "moderateContent", "listOrganizerApplications", "approveOrganizer",
   "listStaffPrograms", "saveProgram", "deactivateProgram",
+  "setPlaceStoryOwnership", "listStaffStoryPlaces",
   "listStaffPartners", "savePartner", "upsertPartnerPerk", "importPartnerCodes", "deactivatePartnerOffer",
 ]);
 export class StaffError extends Error {

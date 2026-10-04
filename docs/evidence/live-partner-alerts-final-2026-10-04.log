@@ -1,0 +1,30 @@
+PASS guest consent denied
+PASS off by default
+PASS minor or unknown age entirely ineligible
+PASS minor or unknown age entirely ineligible
+PASS explicit promotional consent required
+PASS adult explicitly opts in
+PASS profile SDK edit preserves server-added consent
+[2026-10-04T18:24:56.126Z]  @firebase/firestore: Firestore (12.16.0): GrpcConnection RPC 'Write' stream 0x60181a58 error. Code: 7 Message: 7 PERMISSION_DENIED:
+false for 'create' @ L29, Unable to evaluate the expression as the maximum of 1000 expressions to evaluate has been reached. for 'create' @ L202, false for 'update' @ L29, evaluation error at L208:24 for 'update' @ L208, false for 'update' @ L29, false for 'update' @ L208
+PASS direct SDK cannot bypass consent callable
+PASS ordinary preference save preserves consent
+PASS exactly nearest 20 unique eligible partners
+PASS no coordinates persisted in consent profile
+PASS old location refused
+PASS inaccurate location refused
+PASS distant location cannot authorize alert
+PASS nearby opted-in adult receives alert payload
+PASS venue hours independent of account timezone
+PASS same partner retried once only
+PASS second distinct partner uses remaining shared slot
+PASS third partner refused by shared weekly cap
+PASS organic/friend push also sees exhausted cap
+PASS concurrent alert and ordinary push cannot exceed cap
+PASS withdrawn partner never produces stale alert
+PASS quiet hours respected
+PASS opt-out saved
+PASS opted-out account gets no monitored regions
+PASS opted-out account gets no alert
+PASS notification records contain no location fields
+27 local live-partner alert checks passed

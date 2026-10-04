@@ -83,6 +83,13 @@ service cloud.firestore {
     match /placeIngestRuns/{runId} { allow read, write: if false; }
     match /parkCatalog/{docId} { allow read, write: if false; }
     match /parkGenerations/{generation}/{document=**} { allow read, write: if false; }
+    match /placeStories/{storyId} { allow read, write: if false; }
+    match /placeStoryOwnership/{placeId} { allow read, write: if false; }
+    // Minimal revisions and eligibility only. Public guests can listen to known
+    // IDs, but cannot enumerate content/publishers or change moderation state.
+    match /placeStoryStatus/{placeId} { allow get: if true; allow list, write: if false; }
+    match /organizerStoryStatus/{organizerId} { allow get: if true; allow list, write: if false; }
+    match /storyAuthorStatus/{uid} { allow get: if true; allow list, write: if false; }
     // Ingestion telemetry. Run logs and coverage reports are operational data
     // written by the scheduled jobs; the treasury holds spend + quota counters.
     match /ingestRuns/{docId} {
@@ -201,6 +208,7 @@ service cloud.firestore {
       allow update: if isOwner(userId)
                     && validUserDocument(request.resource.data)
                     && noForbiddenFieldChanges()
+                    && noLivePartnerConsentChanges()
                     && noServerOwnedFieldChanges();
 
       // Users cannot delete their own document directly — account deletion goes
@@ -644,7 +652,12 @@ service cloud.firestore {
       return !('notificationPrefs' in data) || (
         data.notificationPrefs is map
         && data.notificationPrefs.keys().hasOnly(
-             ['eventSuggestions', 'friendActivity', 'rsvpPartnerOffers', 'quietStart', 'quietEnd', 'timeZone'])
+             ['eventSuggestions', 'friendActivity', 'rsvpPartnerOffers', 'quietStart', 'quietEnd', 'timeZone',
+              'livePartnerAlerts', 'livePartnerConsentVersion', 'livePartnerConsentAt'])
+        && (!('livePartnerAlerts' in data.notificationPrefs) || data.notificationPrefs.livePartnerAlerts is bool)
+        && (!('livePartnerConsentVersion' in data.notificationPrefs) ||
+            data.notificationPrefs.livePartnerConsentVersion == null || data.notificationPrefs.livePartnerConsentVersion == 'live-deals-v1')
+        && (!('livePartnerConsentAt' in data.notificationPrefs) || data.notificationPrefs.livePartnerConsentAt is timestamp)
         && (!('eventSuggestions' in data.notificationPrefs) || data.notificationPrefs.eventSuggestions is bool)
         && (!('friendActivity' in data.notificationPrefs) || data.notificationPrefs.friendActivity is bool)
         && (!('rsvpPartnerOffers' in data.notificationPrefs) || data.notificationPrefs.rsvpPartnerOffers is bool)
@@ -813,7 +826,8 @@ service cloud.firestore {
     // On create, server-owned fields must be absent or zero/empty — a fresh client
     // can't mint itself points or attendance history.
     function serverOwnedFieldsAtZero(data) {
-      return (!('pointsBalance' in data) || data.pointsBalance == 0)
+      return !data.get('notificationPrefs', {}).keys().hasAny(['livePartnerAlerts', 'livePartnerConsentVersion', 'livePartnerConsentAt'])
+          && (!('pointsBalance' in data) || data.pointsBalance == 0)
           && (!('lifetimePoints' in data) || data.lifetimePoints == 0)
           && (!('checkedInEventIDs' in data) || (data.checkedInEventIDs is list && data.checkedInEventIDs.size() == 0))
           && (!('redeemedRewardIDs' in data) || (data.redeemedRewardIDs is list && data.redeemedRewardIDs.size() == 0))
@@ -840,6 +854,15 @@ service cloud.firestore {
     }
 
     // Prevent changing fields that should be immutable after creation
+    // Live promotional consent is established only by the age-gated callable.
+    // Preserve server-added nested fields when a client edits ordinary profile
+    // data, without allowing a direct SDK write to forge or erase that consent.
+    function noLivePartnerConsentChanges() {
+      return !request.resource.data.get('notificationPrefs', {})
+        .diff(resource.data.get('notificationPrefs', {})).affectedKeys()
+        .hasAny(['livePartnerAlerts', 'livePartnerConsentVersion', 'livePartnerConsentAt']);
+    }
+
     function noForbiddenFieldChanges() {
       // email and createdAt cannot be changed after document creation
       let emailUnchanged = !('email' in request.resource.data) ||

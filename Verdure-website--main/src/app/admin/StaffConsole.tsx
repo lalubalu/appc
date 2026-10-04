@@ -94,10 +94,11 @@ export default function StaffConsole() {
         <Field label="Password"><input name="password" type="password" autoComplete="current-password" required maxLength={256} /></Field>
         <button className="staff-primary" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
       </form></section> : <>
-      <nav className="staff-tabs" aria-label="Staff tools">{["Moderation", "Organizers", "Partners", "Programs", "Submissions", "Operations"].map((name) =>
+      <nav className="staff-tabs" aria-label="Staff tools">{["Moderation", "Organizers", "Place stories", "Partners", "Programs", "Submissions", "Operations"].map((name) =>
         <button key={name} aria-current={tab === name ? "page" : undefined} onClick={() => setTab(name)}>{name}</button>)}</nav>
       {tab === "Moderation" && <Moderation onAccessLost={accessLost} />}
       {tab === "Organizers" && <Organizers onAccessLost={accessLost} />}
+      {tab === "Place stories" && <StoryOwnership onAccessLost={accessLost} />}
       {tab === "Partners" && <Partners onAccessLost={accessLost} />}
       {tab === "Programs" && <Programs onAccessLost={accessLost} />}
       {tab === "Submissions" && <Submissions onAccessLost={accessLost} />}
@@ -246,7 +247,7 @@ function Moderation({ onAccessLost }: { onAccessLost: () => void }) {
         <option value="open">Pending</option><option value="resolved">Resolved history</option><option value="removed">Removed</option><option value="warned">Warned</option><option value="dismissed">Restored / dismissed</option>
       </select></Field>
       <Field label="Content type"><select value={type} disabled={busy} onChange={(e) => setType(e.target.value)}>
-        <option value="">All content</option>{["post", "event", "organizer", "user"].map((x) => <option key={x}>{x}</option>)}
+        <option value="">All content</option>{["post", "event", "organizer", "user", "place_story"].map((x) => <option key={x} value={x}>{x === "place_story" ? "Place story" : x}</option>)}
       </select></Field><button disabled={busy} onClick={() => void run(load)}>Refresh reports</button>
     </div>{notice}
     <div className="staff-workspace"><div className="staff-list" aria-label="Reports">
@@ -271,6 +272,61 @@ function Moderation({ onAccessLost }: { onAccessLost: () => void }) {
           className={action === "remove" || action === "suspend" ? "staff-danger" : ""} onClick={() => void decide(action)}>{action[0].toUpperCase() + action.slice(1)}</button>)}</div>
       </> : <p>Select a report to read the content and make a decision.</p>}</article>
     </div></section>;
+}
+
+type StoryPlace = { placeId: string; placeName: string; officialURL: string; organizerId: string; active: boolean;
+  verificationReference: string; verifiedBy: string; verifiedAtMs: number | null };
+function StoryOwnership({ onAccessLost }: { onAccessLost: () => void }) {
+  const [places, setPlaces] = useState<StoryPlace[]>([]), [organizers, setOrganizers] = useState<Organizer[]>([]);
+  const [cursor, setCursor] = useState<string | null>(null), [notes, setNotes] = useState<Record<string, string>>({});
+  const { busy, run, notice, setMessage } = useWork(onAccessLost);
+  const load = useCallback(async (afterId?: string) => {
+    const data = await call<{ places: StoryPlace[]; nextCursor: string | null }>("listStaffStoryPlaces", { afterId, limit: 50 });
+    setPlaces((old) => afterId ? [...old, ...data.places.filter((p) => !old.some((x) => x.placeId === p.placeId))] : data.places);
+    setCursor(data.nextCursor);
+  }, []);
+  useEffect(() => { void run(async () => {
+    await load();
+    const data = await call<{ organizers: Organizer[] }>("listOrganizerApplications", { status: "approved", limit: 100 });
+    setOrganizers(data.organizers);
+  }); }, [load]); // eslint-disable-line react-hooks/exhaustive-deps
+  async function verify(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); const form = event.currentTarget, data = new FormData(form);
+    await run(async () => {
+      await call("setPlaceStoryOwnership", Object.fromEntries([...data.entries(), ["active", true]]));
+      await load(); form.reset(); setMessage("Ownership verified. The approved organizer can now write this place's story.");
+    });
+  }
+  return <section className="staff-section"><h2>Place stories</h2>
+    <p>Verify that an approved organizer owns or manages the place before enabling its story. Keep a reference to written confirmation. Organizers write the text; staff review reports in Moderation.</p>
+    <form className="staff-form" onSubmit={verify}>
+      <Field label="Place ID"><input name="placeId" required maxLength={180} placeholder="city-parks_123 or osm-123" /></Field>
+      <Field label="Approved organizer"><select name="organizerId" required defaultValue=""><option value="" disabled>Choose an organizer</option>
+        {organizers.map((o) => <option key={o.id} value={o.id}>{o.displayName}</option>)}</select></Field>
+      <Field label="Place name (outside the official park catalog)"><input name="placeName" maxLength={200} /></Field>
+      <Field label="Official place link (outside the official park catalog)"><input name="officialURL" type="url" maxLength={1000} /></Field>
+      <p>Official park names and links come from the park catalog. For other places, use the matching OpenStreetMap, Recreation.gov or NPS listing.</p>
+      <Field label="Written ownership confirmation reference"><textarea name="verificationReference" required minLength={3} maxLength={1000} /></Field>
+      <Field label="Reason for verification"><textarea name="reason" required minLength={3} maxLength={1000} /></Field>
+      <button className="staff-primary" disabled={busy}>Verify ownership</button>
+    </form>{notice}
+    <button disabled={busy} onClick={() => void run(load)}>Refresh verified places</button>
+    <div className="staff-list">{!busy && !places.length && <p>No place ownership has been verified.</p>}
+      {places.map((p) => <article key={p.placeId} className="staff-detail"><h3>{p.placeName}</h3>
+        <p>{p.active ? "Active ownership" : "Ownership revoked"} · {p.placeId}</p>
+        <p>Organizer: {organizers.find((o) => o.id === p.organizerId)?.displayName || p.organizerId}</p>
+        {safeLink(p.officialURL) && <a href={safeLink(p.officialURL)!} target="_blank" rel="noopener noreferrer">Official place listing</a>}
+        <p>Confirmation: {p.verificationReference}</p>
+        <p>Verified {p.verifiedAtMs ? new Date(p.verifiedAtMs).toLocaleString() : "time unavailable"} by {p.verifiedBy}</p>
+        {p.active && <><Field label={`Reason to revoke ownership of ${p.placeName}`}><textarea value={notes[p.placeId] || ""}
+          maxLength={1000} onChange={(e) => setNotes({ ...notes, [p.placeId]: e.target.value })} /></Field>
+          <button disabled={busy || (notes[p.placeId] || "").trim().length < 3} onClick={() => void run(async () => {
+            await call("setPlaceStoryOwnership", { placeId: p.placeId, active: false, reason: notes[p.placeId] });
+            await load(); setMessage(`Ownership revoked for ${p.placeName}. Its story is no longer public.`);
+          })}>Revoke ownership</button></>}
+      </article>)}
+    </div>{cursor && <button disabled={busy} onClick={() => void run(() => load(cursor))}>Load more verified places</button>}
+  </section>;
 }
 
 function Organizers({ onAccessLost }: { onAccessLost: () => void }) {

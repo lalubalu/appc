@@ -30,8 +30,8 @@ import FirebaseFirestore
 // content in any payload. The identifier is a per-INSTALL UUID in UserDefaults
 // which is deliberately not the Firebase uid: it survives sign-out (so the
 // funnel does not break when someone logs out mid-session) and it is discarded
-// on uninstall. Deleting an account deletes the uid link, not the install id,
-// because the install id was never linked to a person in the first place.
+// on uninstall. Signed-in records also carry the uid and are deleted during account deletion.
+// The install id remains on the device until uninstall.
 
 @MainActor
 enum Analytics {

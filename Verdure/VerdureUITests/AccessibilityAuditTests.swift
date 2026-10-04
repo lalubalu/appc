@@ -88,7 +88,7 @@ final class AccessibilityAuditTests: XCTestCase {
 
     func testAuditOnboardingFirstPage() throws {
         let app = XCUIApplication()
-        app.launchArguments += ["-hasCompletedOnboarding", "NO", "-QADisableMotion", "YES"]
+        app.launchArguments += ["-hasCompletedOnboarding", "NO", "-QADisableMotion", "YES", "-QAOfflineData", "YES"]
         app.launch()
         QA.waitFor(app.staticTexts["Step Outside.\nConnect Within."], "onboarding hero title")
         try QA.audit(app, screen: "onboarding-1")

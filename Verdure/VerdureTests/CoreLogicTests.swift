@@ -10,6 +10,16 @@ import CoreLocation
 @MainActor
 final class CoreLogicTests: XCTestCase {
 
+    func testOverlappingFeedDocumentsKeepOneCardAndFirstOrder() {
+        let first = Event(id: "overlap", title: "First read", organizer: "QA", date: Date(), time: "Now", locationName: "QA", attendeeCount: 0, maxAttendees: nil, category: .workshop, imagePlaceholder: "leaf", pointValue: 0)
+        let later = Event(id: "overlap", title: "Overlapping read", organizer: "QA", date: Date(), time: "Now", locationName: "QA", attendeeCount: 0, maxAttendees: nil, category: .workshop, imagePlaceholder: "leaf", pointValue: 0)
+        let other = Event(id: "other", title: "Second card", organizer: "QA", date: Date(), time: "Now", locationName: "QA", attendeeCount: 0, maxAttendees: nil, category: .workshop, imagePlaceholder: "leaf", pointValue: 0)
+        let service = EventsAPIService()
+        service.events = [first, other, later, first]
+        XCTAssertEqual(service.events.map(\.id), ["overlap", "other"])
+        XCTAssertEqual(service.events.first?.title, "First read")
+    }
+
     func testVolunteerSupplyReadsCompletePublicCorpusBeyondFirstDiscoveryPage() async throws {
         try? Auth.auth().signOut()
         let query = Firestore.firestore().collection("events")

@@ -14,6 +14,7 @@ struct MapExploreView: View {
     @State private var position: MapCameraPosition = .automatic
     @State private var selectedPlace: Place? = nil
     @State private var showList = false
+    @State private var showExploreBeta = false
     @State private var hasCentered = false
     @State private var hasFetched = false
     @State private var fetchedFallback = false
@@ -64,6 +65,7 @@ struct MapExploreView: View {
             }
             .navigationBarHidden(true)
             .navigationDestination(for: Place.self) { PlaceDetailView(place: $0) }
+            .fullScreenCover(isPresented: $showExploreBeta) { ExploreBetaView() }
             .sheet(isPresented: $showList) {
                 mapListSheet
                     .presentationDetents([.medium, .large])
@@ -113,6 +115,7 @@ struct MapExploreView: View {
                                 .background(Palette.ink, in: RoundedRectangle(cornerRadius: Radius.sm))
                                 .overlay(RoundedRectangle(cornerRadius: Radius.sm).stroke(Palette.gold.base, lineWidth: 2))
                         }.buttonStyle(.plain).accessibilityLabel("Partner \(offer.partner), \(offer.title), \(offer.pointCost) points")
+                            .accessibilityIdentifier("partner-pin:\(offer.id)")
                     }.annotationTitles(.hidden)
                 }
             }
@@ -163,6 +166,8 @@ struct MapExploreView: View {
             VStack(spacing: 12) {
                 mapButton(icon: "location.fill") { centerOnUser() }
                 mapButton(icon: "list.bullet") { Haptics.soft(); showList.toggle() }
+                mapButton(icon: "camera.viewfinder") { showExploreBeta = true }
+                    .accessibilityLabel("Open Explore view (beta)").accessibilityIdentifier("openExploreBeta")
                 FilterButton(mode: .places)
                 Toggle(isOn: Binding(get: { partners.layerEnabled }, set: { partners.setLayerEnabled($0) })) {
                     Text("Partners").frame(minWidth: 70, minHeight: 44)

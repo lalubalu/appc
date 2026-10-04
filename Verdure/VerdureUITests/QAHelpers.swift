@@ -25,6 +25,7 @@ enum QA {
             "-QATab", tab,
             "-QADisableMotion", "YES",   // audits need quiescence
             "-QAOfflineData", "YES",     // deterministic content, no fetch churn
+            "-QAResetDiscoveryFilters", "YES", // independent initial filters
         ]
         app.launchArguments += extraArguments
         app.launch()
@@ -44,8 +45,10 @@ enum QA {
         // The audit service occasionally fails to attach to the app process with
         // `com.apple.accessibilityAudit` code -902 ("Invalid target app <pid>").
         // That's infrastructure, not a finding — on CI it hit the first few tests
-        // in the class and cleared up once the service warmed up. Retry only that
-        // error class; real findings still fail immediately and are never retried.
+        // in the class and cleared up once the service warmed up. The structural
+        // engine can also time out (-56) without producing a result. Retry only
+        // those infrastructure errors; real findings fail immediately. Exhausted
+        // retries still throw, and each attempt is recorded in the result bundle.
         var lastError: Error?
         for attempt in 1...3 {
             do {
@@ -55,8 +58,9 @@ enum QA {
                 _ = app.wait(for: .runningForeground, timeout: 5)
                 try runAudit(app, screen: screen, file: file, line: line)
                 return
-            } catch let error as NSError where error.domain == "com.apple.accessibilityAudit"
-                                            && error.code == -902 {
+            } catch let error as NSError where
+                (error.domain == "com.apple.accessibilityAudit" && error.code == -902) ||
+                (error.domain == "com.apple.xcode.xctest.accessibilityAudit" && error.code == -56) {
                 lastError = error
                 XCTContext.runActivity(named: "AUDIT-RETRY [\(screen)] attempt \(attempt): \(error.localizedDescription)") { _ in }
                 Thread.sleep(forTimeInterval: 2)
@@ -71,25 +75,34 @@ enum QA {
         let structural: XCUIAccessibilityAuditType = [
             .sufficientElementDescription, .hitRegion, .trait,
         ]
-        try app.performAccessibilityAudit(for: structural) { issue in
-            let element = issue.element.map { "\($0)" } ?? "?"
-            // MapKit owns the Legal attribution link and exposes its text-sized
-            // frame. Keep it visible and actionable; exclude only that native
-            // link's hit-region finding, never Verdure pins or controls.
-            if screen == "partner-map-layer", issue.auditType == .hitRegion,
-               issue.element?.label == "Legal" {
-                XCTContext.runActivity(named: "AUDIT-NOTE [\(screen)] native MapKit Legal link; physical VoiceOver check remains required") { _ in }
-                return true
+        // The Program detail's combined structural request repeatedly exceeds
+        // the system audit time budget. Run the same three types separately,
+        // requiring all of them; do not suppress findings or accept a timeout.
+        let scopes: [XCUIAccessibilityAuditType] = screen == "Curated Program detail"
+            ? [.sufficientElementDescription, .hitRegion, .trait] : [structural]
+        for scope in scopes {
+            try XCTContext.runActivity(named: "AUDIT-SCOPE [\(screen)] \(scope.rawValue)") { _ in
+                try app.performAccessibilityAudit(for: scope) { issue in
+                    let element = issue.element.map { "\($0)" } ?? "?"
+                    // MapKit owns the Legal attribution link and exposes its text-sized
+                    // frame. Keep it visible and actionable; exclude only that native
+                    // link's hit-region finding, never Verdure pins or controls.
+                    if screen == "partner-map-layer", issue.auditType == .hitRegion,
+                       issue.element?.label == "Legal" {
+                        XCTContext.runActivity(named: "AUDIT-NOTE [\(screen)] native MapKit Legal link; physical VoiceOver check remains required") { _ in }
+                        return true
+                    }
+                    // Known SwiftUI limitation: a TextField's audit frame is its text rect
+                    // even when the surrounding container focuses it on tap (ours are ≥44pt
+                    // clay wells wired via FocusState). Note it; don't fail.
+                    if issue.auditType == .hitRegion, issue.element?.elementType == .textField {
+                        XCTContext.runActivity(named: "AUDIT-NOTE [\(screen)] textField rect (container focuses ≥44pt) → \(element.prefix(120))") { _ in }
+                        return true
+                    }
+                    XCTContext.runActivity(named: "AUDIT [\(screen)] \(issue.compactDescription) → \(element.prefix(160))") { _ in }
+                    return false   // every other structural finding fails the test
+                }
             }
-            // Known SwiftUI limitation: a TextField's audit frame is its text rect
-            // even when the surrounding container focuses it on tap (ours are ≥44pt
-            // clay wells wired via FocusState). Note it; don't fail.
-            if issue.auditType == .hitRegion, issue.element?.elementType == .textField {
-                XCTContext.runActivity(named: "AUDIT-NOTE [\(screen)] textField rect (container focuses ≥44pt) → \(element.prefix(120))") { _ in }
-                return true
-            }
-            XCTContext.runActivity(named: "AUDIT [\(screen)] \(issue.compactDescription) → \(element.prefix(160))") { _ in }
-            return false   // every other structural finding fails the test
         }
     }
 

@@ -7,6 +7,7 @@ import { containsPoint } from "./geometry.js";
 import { boundaryDistanceMeters, confirmedAmenities, type ParkSummary } from "./guides.js";
 import { loadParkIndex, placeCatalogState, readPlaceFeatures } from "./store.js";
 import type { Boundary, PlaceFeature, Position } from "./types.js";
+import { readPlaceStory } from "../place-stories.js";
 
 const OPTIONS = { timeoutSeconds: 120 as const, memory: "512MiB" as const, maxInstances: 5 };
 const guestLimits = new Map<string, { start: number; count: number }>();
@@ -119,7 +120,7 @@ export async function weekEvents(uid?: string, now = Date.now()) {
   return events;
 }
 export async function buildParkGuide(state: Awaited<ReturnType<typeof placeCatalogState>>, index: ParkSummary[], id: string,
-  week: Awaited<ReturnType<typeof weekEvents>>) {
+  week: Awaited<ReturnType<typeof weekEvents>>, viewerUid?: string) {
   const summary = index.find((p) => p.id === id);
   if (!summary) throw new HttpsError("not-found", "This park is not in the current catalog.");
   const related = await db.collection(`parkGenerations/${state.generation}/features`).where("parkIds", "array-contains", id).get();
@@ -133,12 +134,12 @@ export async function buildParkGuide(state: Awaited<ReturnType<typeof placeCatal
     trails: features.filter((f) => f.kind === "trail").map((f) => ({ id: f.id, name: f.name, geometry: f.geometry, status: f.status,
       sourceStatus: f.sourceStatus, officialURL: summary.officialURL, ...f.trail })),
     hours: null, accessibility: [...new Set(amenities.map((a) => a.accessibility).filter(Boolean))],
-    entrances: amenities.filter((a) => a.kind === "entrance"), events, credits, story: null };
+    entrances: amenities.filter((a) => a.kind === "entrance"), events, credits, story: await readPlaceStory(id, viewerUid) };
   if (Buffer.byteLength(JSON.stringify(result)) > 24 * 1024 * 1024) throw new HttpsError("resource-exhausted", "This guide exceeds the current download bound.");
   return result;
 }
 export const parkGuide = onCall(OPTIONS, async (req) => {
   const id = validParkId(req.data?.parkId); await browseBudget(req);
   const { state, index } = await catalog();
-  return buildParkGuide(state, index, id, await weekEvents(req.auth?.uid));
+  return buildParkGuide(state, index, id, await weekEvents(req.auth?.uid), req.auth?.uid);
 });
