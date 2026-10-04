@@ -344,3 +344,6 @@ Five new regressions cover actual SDK Auth restoration/sign-out without a foregr
 
 
 The recovery-focused run built current source and passed all five new regressions, stationary partner invalidation, promotional-consent UI and optional Explore UI (8 pass/1 Program AX-hittability failure/0 skips). The native Program test now checks actual rendered bounds instead of querying offscreen AX hittability; its fresh final rerun passed the full sign-in/chip/detail/official-link journey and the same three required structural audits (1 pass/0 fail/0 skips). No production listener patch or timeout relaxation was used to obtain the separate SDK pass. A fresh broad run remains required after the production startup correction. Earlier native attempts remain recorded, not overwritten with fabricated passes.
+
+
+Committed recovery source: `706e1ee`. Fresh unsigned ARM64 iPhone build passed with matching binary/dSYM UUID; explicit receipt is saved. Fresh broad native r4 is running against recreated reserved fixtures at `/tmp/verdure-sprint-native-final-20261004-r4.xcresult`; no success is claimed until its terminal summary is inspected. Physical G/H2 remain incomplete.
