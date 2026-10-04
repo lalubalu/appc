@@ -7,7 +7,7 @@
       "event": "story_expanded",
       "params": {
         "placeId": "osm-999999999999998",
-        "storyId": "2YHvycxHE9SPTV2dNKxF",
+        "storyId": "CPdYyDFOWgDAwbvKtn27",
         "version": 4
       }
     },
@@ -15,7 +15,7 @@
       "event": "story_read_through",
       "params": {
         "placeId": "osm-999999999999998",
-        "storyId": "2YHvycxHE9SPTV2dNKxF",
+        "storyId": "CPdYyDFOWgDAwbvKtn27",
         "version": 4
       }
     },
@@ -23,7 +23,7 @@
       "event": "story_shown",
       "params": {
         "placeId": "osm-999999999999998",
-        "storyId": "2YHvycxHE9SPTV2dNKxF",
+        "storyId": "CPdYyDFOWgDAwbvKtn27",
         "version": 4
       }
     }

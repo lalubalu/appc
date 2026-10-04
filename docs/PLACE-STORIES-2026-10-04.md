@@ -99,3 +99,7 @@ links to the actual support form for guest concerns and written ownership
 confirmation. The change uses the same DEBUG local website override as Terms;
 website publication is not implied. Final native SDK/UI and telemetry proofs
 remain local. A fresh final build includes those support links.
+
+## Final recovery-source verification
+
+Fresh broad native r4 passed 181/181 with zero failures/skips, including story SDK/UI checks. The subsequent actual emulator telemetry read-back again confirmed exactly one shown, one expanded and one end-visible event for the current native story/version. Receipts: `docs/evidence/sprint-native-final-r4-2026-10-04.json` and `docs/evidence/place-stories-native-engagement-2026-10-04.json`.

@@ -229,3 +229,7 @@ The final test taps the measured on-screen annotation and generates a new
 fictional code for each run. A live simulated location stream passed; stale
 one-shot location is the likely reason for the fallback, not a proved physical
 GPS defect. None of these results establishes outdoor/device behavior.
+
+## Final recovery-source verification
+
+The fresh recovery-source map withdrawal run passed 1/1 with zero failures/skips; before/after screenshots were inspected. Receipt: `docs/evidence/native-map-recovery-final-2026-10-04.json`. Images: `partner-detail-recovery-before-withdrawal-2026-10-04.png` and `partner-detail-recovery-after-withdrawal-2026-10-04.png`. Physical venue/GPS acceptance remains untested.

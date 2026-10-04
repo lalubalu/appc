@@ -49,3 +49,8 @@ The integration follows Firebase's official
 ## Fresh iPhone-target build
 
 The committed source at `16c1bad` also builds for `generic/platform=iOS`, Debug/ARM64, with signing and symbol upload disabled. The binary and device-target dSYM share UUID `D8A92333-2F7F-3789-B264-F6AADA79BFF5`. The built app and bundled Firebase configuration both use `com.vaiybhav.verdure`. Exact command and read-back are in `docs/evidence/crashlytics-device-target-build-2026-10-04.json`. This is stronger than Simulator-only compilation, but is not a Personal Team signing/install, symbol upload, physical test crash or dashboard receipt. H2 remains incomplete.
+
+
+## Registered Firebase identity read-back
+
+A read-only live `firebase apps:list IOS --project connectify-19dd8 --json` confirmed that the bundled Google app ID belongs to the registered **Verdure** iOS app, with bundle ID `com.vaiybhav.verdure`. Both the app ID and bundle ID match current local configuration. Evidence: `docs/evidence/crashlytics-firebase-registration-2026-10-04.json`. No Firebase application/configuration was created or changed. This resolves the identity-association check; it does not prove symbol upload or readable physical crash delivery. H2 remains incomplete.
