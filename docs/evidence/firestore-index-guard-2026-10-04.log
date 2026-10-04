@@ -1,0 +1,65 @@
+
+> check:indexes
+> node scripts/check-firestore-indexes.mjs && node scripts/firestore-indexes-unit.mjs
+
+{
+  "status": "passed",
+  "queries": 109,
+  "compoundMappings": 37,
+  "queryShapes": 92,
+  "compositeDefinitions": 31,
+  "fieldOverrides": 12
+}
+PASS direct compound source maps exact fields
+PASS unchanged source/document/config pass
+PASS new undocumented compound query fails
+PASS removed index fails even with unchanged documentation
+PASS wrong ordered direction fails
+PASS wrong collection scope fails
+PASS extra indexed field is not a valid substitute
+PASS equality prefix permutation and direction accepted
+PASS unordered compound range has implicit ascending field
+PASS same-field two-sided range is indexed once
+PASS array filter requires CONTAINS mode
+PASS array equality is not array-contains
+PASS collection-group single field needs override
+PASS correct group override passes
+PASS collection-only override cannot satisfy group query
+PASS automatic field exemption is respected
+PASS duplicate definition fails
+PASS array/order simultaneously fails
+PASS local query alias carries prior filters
+PASS conditional reassignment inventories both paths
+PASS ternary status == and in variants survive
+PASS collection discriminators rule out impossible branches
+PASS for-of finite collection names all inventoried
+PASS template subcollection uses final collection ID
+PASS Query parameter helper appends its own ordering
+PASS detached Query helper cannot hide caller transforms
+PASS same offsets in different files do not suppress queries
+PASS literal comments/strings do not create TS queries
+PASS dynamic field fails closed
+PASS dynamic direction fails closed
+PASS unresolved receiver fails closed
+PASS computed where method fails closed
+PASS detached where method fails closed
+PASS modular Web query requires resolver extension
+PASS new equality-only compound query requires mapping
+PASS Swift balanced multiline arguments parsed
+PASS Swift nested subcollection chosen over parent
+PASS Swift comments and quoted fake methods ignored
+PASS Swift detached alias fails closed
+PASS Swift detached method fails closed
+PASS Swift unsupported predicate fails closed
+PASS Swift source change invalidates documentation
+PASS filter values and limit changes preserve index shape
+PASS directory discovery finds the existing query
+PASS new backend file with existing index still needs documentation
+PASS new Swift file requires documentation
+PASS new Web SDK query is rejected before silently bypassing inventory
+PASS new operational query script requires explicit inventory inclusion
+PASS real file edit fails for missing corresponding index
+{
+  "status": "passed",
+  "checks": 49
+}

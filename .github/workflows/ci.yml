@@ -134,6 +134,12 @@ jobs:
         working-directory: functions
         run: npm run build
 
+      # The emulator ignores missing composite indexes. Source/configuration
+      # coverage and negative regressions are a separate blocking gate.
+      - name: Validate Firestore query indexes
+        working-directory: functions
+        run: npm run check:indexes
+
       # Proves the whole server contract without touching production: storage
       # ownership rules, check-in proof/GPS validation, point clamps and
       # idempotency, the Firestore lockdown, Verdure+ entitlement gating,

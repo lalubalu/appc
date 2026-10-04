@@ -38,7 +38,7 @@ synonym map remain untouched; `CLAUDE.md` deploy status remains untouched.
 | G1 | Free-team installs on two real iPhones; local populated emulator via DEBUG opt-in | Pending; no hardware evidence collected |
 | G2 | Full DEVICE-QA and all sprint additions, outdoor offline trail/GPS test, two-phone flows, a11y/network/power/performance/StoreKit | Pending |
 | G3 | Dated device/iOS/item results; defects fixed/regressed; committed; membership/deploy-dependent behavior explicitly untested | Pending |
-| H1 | All app/backend/console compound queries inventoried and mapped to matching indexes with locations; missing indexes added; undocumented-query regression check | Pending |
+| H1 | All app/backend/console compound queries inventoried and mapped to matching indexes with locations; missing indexes added; undocumented-query regression check | Complete locally: 109 source variants (37 compound mappings, 72 simpler queries), 92 distinct shapes; nine composite definitions and four group overrides added. Source-aware guard runs in backend CI and test:units; 49 positive/negative checks plus 424 existing backend checks passed with a fresh build and D1 freeze check. See FIRESTORE-INDEXES.md and docs/evidence/firestore-index-audit-2026-10-04.json. No indexes deployed or live readiness inferred. |
 | H2 | Crashlytics integration/symbol upload; physical readable test crash; accurate privacy/App Privacy in same change | Pending |
 | Final gate | Fresh iOS/backend unit/E2E/red-team checks green; every scope item audited; no deploy/status change | Pending |
 
@@ -204,3 +204,26 @@ been claimed.
   tasks remain pending, rather than being quietly cut after meeting the minimum.
 - F1/F2, A6, remaining partner caches, H1/H2, physical G and final acceptance
   still remain. No ranking/classifier drift, deployment or optional cut occurred.
+
+## October 4 Firestore-index checkpoint
+
+- H1 inventories current native Swift, Functions, website-console server paths
+  and four operational scripts. Alias builders, status/filter branches, finite
+  collection selectors and the offline paging helper are included. Conservative
+  builder prefixes are documented explicitly; these counts do not claim 109
+  separate executed queries.
+- Added nine composite definitions and four collection-group overrides. The
+  previously missing follower-event, invite cleanup and account-deletion group
+  mappings are covered alongside the ranking, ingestion and console queries.
+- The guard verifies source locations/shapes against the documentation and
+  actual index fields/scope/direction/array modes. Unknown syntax fails closed.
+  Temporary-fixture tests prove new backend/Swift files, Web SDK queries and
+  operational scripts cannot silently bypass inventory; missing definitions and
+  undocumented changes are rejected. Output is deterministic across locales.
+- Fresh TypeScript build and all 424 existing backend checks passed; the 49
+  index-guard cases passed both in the full command and the final focused run.
+  D1's six-file freeze passed. CI is configured to run the guard; no remote CI
+  run or live index deployment was performed. Logs and source digests are saved.
+- Remaining partner caches, F1/F2, A6, D2 permission/venue follow-up, H2,
+  physical G and final whole-sprint acceptance remain in scope. Nothing was cut
+  or deployed. The full sprint remains incomplete.
