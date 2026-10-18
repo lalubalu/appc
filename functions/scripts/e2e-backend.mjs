@@ -181,7 +181,7 @@ async function main() {
     time: "12:00 PM", locationName: "E2E Venue", attendeeCount: 1,
     category: "Volunteer", imagePlaceholder: "heart.fill", pointValue: 200,
     creatorID: "seed-admin", createdAt: new Date(),
-    latitude: 44.98, longitude: -93.26,
+    latitude: 44.98, longitude: -93.26, adultOnly: false,
   });
   await db.doc("events/e2e-event-1").set(event("E2E Cleanup One"));
   await db.doc("events/e2e-event-2").set(event("E2E Cleanup Two"));
@@ -741,7 +741,7 @@ async function main() {
     title: "Deleter's Event", organizer: "Delete Me", date: new Date("2026-12-01T17:00:00Z"),
     time: "12:00 PM", locationName: "Venue", attendeeCount: 1, category: "Social",
     imagePlaceholder: "cup.and.saucer.fill", pointValue: 100, creatorID: del.uid,
-    createdAt: serverTimestamp(), hidden: false, active: true, source: "community",
+    createdAt: serverTimestamp(), hidden: false, active: true, source: "community", adultOnly: false,
   });
   // Someone RSVP'd to their event; they RSVP'd to someone else's (server-written rows).
   await db.doc(`events/e2e-del-event/attendees/${bystander2.uid}`).set({ uid: bystander2.uid, createdAt: new Date() });
@@ -949,7 +949,7 @@ async function main() {
   const baseEvent = {
     title: "Self Broadcast", organizer: "Me", date: new Date(Date.now() + 7 * 86_400_000), time: "6 PM",
     locationName: "Somewhere", attendeeCount: 1, category: "Social", imagePlaceholder: "cup.and.saucer.fill",
-    pointValue: 100, creatorID: uid, createdAt: serverTimestamp(), hidden: false, active: true, source: "community",
+    pointValue: 100, creatorID: uid, createdAt: serverTimestamp(), hidden: false, active: true, source: "community", adultOnly: false,
   };
   const tryCreate = async (id, extra) => { try { await setDoc(doc(cdb, `events/${id}`), { ...baseEvent, ...extra }); return "ok"; } catch (e) { return e.code; } };
   ok("rules: client cannot create an event with broadcast: true", (await tryCreate("e2e-selfbc", { broadcast: true })) === "permission-denied");
@@ -995,7 +995,7 @@ async function main() {
     title: "Thursday Trail Cleanup", organizer: "Metroparks Friends", date: new Date(Date.now() + 5 * 86_400_000),
     time: "6:00 PM", locationName: "Edgewater Park", attendeeCount: 0, category: "Cleanup",
     imagePlaceholder: "sparkles", pointValue: 200, creatorID: "system:ingest", createdAt: new Date(),
-    hidden: false, active: true, broadcast: true, source: "libcal", areaId: "san-jose-ca",
+    hidden: false, active: true, broadcast: true, source: "libcal", areaId: "san-jose-ca", adultOnly: false,
     latitude: 37.3230, longitude: -121.9200,
   });
 

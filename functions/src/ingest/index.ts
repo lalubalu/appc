@@ -122,7 +122,8 @@ export async function runSource(source: SourceId, area: LaunchArea, keys: Keys, 
   const result: IngestResult = {
     source, areaId: area.id, fetched: 0, created: 0, updated: 0, merged: 0,
     mergeRate: 0, suspectedDuplicates: 0, suspectedDuplicateRate: 0,
-    markedStale: 0, deactivated: 0, skipped: 0, errors: [], durationMs: 0,
+    markedStale: 0, deactivated: 0, skipped: 0, unchanged: 0, fuzzyMerged: 0, rejected: 0, rejectedByReason: {}, writes: 0,
+    errors: [], durationMs: 0,
   };
   try {
     const records = payload ?? await fetchSource(source, area, keys);
@@ -138,6 +139,7 @@ export async function runSource(source: SourceId, area: LaunchArea, keys: Keys, 
       const stale = await markStale(source, area, index, runStart);
       result.markedStale = stale.markedStale;
       result.deactivated = stale.deactivated;
+      result.writes += stale.writes;
     }
     const audit = auditSuspectedDuplicates(index);
     result.suspectedDuplicates = audit.suspected;
@@ -159,8 +161,15 @@ export async function runSource(source: SourceId, area: LaunchArea, keys: Keys, 
     supply: { [`${source}.fetched`]: FieldValue.increment(result.fetched), [`${source}.runs`]: FieldValue.increment(1) },
     dedupe: {
       [`${source}.merged`]: FieldValue.increment(result.merged),
+      [`${source}.fuzzyMerged`]: FieldValue.increment(result.fuzzyMerged),
       [`${source}.candidates`]: FieldValue.increment(result.created + result.merged),
       [`${source}.suspectedRate`]: result.suspectedDuplicateRate,
+    },
+    // Free-tier budget telemetry: writes issued and writes avoided, per source.
+    writes: {
+      [`${source}.writes`]: FieldValue.increment(result.writes),
+      [`${source}.unchanged`]: FieldValue.increment(result.unchanged),
+      [`${source}.rejected`]: FieldValue.increment(result.rejected),
     },
     updatedAt: FieldValue.serverTimestamp(),
   }, { merge: true });

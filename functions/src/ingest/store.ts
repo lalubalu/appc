@@ -1,27 +1,44 @@
 /**
- * The normalized /events store: write-time dedupe, provenance, staleness.
+ * The normalized /events store: listing checks, write-time dedupe, provenance,
+ * staleness, and write-only-what-changed.
  *
  * ONE PASS, AT WRITE TIME. Every record that any fetcher produces goes through
  * `upsertBatch`, which:
- *   1. drops anything outside the launch area or the 120-day horizon;
+ *   0. rejects listings that fail John's blocking rules (port of validate.py:
+ *      missing title or start, end before start, already ended, cancelled,
+ *      outside the radius, in-person with no location) into /rejectedListings
+ *      with their reasons and a 30-day expiry, counted per source;
+ *   1. drops anything beyond the 120-day horizon;
  *   2. finds the same event by its own source key (`sourceKeys` array) and
- *      refreshes it;
+ *      refreshes it — SKIPPING THE WRITE when its content hash is unchanged,
+ *      missedCycles is 0 and lastSeenAt was refreshed within 24 hours;
  *   3. otherwise looks for a CROSS-SOURCE duplicate — same normalised title,
  *      start within 120 minutes, same venue key or within 300 m — and merges
  *      into it, recording the extra feed in `sources[]`;
- *   4. otherwise creates a new document with a stable id.
+ *   4. otherwise runs John's fuzzy rule (port of dedupe.py) as a SECOND pass —
+ *      title-token Jaccard ≥ 0.7 after stop-words, start within 30 minutes,
+ *      same venue or within 0.25 miles — and merges the same way, keeping the
+ *      richer listing;
+ *   5. otherwise creates a new document with a stable id.
+ *
+ * Right after the frozen classifier (`enrichEvent`) every record is annotated
+ * (`annotateEvent`: adultOnly + topicTags). Those two fields exist on every
+ * stored event; the frozen classifier files are not touched.
  *
  * STALENESS, NOT DELETION. After a source's records are processed, any FUTURE
  * event from that source not seen this run gets `missedCycles + 1`; at
  * STALE_CYCLES it is marked `active: false`. Cancellations therefore disappear
  * from the app within a few cycles without ever deleting history, and a feed
  * outage (zero records) is treated as "nothing seen" only when the fetch
- * succeeded — a thrown fetch never marks anything stale.
+ * succeeded — a thrown fetch never marks anything stale. Skipping unchanged
+ * writes does not change this: "seen this run" is tracked in the in-memory
+ * index, which upsertBatch refreshes whether or not it writes.
  *
  * The whole area's active corpus is loaded into memory once per run (a few
  * thousand documents) so dedupe costs one query, not one per record.
  */
 
+import { createHash } from "node:crypto";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { db } from "../common.js";
 import type { LaunchArea } from "./areas.js";
@@ -29,7 +46,8 @@ import { isInsideArea } from "./areas.js";
 import type { NormalizedEvent, SourceId } from "./types.js";
 import { CATEGORY_ICON, CATEGORY_POINTS } from "./types.js";
 import { eventDocId, sourceKey, startBucket, titleKey, venueKey } from "./normalize.js";
-import { enrichEvent, type EnrichedEvent } from "./classify.js";
+import { enrichEvent } from "./classify.js";
+import { annotateEvent, type AnnotatedEvent } from "./annotate.js";
 import { distanceMeters } from "../common.js";
 
 export const STALE_CYCLES = 3;
@@ -37,20 +55,39 @@ const HORIZON_DAYS = 120;
 const MATCH_WINDOW_MS = 120 * 60 * 1000;
 const MATCH_DISTANCE_M = 300;
 const BATCH = 400;
+/** W1.4: an unchanged sighting is rewritten at most once in this window, so lastSeenAt stays fresh to the day. */
+export const UNCHANGED_REWRITE_MS = 24 * 3_600_000;
+/** Rejected listings expire after this many days (a Firestore TTL policy on `expiresAt`). */
+export const REJECTED_TTL_DAYS = 30;
+/** A rejection row is refreshed when its expiry is closer than this, so a persistent bad listing stays visible. */
+const REJECTED_REFRESH_MS = 7 * 86_400_000;
 
 interface IndexedEvent {
   id: string;
   data: FirebaseFirestore.DocumentData;
 }
 
-interface AreaIndex {
+export interface AreaIndex {
   bySourceKey: Map<string, IndexedEvent>;
   byTitleKey: Map<string, IndexedEvent[]>;
+  /** Start-hour buckets for the fuzzy second pass (port of dedupe.py's hour buckets). */
+  byHour: Map<number, IndexedEvent[]>;
   all: IndexedEvent[];
+  /** Existing /rejectedListings rows for the area, by document id, so a repeat rejection is not rewritten. */
+  rejected: Map<string, FirebaseFirestore.DocumentData>;
 }
 
 export interface UpsertStats {
   created: number; updated: number; merged: number; skipped: number;
+  /** Sightings whose content hash, missedCycles and lastSeenAt made a write unnecessary. */
+  unchanged: number;
+  /** Merges found only by the fuzzy second pass. */
+  fuzzyMerged: number;
+  /** Listings that failed a blocking rule (written to /rejectedListings). */
+  rejected: number;
+  rejectedByReason: Record<string, number>;
+  /** Document writes issued (sets to /events and /rejectedListings). */
+  writes: number;
 }
 
 /**
@@ -65,13 +102,21 @@ export async function loadAreaIndex(area: LaunchArea, now = new Date()): Promise
     .where("areaId", "==", area.id)
     .where("date", ">=", Timestamp.fromMillis(now.getTime() - 2 * 86_400_000))
     .orderBy("date");
-  const index: AreaIndex = { bySourceKey: new Map(), byTitleKey: new Map(), all: [] };
+  const index: AreaIndex = { bySourceKey: new Map(), byTitleKey: new Map(), byHour: new Map(), all: [], rejected: new Map() };
   let cursor: FirebaseFirestore.QueryDocumentSnapshot | undefined;
   for (;;) {
     const snap = await (cursor ? query.startAfter(cursor) : query).limit(500).get();
     snap.forEach((d) => addToIndex(index, { id: d.id, data: d.data() }));
     if (snap.size < 500) break;
     cursor = snap.docs[snap.docs.length - 1];
+  }
+  const rejectedQuery = db.collection("rejectedListings").where("areaId", "==", area.id);
+  let rejectedCursor: FirebaseFirestore.QueryDocumentSnapshot | undefined;
+  for (;;) {
+    const snap = await (rejectedCursor ? rejectedQuery.startAfter(rejectedCursor) : rejectedQuery).limit(500).get();
+    snap.forEach((d) => index.rejected.set(d.id, d.data()));
+    if (snap.size < 500) break;
+    rejectedCursor = snap.docs[snap.docs.length - 1];
   }
   return index;
 }
@@ -85,6 +130,13 @@ function addToIndex(index: AreaIndex, ev: IndexedEvent) {
     list.push(ev);
     index.byTitleKey.set(tk, list);
   }
+  const millis = ev.data.date?.toMillis?.();
+  if (Number.isFinite(millis)) {
+    const hour = Math.floor(millis / 3_600_000);
+    const bucket = index.byHour.get(hour) ?? [];
+    bucket.push(ev);
+    index.byHour.set(hour, bucket);
+  }
 }
 
 /**
@@ -92,7 +144,7 @@ function addToIndex(index: AreaIndex, ev: IndexedEvent) {
  * It is intentionally a heuristic: a warning for review, not a deletion rule.
  * Grouping by hour keeps the scan bounded even for a large launch-area corpus.
  */
-export function auditSuspectedDuplicates(index: AreaIndex): { active: number; suspected: number; rate: number } {
+export function auditSuspectedDuplicates(index: Pick<AreaIndex, "all"> & Partial<AreaIndex>): { active: number; suspected: number; rate: number } {
   const byHour = new Map<number, IndexedEvent[]>();
   let active = 0;
   let suspected = 0;
@@ -158,7 +210,7 @@ function richness(d: { description?: string; latitude?: unknown; imageURL?: unkn
     + (d.imageURL ? 1 : 0) + (d.website ? 1 : 0);
 }
 
-function enrichmentFields(rec: EnrichedEvent): FirebaseFirestore.DocumentData {
+function enrichmentFields(rec: AnnotatedEvent): FirebaseFirestore.DocumentData {
   return {
     categories: rec.categories,
     classificationConfidence: rec.classificationConfidence,
@@ -166,10 +218,54 @@ function enrichmentFields(rec: EnrichedEvent): FirebaseFirestore.DocumentData {
     inferredCost: rec.inferredCost,
     ageSuitability: rec.ageSuitability,
     endInferred: rec.endInferred,
+    adultOnly: rec.adultOnly,
+    adultOnlyReason: rec.adultOnlyReason,
+    topicTags: rec.topicTags,
   };
 }
 
-function fullDocument(rec: EnrichedEvent, now: Timestamp): FirebaseFirestore.DocumentData {
+// ── W1.4 content hash ────────────────────────────────────────────────────────
+
+/**
+ * Stable digest of everything a primary sighting would rewrite. Dates are
+ * hashed as epoch millis and optional fields as explicit nulls, so a feed that
+ * drops a price or adds an image changes the hash and forces the write.
+ */
+export function contentHash(rec: AnnotatedEvent): string {
+  const material = {
+    title: rec.title, description: rec.description, organizer: rec.organizer,
+    start: rec.start.getTime(), end: rec.end ? rec.end.getTime() : null, time: rec.time,
+    locationName: rec.locationName, latitude: rec.latitude ?? null, longitude: rec.longitude ?? null,
+    category: rec.category, categories: rec.categories, classificationConfidence: rec.classificationConfidence,
+    qualityScore: rec.qualityScore, inferredCost: rec.inferredCost, ageSuitability: rec.ageSuitability, endInferred: rec.endInferred,
+    isFree: rec.isFree ?? null, priceMin: rec.priceMin ?? null, website: rec.website ?? null, imageURL: rec.imageURL ?? null,
+    tags: rec.tags.slice(0, 8), eventTypes: rec.eventTypes ?? [], audiences: rec.audiences ?? [],
+    adultOnly: rec.adultOnly, adultOnlyReason: rec.adultOnlyReason, topicTags: rec.topicTags,
+  };
+  return createHash("sha1").update(JSON.stringify(material)).digest("hex");
+}
+
+/** True when a refreshed sighting may skip its write (W1.4). Staleness is untouched: missedCycles must already be 0. */
+export function unchangedSighting(existing: FirebaseFirestore.DocumentData, hash: string, runStartMs: number): boolean {
+  const lastSeen: number | undefined = existing.lastSeenAt?.toMillis?.();
+  return existing.contentHash === hash
+    && (Number(existing.missedCycles) || 0) === 0
+    && existing.active === true
+    && typeof lastSeen === "number" && runStartMs - lastSeen < UNCHANGED_REWRITE_MS;
+}
+
+/** Field-by-field "would this update change the document?" for the secondary-source path. */
+function changesNothing(existing: FirebaseFirestore.DocumentData, upd: FirebaseFirestore.DocumentData): boolean {
+  const canon = (v: unknown): unknown => {
+    if (v instanceof Timestamp) return v.toMillis();
+    if (Array.isArray(v)) return v.map(canon);
+    if (v && typeof v === "object") return Object.fromEntries(Object.entries(v as Record<string, unknown>).sort().map(([k, x]) => [k, canon(x)]));
+    return v ?? null;
+  };
+  return Object.entries(upd).every(([k, v]) => JSON.stringify(canon(existing[k])) === JSON.stringify(canon(v)));
+}
+
+function fullDocument(rec: AnnotatedEvent, now: Timestamp): FirebaseFirestore.DocumentData {
   const doc: FirebaseFirestore.DocumentData = {
     title: rec.title,
     description: rec.description,
@@ -202,6 +298,7 @@ function fullDocument(rec: EnrichedEvent, now: Timestamp): FirebaseFirestore.Doc
     eventTypes: rec.eventTypes ?? [],
     audiences: rec.audiences ?? [],
     ...enrichmentFields(rec),
+    contentHash: contentHash(rec),
     ingestedAt: now,
     lastSeenAt: now,
     missedCycles: 0,
@@ -216,7 +313,7 @@ function fullDocument(rec: EnrichedEvent, now: Timestamp): FirebaseFirestore.Doc
 }
 
 /** Fields refreshed on every sighting from the PRIMARY source. */
-function refreshFromPrimary(rec: EnrichedEvent): FirebaseFirestore.DocumentData {
+function refreshFromPrimary(rec: AnnotatedEvent, hash: string): FirebaseFirestore.DocumentData {
   const upd: FirebaseFirestore.DocumentData = {
     title: rec.title, description: rec.description, organizer: rec.organizer,
     date: Timestamp.fromDate(rec.start), time: rec.time, locationName: rec.locationName,
@@ -225,6 +322,7 @@ function refreshFromPrimary(rec: EnrichedEvent): FirebaseFirestore.DocumentData 
     isFree: rec.isFree ?? null, tags: rec.tags.slice(0, 8),
     eventTypes: rec.eventTypes ?? [], audiences: rec.audiences ?? [],
     ...enrichmentFields(rec),
+    contentHash: hash,
   };
   if (rec.end) upd.endDate = Timestamp.fromDate(rec.end);
   if (rec.latitude !== undefined) upd.latitude = rec.latitude;
@@ -236,7 +334,7 @@ function refreshFromPrimary(rec: EnrichedEvent): FirebaseFirestore.DocumentData 
 }
 
 /** Fill blanks from a secondary source without overwriting the primary's facts. */
-function fillFromSecondary(existing: FirebaseFirestore.DocumentData, rec: EnrichedEvent): FirebaseFirestore.DocumentData {
+function fillFromSecondary(existing: FirebaseFirestore.DocumentData, rec: AnnotatedEvent): FirebaseFirestore.DocumentData {
   const upd: FirebaseFirestore.DocumentData = {};
   upd.categories = [...new Set([...(Array.isArray(existing.categories) ? existing.categories : [existing.category]), ...rec.categories])];
   upd.classificationConfidence = Math.max(Number(existing.classificationConfidence) || 0, rec.classificationConfidence);
@@ -253,12 +351,71 @@ function fillFromSecondary(existing: FirebaseFirestore.DocumentData, rec: Enrich
   if (existing.isFree === true && rec.isFree === false && rec.priceMin !== undefined) {
     upd.isFree = false; upd.priceMin = rec.priceMin;
   }
+  // Err toward true: one feed saying "21+" makes the merged listing adult-only.
+  upd.adultOnly = existing.adultOnly === true || rec.adultOnly;
+  upd.adultOnlyReason = existing.adultOnly === true ? (existing.adultOnlyReason ?? null) : rec.adultOnlyReason;
+  upd.topicTags = [...new Set([...(Array.isArray(existing.topicTags) ? existing.topicTags : []), ...rec.topicTags])].filter((t) => t !== "other");
+  if (!upd.topicTags.length) upd.topicTags = ["other"];
   return upd;
 }
 
 export function isWithinHorizon(rec: NormalizedEvent, now = Date.now()): boolean {
   const t = rec.start.getTime();
   return Number.isFinite(t) && t >= now - 86_400_000 && t <= now + HORIZON_DAYS * 86_400_000;
+}
+
+// ── W1.2 listing checks — port of validate.py: BLOCKING / validate() ────────
+
+/** Port of validate.py: BLOCKING */
+export type RejectionReason =
+  | "missing_title" | "missing_start" | "end_before_start" | "already_ended"
+  | "cancelled" | "outside_region" | "missing_location_in_person";
+
+/** Port of validate.py: schedule.drop_past_after_hours (2 hours of grace). */
+export const ENDED_GRACE_MS = 2 * 3_600_000;
+
+const ONLINE_LOCATION = /\b(?:virtual|online|zoom|webinar|livestream|live stream|teams meeting|google meet)\b/i;
+const CANCELLED_TITLE = /^\s*(?:\[?\(?\s*)?(?:cancel+ed|postponed|rescheduled)\b/i;
+
+/** John's `format == "online"`: the feed has no format field, so the location (or title) must say so. */
+export function isOnlineListing(rec: NormalizedEvent & { virtual?: boolean }): boolean {
+  return rec.virtual === true || ONLINE_LOCATION.test(rec.locationName) || /\b(?:virtual|online|webinar)\b/i.test(rec.title);
+}
+
+/**
+ * Port of validate.py: the blocking half of validate(). Returns every reason
+ * that applies; an empty list means the listing may be stored. Non-blocking
+ * issues (short description, no price, …) lower qualityScore in the frozen
+ * classifier instead and are not repeated here.
+ */
+export function listingChecks(rec: NormalizedEvent & { status?: string; virtual?: boolean }, area: LaunchArea, now = Date.now()): RejectionReason[] {
+  const reasons: RejectionReason[] = [];
+  if (!rec.title || rec.title.trim().length < 3) reasons.push("missing_title");
+  const startMs = rec.start instanceof Date ? rec.start.getTime() : NaN;
+  if (!Number.isFinite(startMs)) reasons.push("missing_start");
+  const endMs = rec.end instanceof Date ? rec.end.getTime() : NaN;
+  if (Number.isFinite(startMs) && Number.isFinite(endMs) && endMs < startMs) reasons.push("end_before_start");
+  const endOrStart = Number.isFinite(endMs) ? endMs : startMs;
+  if (Number.isFinite(endOrStart) && endOrStart + ENDED_GRACE_MS < now) reasons.push("already_ended");
+  if (rec.status === "cancelled" || CANCELLED_TITLE.test(rec.title ?? "")) reasons.push("cancelled");
+  const online = isOnlineListing(rec);
+  const hasCoords = typeof rec.latitude === "number" && typeof rec.longitude === "number";
+  if (hasCoords && !online && !isInsideArea(area, rec.latitude!, rec.longitude!)) reasons.push("outside_region");
+  if (!online && !hasCoords && !venueKey(rec.locationName ?? "")) reasons.push("missing_location_in_person");
+  return reasons;
+}
+
+function rejectedDocument(rec: NormalizedEvent, reasons: RejectionReason[], now: Timestamp, firstRejectedAt: Timestamp): FirebaseFirestore.DocumentData {
+  const startMs = rec.start instanceof Date ? rec.start.getTime() : NaN;
+  return {
+    source: rec.source, sourceEventId: rec.sourceEventId, areaId: rec.areaId,
+    title: rec.title ?? "", organizer: rec.organizer ?? "", locationName: rec.locationName ?? "",
+    start: Number.isFinite(startMs) ? Timestamp.fromMillis(startMs) : null,
+    url: rec.website ?? null,
+    reasons: [...reasons].sort(),
+    firstRejectedAt, rejectedAt: now,
+    expiresAt: Timestamp.fromMillis(now.toMillis() + REJECTED_TTL_DAYS * 86_400_000),
+  };
 }
 
 /**
@@ -268,13 +425,14 @@ export function isWithinHorizon(rec: NormalizedEvent, now = Date.now()): boolean
 export async function upsertBatch(
   records: NormalizedEvent[], area: LaunchArea, index: AreaIndex, runStart: Date,
 ): Promise<UpsertStats> {
-  const stats: UpsertStats = { created: 0, updated: 0, merged: 0, skipped: 0 };
+  const stats: UpsertStats = { created: 0, updated: 0, merged: 0, skipped: 0, unchanged: 0, fuzzyMerged: 0, rejected: 0, rejectedByReason: {}, writes: 0 };
   const now = Timestamp.fromDate(runStart);
+  const runMs = runStart.getTime();
   let batch = db.batch();
   let pending = 0;
   const flush = async () => { if (pending) { await batch.commit(); batch = db.batch(); pending = 0; } };
   const queue = async (fn: (b: FirebaseFirestore.WriteBatch) => void) => {
-    fn(batch); pending++;
+    fn(batch); pending++; stats.writes++;
     if (pending >= BATCH) await flush();
   };
 
@@ -296,22 +454,73 @@ export async function upsertBatch(
     }
   }
 
+  const mergeInto = async (match: IndexedEvent, rec: AnnotatedEvent, key: string) => {
+    const richer = richness(rec) > richness(match.data as { description?: string; latitude?: unknown; imageURL?: unknown; website?: unknown });
+    const upd: FirebaseFirestore.DocumentData = {
+      ...fillFromSecondary(match.data, rec),
+      ...(richer && rec.description.length > (match.data.description?.length ?? 0) ? { description: rec.description } : {}),
+      sourceKeys: FieldValue.arrayUnion(key),
+      sources: FieldValue.arrayUnion({ source: rec.source, sourceEventId: rec.sourceEventId, url: rec.website ?? null, lastSeenAt: now }),
+      lastSeenAt: now, missedCycles: 0, active: true,
+    };
+    // Keep the in-memory index truthful for the rest of the run.
+    (match.data.sourceKeys as string[]) = [...((match.data.sourceKeys as string[]) ?? []), key];
+    (match.data.sources as unknown[]) = [...((match.data.sources as unknown[]) ?? []), { source: rec.source, sourceEventId: rec.sourceEventId }];
+    match.data.lastSeenAt = now;
+    match.data.missedCycles = 0;
+    match.data.active = true;
+    match.data.adultOnly = upd.adultOnly;
+    match.data.topicTags = upd.topicTags;
+    index.bySourceKey.set(key, match);
+    await queue((b) => b.set(db.collection("events").doc(match.id), upd, { merge: true }));
+    stats.merged++;
+  };
+
   for (const raw of records) {
     const cached = venueCoordinates.get(venueIdentity(raw.organizer, raw.locationName));
     const withCoords = raw.latitude == null && raw.longitude == null && cached
       ? { ...raw, latitude: cached.lat, longitude: cached.lng } : raw;
-    const rec = enrichEvent(withCoords);
-    if (!rec.title || !isWithinHorizon(rec, runStart.getTime())) { stats.skipped++; continue; }
-    if (rec.latitude !== undefined && rec.longitude !== undefined && !isInsideArea(area, rec.latitude, rec.longitude)) {
-      stats.skipped++; continue;   // geographic scoping: never ingest outside the launch area
+
+    // 0. Blocking listing checks (port of validate.py). Rejections are recorded
+    //    once with their reasons and refreshed weekly, never rewritten per run.
+    const reasons = listingChecks(withCoords, area, runMs);
+    if (reasons.length) {
+      stats.rejected++;
+      for (const r of reasons) stats.rejectedByReason[r] = (stats.rejectedByReason[r] ?? 0) + 1;
+      const id = eventDocId(withCoords.source, withCoords.sourceEventId || `${runMs}-${stats.rejected}`);
+      const prior = index.rejected.get(id);
+      const sameReasons = prior && JSON.stringify(prior.reasons ?? []) === JSON.stringify([...reasons].sort());
+      const fresh = prior && (prior.expiresAt?.toMillis?.() ?? 0) - runMs > REJECTED_REFRESH_MS;
+      if (!(sameReasons && fresh)) {
+        const doc = rejectedDocument(withCoords, reasons, now, prior?.firstRejectedAt ?? now);
+        index.rejected.set(id, doc);
+        await queue((b) => b.set(db.collection("rejectedListings").doc(id), doc, { merge: true }));
+      }
+      continue;
     }
+
+    // 1. Horizon: not a rejection, just not ingested yet.
+    if (!isWithinHorizon(withCoords, runMs)) { stats.skipped++; continue; }
+
+    const rec = annotateEvent(enrichEvent(withCoords));
+    const hash = contentHash(rec);
     const key = sourceKey(rec.source, rec.sourceEventId);
     const seen = index.bySourceKey.get(key);
 
+    // 2. Same source key: refresh, or skip the write when nothing changed.
     if (seen) {
       const isPrimary = seen.data.source === rec.source;
+      const fieldUpdate = isPrimary ? refreshFromPrimary(rec, hash) : fillFromSecondary(seen.data, rec);
+      const skippable = isPrimary ? unchangedSighting(seen.data, hash, runMs)
+        : (changesNothing(seen.data, fieldUpdate) && unchangedSighting(seen.data, String(seen.data.contentHash ?? ""), runMs));
+      if (skippable) {
+        // Seen this run — markStale reads the in-memory index, so staleness is unaffected.
+        seen.data.lastSeenAt = now;
+        stats.unchanged++;
+        continue;
+      }
       const upd: FirebaseFirestore.DocumentData = {
-        ...(isPrimary ? refreshFromPrimary(rec) : fillFromSecondary(seen.data, rec)),
+        ...fieldUpdate,
         lastSeenAt: now, missedCycles: 0, active: true,
         sources: ((seen.data.sources as Array<Record<string, unknown>>) ?? []).map((s) =>
           s.source === rec.source && s.sourceEventId === rec.sourceEventId ? { ...s, lastSeenAt: now, url: rec.website ?? s.url ?? null } : s),
@@ -322,27 +531,25 @@ export async function upsertBatch(
       continue;
     }
 
+    // 3. Exact-key cross-source duplicate.
     const candidates = index.byTitleKey.get(titleKey(rec.title)) ?? [];
     const match = candidates.find((c) => isSameEvent(c.data, rec));
-    if (match) {
-      const richer = richness(rec) > richness(match.data as { description?: string; latitude?: unknown; imageURL?: unknown; website?: unknown });
-      const upd: FirebaseFirestore.DocumentData = {
-        ...fillFromSecondary(match.data, rec),
-        ...(richer && rec.description.length > (match.data.description?.length ?? 0) ? { description: rec.description } : {}),
-        sourceKeys: FieldValue.arrayUnion(key),
-        sources: FieldValue.arrayUnion({ source: rec.source, sourceEventId: rec.sourceEventId, url: rec.website ?? null, lastSeenAt: now }),
-        lastSeenAt: now, missedCycles: 0, active: true,
-      };
-      // Keep the in-memory index truthful for the rest of the run.
-      (match.data.sourceKeys as string[]) = [...((match.data.sourceKeys as string[]) ?? []), key];
-      (match.data.sources as unknown[]) = [...((match.data.sources as unknown[]) ?? []), { source: rec.source, sourceEventId: rec.sourceEventId }];
-      match.data.lastSeenAt = now;
-      index.bySourceKey.set(key, match);
-      await queue((b) => b.set(db.collection("events").doc(match.id), upd, { merge: true }));
-      stats.merged++;
-      continue;
-    }
+    if (match) { await mergeInto(match, rec, key); continue; }
 
+    // 4. Fuzzy second pass (port of dedupe.py), over the neighbouring start hours.
+    const listing = fuzzyListingFromRecord(rec);
+    const hour = Math.floor(listing.startMs / 3_600_000);
+    let fuzzyMatch: IndexedEvent | undefined;
+    for (const h of [hour - 1, hour, hour + 1]) {
+      for (const c of index.byHour.get(h) ?? []) {
+        const other = fuzzyListingFromDoc(c.data);
+        if (other && isFuzzyDuplicate(other, listing)) { fuzzyMatch = c; break; }
+      }
+      if (fuzzyMatch) break;
+    }
+    if (fuzzyMatch) { await mergeInto(fuzzyMatch, rec, key); stats.fuzzyMerged++; continue; }
+
+    // 5. New document.
     const id = eventDocId(rec.source, rec.sourceEventId);
     const doc = fullDocument(rec, now);
     addToIndex(index, { id, data: doc });
@@ -359,8 +566,8 @@ export async function upsertBatch(
  */
 export async function markStale(
   source: SourceId, area: LaunchArea, index: AreaIndex, runStart: Date,
-): Promise<{ markedStale: number; deactivated: number }> {
-  let markedStale = 0, deactivated = 0;
+): Promise<{ markedStale: number; deactivated: number; writes: number }> {
+  let markedStale = 0, deactivated = 0, writes = 0;
   let batch = db.batch();
   let pending = 0;
   const runMs = runStart.getTime();
@@ -376,10 +583,11 @@ export async function markStale(
     markedStale++;
     Object.assign(ev.data, upd);
     batch.set(db.collection("events").doc(ev.id), upd, { merge: true });
+    writes++;
     if (++pending >= BATCH) { await batch.commit(); batch = db.batch(); pending = 0; }
   }
   if (pending) await batch.commit();
-  return { markedStale, deactivated };
+  return { markedStale, deactivated, writes };
 }
 
 // ── Fuzzy duplicate rule — port of reference/verdure-discovery/verdure/dedupe.py ──
@@ -389,7 +597,7 @@ export async function markStale(
 // John's rule: title-token Jaccard ≥ 0.7 after stop-words, start within 30
 // minutes, and same venue (venue-token Jaccard ≥ 0.5) or within 0.25 miles.
 // These functions are pure so the baseline script can run them in report-only
-// mode over the stored corpus, and so the write path can reuse them verbatim.
+// mode over the stored corpus, and so the write path reuses them verbatim.
 
 /** Port of dedupe.py: STOPWORDS */
 export const FUZZY_STOPWORDS = new Set(["the", "a", "an", "and", "of", "at", "in", "for", "with", "to", "on", "&"]);
@@ -480,7 +688,7 @@ export function fuzzyListingFromRecord(rec: NormalizedEvent): FuzzyListing {
     title: rec.title, startMs: rec.start.getTime(),
     venue: venueKey(rec.locationName) ? rec.locationName : "",
     latitude: rec.latitude ?? null, longitude: rec.longitude ?? null, url: rec.website ?? null,
-    online: false,
+    online: isOnlineListing(rec),
   };
 }
 
@@ -490,7 +698,7 @@ export function fuzzyListingFromRecord(rec: NormalizedEvent): FuzzyListing {
  * compared against the neighbouring hours exactly as John's engine does, and
  * counts the listings his rule would have merged. Nothing is written.
  */
-export function auditFuzzyDuplicates(index: Pick<AreaIndex, "all">, now = Date.now()): {
+export function auditFuzzyDuplicates(index: Pick<AreaIndex, "all"> & Partial<AreaIndex>, now = Date.now()): {
   active: number; duplicates: number; rate: number; sample: Array<{ keep: string; drop: string }>;
 } {
   const rows = index.all

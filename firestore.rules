@@ -77,6 +77,11 @@ service cloud.firestore {
     match /sourceHealth/{sourceId} {
       allow read, write: if false;
     }
+    // Listings that failed a blocking rule (W1.2), with their reasons and a
+    // 30-day expiry. Operational data for staff; never a client surface.
+    match /rejectedListings/{listingId} {
+      allow read, write: if false;
+    }
     // Official place data is published atomically and served through the park
     // API. Clients cannot select an incomplete generation or mutate sources.
     match /placeSourceHealth/{sourceId} { allow read, write: if false; }
@@ -493,6 +498,11 @@ service cloud.firestore {
     function storeFlagsAtCreate(data) {
       return data.active == true
           && data.source == 'community'
+          // Every event carries adultOnly (never missing). A client may create
+          // only a non-broadcast community event, so it cannot smuggle a
+          // false flag onto a public listing; topicTags/contentHash are server-written.
+          && data.adultOnly is bool
+          && !('adultOnlyReason' in data) && !('topicTags' in data) && !('contentHash' in data)
           && (!('broadcast' in data) || data.broadcast == false)
           && !('sources' in data) && !('sourceKeys' in data) && !('areaId' in data)
           && !('organizerOwnerUid' in data) && !('lastSeenAt' in data) && !('missedCycles' in data)
@@ -506,7 +516,8 @@ service cloud.firestore {
           .hasAny(['active', 'broadcast', 'source', 'sourceEventId', 'sources', 'sourceKeys',
                    'areaId', 'organizerId', 'organizerOwnerUid', 'ingestedAt', 'lastSeenAt',
                    'missedCycles', 'inactiveAt', 'attendeeCount', 'categories',
-                   'classificationConfidence', 'qualityScore', 'inferredCost', 'endInferred']);
+                   'classificationConfidence', 'qualityScore', 'inferredCost', 'endInferred',
+                   'adultOnly', 'adultOnlyReason', 'topicTags', 'contentHash']);
     }
 
     // Only a server-owned accepted friendship grants activity visibility.
@@ -755,7 +766,11 @@ service cloud.firestore {
         'categories', 'classificationConfidence', 'qualityScore', 'inferredCost',
         'ageSuitability', 'endInferred', 'expectedSize', 'indoorOutdoor',
         'accessibilityFeatures', 'publicVenue', 'minimumAge', 'maximumAge',
-        'applicationDeadline', 'recurring', 'virtual', 'opportunitySubtype'
+        'applicationDeadline', 'recurring', 'virtual', 'opportunitySubtype',
+        // Written by annotate.ts at ingest (W1): adultOnly is required on every
+        // document so the minor/signed-out filter can match it; topicTags and
+        // contentHash are server-owned.
+        'adultOnly', 'adultOnlyReason', 'topicTags', 'contentHash'
       ];
       let noExtraFields = data.keys().hasOnly(allowedFields);
 

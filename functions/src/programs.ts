@@ -8,6 +8,7 @@ import { staffPage } from "./staff-page.js";
 import { geocode } from "./staff-partners.js";
 import { LAUNCH_AREAS, isInsideArea } from "./ingest/areas.js";
 import { haversineMiles } from "./ranking.js";
+import { inferTopicTags } from "./ingest/annotate.js";
 
 export const isProgram = (d: FirebaseFirestore.DocumentData) => d.category === "Program" || d.opportunitySubtype === "program";
 export function programEligible(d: FirebaseFirestore.DocumentData, profile: FirebaseFirestore.DocumentData, now = Date.now()): boolean {
@@ -62,6 +63,8 @@ export const saveProgram = onCall({ timeoutSeconds: 30 }, async (req) => {
       virtual: input.virtual, minimumAge: input.minimumAge, maximumAge: input.maximumAge, priceMin: input.priceMin, isFree: input.priceMin === 0,
       active: input.active, broadcast: true, hidden: before?.hidden ?? false, removed: before?.removed ?? false,
       category: "Program", opportunitySubtype: "program", source: "staff-program", areaId: area.id,
+      adultOnly: input.minimumAge >= 18, adultOnlyReason: input.minimumAge >= 18 ? "structured-age-limit" : null,
+      topicTags: inferTopicTags(input.title, "", "education"),
       creatorID: "verdure-programs", pointValue: 0, attendeeCount: 0, createdAt: before?.createdAt ?? now, updatedAt: now };
     tx.set(ref, after); tx.delete(db.doc(`feedCaches/${area.id}`));
     appendStaffAudit(tx, actor, "program:save", ref.path, before, after, reason);

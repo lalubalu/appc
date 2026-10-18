@@ -25,7 +25,9 @@ import { mapLegistar } from "../lib/ingest/sources/legistar.js";
 import { enrichEvent } from "../lib/ingest/classify.js";
 import { mapNps } from "../lib/ingest/sources/nps.js";
 import { mapSerp, parseSerpDate, serpApiBudgetAllows, SERPAPI_MONTHLY_CAP } from "../lib/ingest/sources/serpapi.js";
-import { isSameEvent, isWithinHorizon, auditSuspectedDuplicates } from "../lib/ingest/store.js";
+import { isSameEvent, isWithinHorizon, auditSuspectedDuplicates, listingChecks, isFuzzyDuplicate, fuzzyTokens, jaccard,
+  auditFuzzyDuplicates, contentHash, unchangedSighting, isOnlineListing, UNCHANGED_REWRITE_MS } from "../lib/ingest/store.js";
+import { annotateEvent, inferAdultOnly, adultOnlyReason, inferTopicTags, interestsForTopics, mentionsAlcohol, alcoholBrandPresents, TOPIC_TAGS } from "../lib/ingest/annotate.js";
 import { SAN_JOSE, isInsideArea } from "../lib/ingest/areas.js";
 import { coercePayloadRecord } from "../lib/ingest/index.js";
 
@@ -498,6 +500,138 @@ ok("valid payload record coerces with cleaned title and tags", good && good.titl
 ok("unknown source rejected", coercePayloadRecord({ source: "meetup", title: "x", start: "2026-10-01T18:00:00Z" }, SAN_JOSE) === null);
 ok("bad date rejected", coercePayloadRecord({ source: "libcal", title: "x", start: "yesterday-ish" }, SAN_JOSE) === null);
 ok("hostile toString payload does not crash", coercePayloadRecord({ source: { toString: "x" }, title: {}, start: [] }, SAN_JOSE) === null);
+
+
+// ── W1.1 annotate: adultOnly + topicTags (annotate.ts; frozen classifier untouched) ──
+console.log("\n── annotate: adultOnly ──");
+const baseRec = { source: "localist", sourceEventId: "a1", areaId: SAN_JOSE.id, organizer: "San José State University",
+  start: new Date("2026-11-01T18:00:00Z"), time: "11:00 AM", locationName: "Tower Lawn", category: "Festival", tags: [], description: "" };
+const sparta = annotateEvent(enrichEvent({ ...baseRec, title: "Sparta Kickoff Fest",
+  description: "Welcome back Spartans! Live music, food trucks and beer tastings, presented by Modelo.", audiences: ["Students", "General Public"] }));
+ok("adultOnly: SJSU 'Sparta Kickoff Fest' (presented by Modelo, beer tastings) is flagged", sparta.adultOnly === true);
+ok("adultOnly: a brand presenter alone flags it", inferAdultOnly({ ...baseRec, title: "Kickoff Fest", description: "Games on the lawn, presented by Modelo." }) === true &&
+   alcoholBrandPresents({ ...baseRec, title: "Kickoff Fest", description: "Games on the lawn, presented by Modelo." }));
+ok("adultOnly: a structured 21+ audience wins without alcohol words", inferAdultOnly({ ...baseRec, title: "Trivia Night", description: "Teams of four.", audiences: ["21+"] }) === true);
+ok("adultOnly: a structured 'Adults (18+)' audience is an age limit", inferAdultOnly({ ...baseRec, source: "bibliocommons", title: "Crochet Club", description: "Bring yarn.", audiences: ["Adults (18+)"] }) === true);
+ok("adultOnly: '18+' and 'ages 21 and over' in text flag it", inferAdultOnly({ ...baseRec, title: "Comedy Night 18+", description: "" }) === true &&
+   inferAdultOnly({ ...baseRec, title: "Jazz", description: "Ages 21 and over only." }) === true);
+ok("adultOnly: an age mentioned as a fact is not a limit ('over 70 years of dialogue', 'teaching for over 20 years', a lecture about adults 65 years and older)",
+   inferAdultOnly({ ...baseRec, title: "Archive tour", description: "The exhibit explores over 70 years of dialogue." }) === false &&
+   inferAdultOnly({ ...baseRec, title: "Paint Party", description: "An artist who has been teaching art for over 20+ years." }) === false &&
+   inferAdultOnly({ ...baseRec, title: "Scholar Series", description: "The current generation of older adults (65 years and older) are more likely to use alcohol-free remedies." }) === false &&
+   inferAdultOnly({ ...baseRec, title: "ESL Club", description: "This program is for adults aged 18 and older who speak basic English." }) === true &&
+   inferAdultOnly({ ...baseRec, title: "Totes", description: "This class is intended for adults, ages 18 and up." }) === true &&
+   inferAdultOnly({ ...baseRec, title: "Board Game Day", description: "Open to ages 18+ from 10am." }) === true);
+ok("adultOnly: a toddler age range and a percentage are not limits ('Ages 18 Months - 4 Years', 'At least 60 percent')",
+   inferAdultOnly({ ...baseRec, title: "Lil' Athletes for Ages 18 Months - 4 Years", description: "Stories and stretches." }) === false &&
+   inferAdultOnly({ ...baseRec, title: "Wetland talk", description: "At least 60 percent of residents live near water." }) === false);
+ok("adultOnly: wine, brewery, tasting room, cocktails, happy hour, bar crawl each flag", ["Wine down Wednesday", "Brewery tour", "Tasting room open house", "Cocktails on the terrace", "Happy hour mixer", "Downtown bar crawl"]
+   .every((title) => inferAdultOnly({ ...baseRec, title, description: "" }) === true));
+ok("adultOnly: a toddler storytime is NOT flagged", annotateEvent(enrichEvent({ ...baseRec, source: "bibliocommons", title: "Toddler Storytime", description: "Songs and stories for ages 1-3.", audiences: ["Kids (0-5)"] })).adultOnly === false);
+ok("adultOnly: root beer floats, ginger beer, apple cider and mocktails are not alcohol",
+   !mentionsAlcohol("Root beer float social") && !mentionsAlcohol("Ginger beer tasting for kids") && !mentionsAlcohol("Hot apple cider and donuts") && !mentionsAlcohol("Mocktail mixology for teens"));
+ok("adultOnly: an 'Adults' audience without an age figure is a target audience, not an age limit", inferAdultOnly({ ...baseRec, source: "bibliocommons", title: "Mystery Book Club", description: "Monthly discussion.", audiences: ["Adults"] }) === false);
+ok("adultOnly: minimumAge 21 from a feed wins", inferAdultOnly({ ...baseRec, title: "Trivia", description: "", minimumAge: 21 }) === true &&
+   inferAdultOnly({ ...baseRec, title: "Trivia", description: "", minimumAge: 12 }) === false);
+ok("adultOnly: the field is always a boolean", typeof annotateEvent(enrichEvent({ ...baseRec, title: "Thing", description: "" })).adultOnly === "boolean");
+ok("adultOnly: the library audience labels decide — 'Adults, ages 18+' and 'Seniors, ages 65+' are limits, 'Teens, ages 12-18' and 'Kids, ages 5-10' are not",
+   inferAdultOnly({ ...baseRec, source: "bibliocommons", title: "Knitting", description: "", audiences: ["Adults, ages 18+"] }) === true &&
+   inferAdultOnly({ ...baseRec, source: "bibliocommons", title: "Tai Chi", description: "", audiences: ["Seniors, ages 65+"] }) === true &&
+   inferAdultOnly({ ...baseRec, source: "bibliocommons", title: "Anime Club", description: "", audiences: ["Teens, ages 12-18"] }) === false &&
+   inferAdultOnly({ ...baseRec, source: "bibliocommons", title: "Lego Club", description: "", audiences: ["Kids, ages 5-10"] }) === false);
+ok("adultOnly: a reason is recorded and null when not flagged",
+   adultOnlyReason({ ...baseRec, title: "Trivia Night", description: "", audiences: ["21+"] }) === "structured-age-limit" &&
+   adultOnlyReason({ ...baseRec, title: "Brewery tour", description: "" }) === "alcohol" &&
+   adultOnlyReason({ ...baseRec, title: "Kickoff", description: "presented by Modelo" }) === "alcohol-brand" &&
+   adultOnlyReason({ ...baseRec, title: "Storytime", description: "" }) === null &&
+   annotateEvent(enrichEvent({ ...baseRec, title: "Storytime", description: "" })).adultOnlyReason === null);
+
+console.log("\n── annotate: topicTags (port of models.py infer_categories) ──");
+const midpenWalk = annotateEvent(enrichEvent({ source: "midpen", sourceEventId: "w1", areaId: SAN_JOSE.id, title: "Explorer Hike: Bayside Birding",
+  description: "Hike · About 3 miles.", organizer: "Midpeninsula Regional Open Space District", start: new Date("2026-11-01T16:00:00Z"), time: "9:00 AM",
+  locationName: "Ravenswood Preserve", latitude: 37.4816, longitude: -122.1264, category: "Sports", isFree: true, tags: ["outdoors", "parks", "Hike"] }));
+ok("topicTags: a Midpen guided walk keeps category Sports, gains outdoors, matches the outdoors interest",
+   midpenWalk.category === "Sports" && midpenWalk.topicTags.includes("outdoors") && interestsForTopics(midpenWalk.topicTags).includes("outdoors"), JSON.stringify(midpenWalk.topicTags));
+ok("topicTags: whole-word matching — 'art' does not match 'start' or 'party', 'ai' does not match 'Thai'",
+   !inferTopicTags("Start of the party", "").includes("arts") && !inferTopicTags("Thai cooking", "").includes("tech") && inferTopicTags("Art walk", "").includes("arts"));
+ok("topicTags: John's optional plural — 'toddlers' matches the 'toddler' keyword; a bare 'kid' does not match 'kids'",
+   inferTopicTags("Toddlers at play", "").includes("kids") && !inferTopicTags("Kid's craft hour", "").includes("kids"));
+ok("topicTags: title signals win; description-only sports/theater are ignored",
+   !inferTopicTags("Coding Club", "Build small games in Python.").includes("sports") && inferTopicTags("Coding Club", "Build small games in Python.").includes("tech"));
+ok("topicTags: description adds categories the title lacks", inferTopicTags("Evening program", "A free yoga class in the park").includes("fitness"));
+ok("topicTags: nothing matched falls back to the source default, then 'other'",
+   JSON.stringify(inferTopicTags("Thing", "", "campus")) === JSON.stringify(["campus"]) && JSON.stringify(inferTopicTags("Thing", "")) === JSON.stringify(["other"]));
+ok("topicTags: every label is one of John's 19", midpenWalk.topicTags.every((t) => TOPIC_TAGS.includes(t)) && TOPIC_TAGS.length === 19);
+ok("topicTags: structured labels join the title as a strong signal",
+   annotateEvent(enrichEvent({ ...baseRec, title: "Opening Night", description: "", eventTypes: ["Theater"] })).topicTags.includes("theater"));
+ok("topicTags: kids → family, theater/film → arts, campus → learning, civic → community mapping",
+   JSON.stringify(interestsForTopics(["kids", "theater", "film", "campus", "civic"])) === JSON.stringify(["family", "arts", "learning", "community"]));
+
+// ── W1.2 listing checks (port of validate.py BLOCKING) ──
+console.log("\n── listing checks ──");
+const NOW = Date.parse("2026-10-18T20:00:00Z");
+const goodListing = { source: "localist", sourceEventId: "ok", areaId: SAN_JOSE.id, title: "Campus Concert", description: "", organizer: "SJSU",
+  start: new Date(NOW + 86_400_000), end: new Date(NOW + 90_000_000), time: "7 PM", locationName: "Music Hall", latitude: 37.3352, longitude: -121.8811, category: "Festival", tags: [] };
+ok("listing: a complete future listing passes", listingChecks(goodListing, SAN_JOSE, NOW).length === 0);
+ok("listing: missing_title (under three characters)", listingChecks({ ...goodListing, title: "Go" }, SAN_JOSE, NOW).includes("missing_title"));
+ok("listing: missing_start", listingChecks({ ...goodListing, start: new Date("nope") }, SAN_JOSE, NOW).includes("missing_start"));
+ok("listing: end_before_start", listingChecks({ ...goodListing, end: new Date(NOW + 1000) }, SAN_JOSE, NOW).includes("end_before_start"));
+ok("listing: already_ended after the two-hour grace, but a still-running event passes",
+   listingChecks({ ...goodListing, start: new Date(NOW - 4 * 3_600_000), end: new Date(NOW - 3 * 3_600_000) }, SAN_JOSE, NOW).includes("already_ended") &&
+   listingChecks({ ...goodListing, start: new Date(NOW - 4 * 3_600_000), end: new Date(NOW + 3_600_000) }, SAN_JOSE, NOW).length === 0 &&
+   listingChecks({ ...goodListing, start: new Date(NOW - 3 * 3_600_000), end: undefined }, SAN_JOSE, NOW).includes("already_ended") &&
+   !listingChecks({ ...goodListing, start: new Date(NOW - 3_600_000), end: undefined }, SAN_JOSE, NOW).includes("already_ended"));
+ok("listing: cancelled (status or title prefix)", listingChecks({ ...goodListing, status: "cancelled" }, SAN_JOSE, NOW).includes("cancelled") &&
+   listingChecks({ ...goodListing, title: "CANCELLED: Campus Concert" }, SAN_JOSE, NOW).includes("cancelled"));
+ok("listing: outside_region (Sacramento)", listingChecks({ ...goodListing, latitude: 38.58, longitude: -121.49 }, SAN_JOSE, NOW).includes("outside_region"));
+ok("listing: in-person with no location is rejected; a named venue without coordinates passes",
+   listingChecks({ ...goodListing, latitude: undefined, longitude: undefined, locationName: "Location TBA" }, SAN_JOSE, NOW).includes("missing_location_in_person") &&
+   listingChecks({ ...goodListing, latitude: undefined, longitude: undefined, locationName: "Dr. Martin Luther King Jr. Library" }, SAN_JOSE, NOW).length === 0);
+ok("listing: an online listing needs no location and is never outside the region",
+   listingChecks({ ...goodListing, title: "*Virtual* Mock Interview", latitude: undefined, longitude: undefined, locationName: "Online" }, SAN_JOSE, NOW).length === 0 &&
+   isOnlineListing({ ...goodListing, locationName: "Zoom" }));
+ok("listing: several reasons are reported together", listingChecks({ ...goodListing, title: "x", start: new Date("nope") }, SAN_JOSE, NOW).length === 2);
+
+// ── W1.3 fuzzy duplicate rule (port of dedupe.py) ──
+console.log("\n── fuzzy duplicates ──");
+const t0 = Date.parse("2026-11-03T18:30:00Z");
+const branch = { venue: "Biblioteca Latinoamericana Branch Library", latitude: 37.3284, longitude: -121.8862 };
+const storytimeA = { title: "Toddler Storytime", startMs: t0, url: "https://sjpl.bibliocommons.com/events/1", ...branch };
+const storytimeB = { title: "Storytime: Toddlers", startMs: t0 + 10 * 60_000, url: "https://sjpl.bibliocommons.com/events/2", ...branch };
+ok("fuzzy: 'Toddler Storytime' and 'Storytime: Toddlers' at one branch, 10 min apart, are one event", isFuzzyDuplicate(storytimeA, storytimeB));
+ok("fuzzy: the same titles 45 minutes apart are not", !isFuzzyDuplicate(storytimeA, { ...storytimeB, startMs: t0 + 45 * 60_000 }));
+ok("fuzzy: the same titles at a different branch 2 miles away are not",
+   !isFuzzyDuplicate(storytimeA, { ...storytimeB, venue: "Rose Garden Branch Library", latitude: 37.3380, longitude: -121.9230 }));
+ok("fuzzy: 'Branch Library' venue tokens alone do not make two branches the same place (venue Jaccard < 0.5)",
+   jaccard(fuzzyTokens("Biblioteca Latinoamericana Branch Library"), fuzzyTokens("Rose Garden Branch Library")) < 0.5);
+ok("fuzzy: distinct titles are not duplicates (Jaccard < 0.7)", !isFuzzyDuplicate(storytimeA, { ...storytimeB, title: "Teen Chess Club" }));
+ok("fuzzy: same URL and same start is a duplicate regardless of title", isFuzzyDuplicate(storytimeA, { ...storytimeB, title: "Something else entirely", url: "https://www.sjpl.bibliocommons.com/events/1/", startMs: t0 }));
+ok("fuzzy: coordinates within a quarter mile count as the same place when venue names differ",
+   isFuzzyDuplicate({ ...storytimeA, venue: "Plaza de César Chávez" }, { ...storytimeB, venue: "Downtown stage", latitude: 37.3290, longitude: -121.8870 }));
+ok("fuzzy: stop-words and punctuation are ignored in tokens", jaccard(fuzzyTokens("The Walk & the Talk"), fuzzyTokens("walk, talk")) === 1);
+const fuzzyAudit = auditFuzzyDuplicates({ all: [
+  { id: "a", data: { active: true, date: ts(new Date(t0).toISOString()), title: "Toddler Storytime", locationName: branch.venue, latitude: branch.latitude, longitude: branch.longitude, qualityScore: 0.9 } },
+  { id: "b", data: { active: true, date: ts(new Date(t0 + 600_000).toISOString()), title: "Storytime: Toddlers", locationName: branch.venue, latitude: branch.latitude, longitude: branch.longitude, qualityScore: 0.5 } },
+  { id: "c", data: { active: true, date: ts(new Date(t0).toISOString()), title: "Teen Chess Club", locationName: branch.venue, qualityScore: 0.5 } },
+] }, t0 - 86_400_000);
+ok("fuzzy audit: report-only count keeps the richer listing and counts one duplicate", fuzzyAudit.duplicates === 1 && fuzzyAudit.active === 3 && fuzzyAudit.sample[0].keep === "a" && fuzzyAudit.sample[0].drop === "b");
+
+// ── W1.4 content hash / unchanged sighting ──
+console.log("\n── write only what changed ──");
+const annotatedGood = annotateEvent(enrichEvent(goodListing));
+const h1 = contentHash(annotatedGood);
+ok("hash: stable across calls", h1 === contentHash(annotateEvent(enrichEvent(goodListing))));
+ok("hash: changes when the description, time or price changes",
+   h1 !== contentHash(annotateEvent(enrichEvent({ ...goodListing, description: "New blurb" }))) &&
+   h1 !== contentHash(annotateEvent(enrichEvent({ ...goodListing, start: new Date(NOW + 2 * 86_400_000) }))) &&
+   h1 !== contentHash(annotateEvent(enrichEvent({ ...goodListing, priceMin: 12, isFree: false }))));
+const fresh = { contentHash: h1, missedCycles: 0, active: true, lastSeenAt: ts(new Date(NOW - 3_600_000).toISOString()) };
+ok("unchanged: same hash, missedCycles 0, seen within 24 h → skip", unchangedSighting(fresh, h1, NOW));
+ok("unchanged: a changed hash forces a write", !unchangedSighting(fresh, "other", NOW));
+ok("unchanged: a missed cycle forces a write (staleness reset must land)", !unchangedSighting({ ...fresh, missedCycles: 1 }, h1, NOW));
+ok("unchanged: an inactive document is always rewritten", !unchangedSighting({ ...fresh, active: false }, h1, NOW));
+ok("unchanged: lastSeenAt older than 24 h forces a refresh write", !unchangedSighting({ ...fresh, lastSeenAt: ts(new Date(NOW - UNCHANGED_REWRITE_MS - 1).toISOString()) }, h1, NOW));
+ok("unchanged: a legacy document without a hash is written once", !unchangedSighting({ missedCycles: 0, active: true, lastSeenAt: fresh.lastSeenAt }, h1, NOW));
 
 console.log(`\n══ ${passed} passed, ${failed} failed ══`);
 process.exit(failed ? 1 : 0);

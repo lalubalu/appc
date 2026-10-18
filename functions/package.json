@@ -23,7 +23,9 @@
     "corpus:local": "npm run build && cd .. && npx firebase-tools@13 emulators:exec --only firestore \"node functions/scripts/local-corpus-gate.mjs\"",
     "public-feed:check": "node scripts/check-public-feed.mjs",
     "backfill:emulator-test": "cd .. && npx firebase-tools@13 emulators:exec --only firestore \"node functions/scripts/backfill-migration-test.mjs\"",
-    "seed:review": "node scripts/seed-review-account.mjs"
+    "seed:review": "node scripts/seed-review-account.mjs",
+    "e2e:ingest": "npm run build && cd .. && npx firebase-tools@13 emulators:exec --only firestore --project connectify-19dd8 \"node functions/scripts/ingest-write-path-e2e.mjs\"",
+    "baseline": "npm run build && cd .. && npx firebase-tools@13 emulators:exec --only firestore --project connectify-19dd8 \"node functions/scripts/baseline.mjs --label run\""
   },
   "dependencies": {
     "@apple/app-store-server-library": "^3.1.0",

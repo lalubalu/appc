@@ -31,6 +31,7 @@ import {
 import { LAUNCH_AREAS, isInsideArea } from "./ingest/areas.js";
 import { CATEGORY_ICON, CATEGORY_POINTS, type EventCategory } from "./ingest/types.js";
 import { titleKey, venueKey, startBucket, cleanUrl } from "./ingest/normalize.js";
+import { adultOnlyReason, inferTopicTags } from "./ingest/annotate.js";
 import { appendStaffAudit, auditStaffRead, staffReason } from "./staff-audit.js";
 import { staffPage } from "./staff-page.js";
 import { stageOrganizerStoryGate } from "./place-stories.js";
@@ -253,6 +254,9 @@ export const createEvent = onCall(async (req) => {
     ? LAUNCH_AREAS.find((a) => isInsideArea(a, lat, lng)) ?? null
     : LAUNCH_AREAS[0] ?? null;
   const broadcast = orgData.status === "approved";
+  const organizerAdultReason = adultOnlyReason({ source: "organizer", sourceEventId: "", areaId: area?.id ?? "", title, description,
+    organizer: safeText(orgData.displayName, 80), start, time, locationName, category, tags: [], minimumAge: minimumAge ?? undefined,
+    audiences: ageSuitability === "adults" && minimumAge !== null && minimumAge >= 18 ? [`${minimumAge}+`] : [] });
   const ref = db.collection("events").doc();
   const now = Timestamp.now();
   const doc: FirebaseFirestore.DocumentData = {
@@ -274,6 +278,9 @@ export const createEvent = onCall(async (req) => {
       (lat !== undefined && lng !== undefined ? 0.25 : 0) + (website ? 0.1 : 0) +
       (ageSuitability !== "unknown" ? 0.15 : 0) + (indoorOutdoor !== "unknown" ? 0.15 : 0) + 0.1),
     inferredCost: isFree ? "free" : "paid", ageSuitability, endInferred: true,
+    // W1 annotation, computed server-side so an organizer cannot un-flag a 21+ listing.
+    adultOnly: organizerAdultReason !== null, adultOnlyReason: organizerAdultReason,
+    topicTags: inferTopicTags(`${title} ${safeText(orgData.category, 40)}`, description, "community"),
     indoorOutdoor, accessibilityFeatures, publicVenue, recurring, virtual,
     ...(expectedSize !== null ? { expectedSize } : {}),
     ...(minimumAge !== null ? { minimumAge } : {}),

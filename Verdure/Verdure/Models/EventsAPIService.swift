@@ -337,6 +337,9 @@ final class EventsAPIService {
             "hidden": false,
             "active": true,
             "source": "community",
+            // Required on every event (W1): a community event is not broadcast, so a
+            // client flag cannot put an adult-only listing in front of a minor.
+            "adultOnly": false,
         ]
         if let venueCoordinate {
             data["latitude"] = venueCoordinate.latitude

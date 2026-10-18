@@ -8,7 +8,7 @@ Run `cd functions && npm run check:indexes`. The command scans the current sourc
 
 ## Coverage and interpretation
 
-Source roots: `functions/src`, `Verdure/Verdure`, `Verdure-website--main/src`. Operational scripts: `functions/scripts/backfill-classify.mjs`, `functions/scripts/list-low-confidence.mjs`, `functions/scripts/coverage-check.mjs`, `functions/scripts/audit-volunteer-supply-local.mjs`, `functions/scripts/baseline.mjs`. Tests and fixtures are excluded. New operational scripts containing queries are rejected until explicitly inventoried. The website console calls Firebase Functions; its Firestore queries appear under the server handlers below. Supabase SQL is outside this Firestore inventory.
+Source roots: `functions/src`, `Verdure/Verdure`, `Verdure-website--main/src`. Operational scripts: `functions/scripts/backfill-classify.mjs`, `functions/scripts/list-low-confidence.mjs`, `functions/scripts/coverage-check.mjs`, `functions/scripts/audit-volunteer-supply-local.mjs`, `functions/scripts/baseline.mjs`, `functions/scripts/backfill-annotate.mjs`. Tests and fixtures are excluded. New operational scripts containing queries are rejected until explicitly inventoried. The website console calls Firebase Functions; its Firestore queries appear under the server handlers below. Supabase SQL is outside this Firestore inventory.
 
 TypeScript is parsed structurally, including variable aliases, conditional reassignments, finite collection names, and query helper parameters. Swift chains use a comment/string-aware balanced scanner. Unknown fields, operators, receivers, predicates, modular Web Firestore imports or dynamic directions fail closed and require a resolver extension. No whole-file hash substitutes for query inspection. Query values and pagination bounds do not alter index shape. Locations identify the last filter/order builder in a chain.
 
@@ -23,9 +23,9 @@ See [Firebase index types](https://firebase.google.com/docs/firestore/query-data
 | Query location | Collection/scope | Filters | Explicit ordering | Matching index |
 | --- | --- | --- | --- | --- |
 | `Verdure/Verdure/Models/EventsAPIService.swift:228` | events / COLLECTION | hidden ==; active ==; broadcast ==; areaId ==; date >= | date ASCENDING | `COLLECTION/events/hidden:ASCENDING,active:ASCENDING,broadcast:ASCENDING,areaId:ASCENDING,date:ASCENDING` |
-| `Verdure/Verdure/Models/EventsAPIService.swift:419` | events / COLLECTION | hidden ==; active ==; broadcast ==; category ==; date > | date ASCENDING | `COLLECTION/events/hidden:ASCENDING,active:ASCENDING,broadcast:ASCENDING,category:ASCENDING,date:ASCENDING` |
-| `Verdure/Verdure/Models/EventsAPIService.swift:459` | events / COLLECTION | hidden ==; active ==; broadcast ==; date >= | date ASCENDING | `COLLECTION/events/hidden:ASCENDING,active:ASCENDING,broadcast:ASCENDING,date:ASCENDING` |
-| `Verdure/Verdure/Models/EventsAPIService.swift:483` | events / COLLECTION | hidden ==; active ==; organizerId ==; date >= | Implicit/default | `COLLECTION/events/active:ASCENDING,hidden:ASCENDING,organizerId:ASCENDING,date:ASCENDING` |
+| `Verdure/Verdure/Models/EventsAPIService.swift:422` | events / COLLECTION | hidden ==; active ==; broadcast ==; category ==; date > | date ASCENDING | `COLLECTION/events/hidden:ASCENDING,active:ASCENDING,broadcast:ASCENDING,category:ASCENDING,date:ASCENDING` |
+| `Verdure/Verdure/Models/EventsAPIService.swift:462` | events / COLLECTION | hidden ==; active ==; broadcast ==; date >= | date ASCENDING | `COLLECTION/events/hidden:ASCENDING,active:ASCENDING,broadcast:ASCENDING,date:ASCENDING` |
+| `Verdure/Verdure/Models/EventsAPIService.swift:486` | events / COLLECTION | hidden ==; active ==; organizerId ==; date >= | Implicit/default | `COLLECTION/events/active:ASCENDING,hidden:ASCENDING,organizerId:ASCENDING,date:ASCENDING` |
 | `Verdure/Verdure/Models/FirestoreService.swift:182` | posts / COLLECTION | hidden == | createdAt DESCENDING | `COLLECTION/posts/hidden:ASCENDING,createdAt:DESCENDING` |
 | `functions/scripts/baseline.mjs:112` | events / COLLECTION | areaId ==; active == | Implicit/default | `COLLECTION/events/areaId:ASCENDING,active:ASCENDING` |
 | `functions/scripts/coverage-check.mjs:35` | events / COLLECTION | areaId ==; active == | Implicit/default | `COLLECTION/events/areaId:ASCENDING,active:ASCENDING` |
@@ -34,8 +34,8 @@ See [Firebase index types](https://firebase.google.com/docs/firestore/query-data
 | `functions/src/ingest/health.ts:32` | ingestRuns / COLLECTION | source ==; areaId == | Implicit/default | `COLLECTION/ingestRuns/areaId:ASCENDING,source:ASCENDING` |
 | `functions/src/ingest/health.ts:34` | ingestRuns / COLLECTION | source ==; areaId == | runAt DESCENDING | `COLLECTION/ingestRuns/source:ASCENDING,areaId:ASCENDING,runAt:DESCENDING` |
 | `functions/src/ingest/health.ts:35` | ingestRuns / COLLECTION | source ==; areaId ==; errors == | runAt DESCENDING | `COLLECTION/ingestRuns/source:ASCENDING,areaId:ASCENDING,errors:ASCENDING,runAt:DESCENDING` |
-| `functions/src/ingest/index.ts:284` | events / COLLECTION | areaId ==; active == | Implicit/default | `COLLECTION/events/areaId:ASCENDING,active:ASCENDING` |
-| `functions/src/ingest/store.ts:67` | events / COLLECTION | areaId ==; date >= | date ASCENDING | `COLLECTION/events/areaId:ASCENDING,date:ASCENDING` |
+| `functions/src/ingest/index.ts:293` | events / COLLECTION | areaId ==; active == | Implicit/default | `COLLECTION/events/areaId:ASCENDING,active:ASCENDING` |
+| `functions/src/ingest/store.ts:104` | events / COLLECTION | areaId ==; date >= | date ASCENDING | `COLLECTION/events/areaId:ASCENDING,date:ASCENDING` |
 | `functions/src/moderation.ts:294` | moderationQueue / COLLECTION | status ==; slaDeadline <= | Implicit/default | `COLLECTION/moderationQueue/status:ASCENDING,slaDeadline:ASCENDING` |
 | `functions/src/moderation.ts:334` | moderationQueue / COLLECTION | status ==; targetType == | Implicit/default | `COLLECTION/moderationQueue/status:ASCENDING,targetType:ASCENDING` |
 | `functions/src/moderation.ts:334` | moderationQueue / COLLECTION | status in; targetType == | Implicit/default | `COLLECTION/moderationQueue/status:ASCENDING,targetType:ASCENDING` |
@@ -45,13 +45,13 @@ See [Firebase index types](https://firebase.google.com/docs/firestore/query-data
 | `functions/src/moderation.ts:335` | moderationQueue / COLLECTION | status in | firstReportedAt ASCENDING | `COLLECTION/moderationQueue/status:ASCENDING,firstReportedAt:ASCENDING` |
 | `functions/src/offline/packs.ts:47` | eventPlanSessions / COLLECTION | uid == | __name__ ASCENDING | `COLLECTION/eventPlanSessions/uid:ASCENDING,__name__:ASCENDING` |
 | `functions/src/offline/packs.ts:47` | groupPlans / COLLECTION | memberUIDs array-contains | __name__ ASCENDING | `COLLECTION/groupPlans/memberUIDs:CONTAINS,__name__:ASCENDING` |
-| `functions/src/organizers.ts:171` | organizers / COLLECTION | status == | createdAt ASCENDING | `COLLECTION/organizers/status:ASCENDING,createdAt:ASCENDING` |
+| `functions/src/organizers.ts:172` | organizers / COLLECTION | status == | createdAt ASCENDING | `COLLECTION/organizers/status:ASCENDING,createdAt:ASCENDING` |
 | `functions/src/parks/api.ts:110` | events / COLLECTION | hidden ==; active ==; broadcast ==; date >=; date < | date ASCENDING | `COLLECTION/events/hidden:ASCENDING,active:ASCENDING,broadcast:ASCENDING,date:ASCENDING` |
 | `functions/src/partners.ts:187` | partnerPerks / COLLECTION | active == | __name__ ASCENDING | `COLLECTION/partnerPerks/active:ASCENDING,__name__:ASCENDING` |
 | `functions/src/place-stories.ts:173` | placeStoryOwnership / COLLECTION | ownerUid == | __name__ ASCENDING | `COLLECTION/placeStoryOwnership/ownerUid:ASCENDING,__name__:ASCENDING` |
-| `functions/src/programs.ts:83` | events / COLLECTION | source == | applicationDeadline ASCENDING | `COLLECTION/events/source:ASCENDING,applicationDeadline:ASCENDING` |
-| `functions/src/programs.ts:97` | events / COLLECTION | category ==; active ==; applicationDeadline > | applicationDeadline ASCENDING | `COLLECTION/events/category:ASCENDING,active:ASCENDING,applicationDeadline:ASCENDING` |
-| `functions/src/programs.ts:115` | events / COLLECTION | category ==; active ==; applicationDeadline <= | applicationDeadline ASCENDING | `COLLECTION/events/category:ASCENDING,active:ASCENDING,applicationDeadline:ASCENDING` |
+| `functions/src/programs.ts:86` | events / COLLECTION | source == | applicationDeadline ASCENDING | `COLLECTION/events/source:ASCENDING,applicationDeadline:ASCENDING` |
+| `functions/src/programs.ts:100` | events / COLLECTION | category ==; active ==; applicationDeadline > | applicationDeadline ASCENDING | `COLLECTION/events/category:ASCENDING,active:ASCENDING,applicationDeadline:ASCENDING` |
+| `functions/src/programs.ts:118` | events / COLLECTION | category ==; active ==; applicationDeadline <= | applicationDeadline ASCENDING | `COLLECTION/events/category:ASCENDING,active:ASCENDING,applicationDeadline:ASCENDING` |
 | `functions/src/ranking.ts:378` | events / COLLECTION | areaId ==; active == | Implicit/default | `COLLECTION/events/areaId:ASCENDING,active:ASCENDING` |
 | `functions/src/ranking.ts:381` | events / COLLECTION | areaId ==; active ==; date >= | date ASCENDING | `COLLECTION/events/areaId:ASCENDING,active:ASCENDING,date:ASCENDING` |
 | `functions/src/ranking.ts:382` | events / COLLECTION | areaId ==; active == | qualityScore DESCENDING | `COLLECTION/events/areaId:ASCENDING,active:ASCENDING,qualityScore:DESCENDING` |
@@ -62,13 +62,14 @@ See [Firebase index types](https://firebase.google.com/docs/firestore/query-data
 | `functions/src/staff-operations.ts:28` | events / COLLECTION | areaId ==; active ==; date >= | date ASCENDING | `COLLECTION/events/areaId:ASCENDING,active:ASCENDING,date:ASCENDING` |
 | `functions/src/staff-partners.ts:228` | partnerPerks / COLLECTION | partnerId == | __name__ ASCENDING | `COLLECTION/partnerPerks/partnerId:ASCENDING,__name__:ASCENDING` |
 
-## Single-field and document-name mappings (76)
+## Single-field and document-name mappings (78)
 
 | Query location | Collection/scope | Filters | Explicit ordering | Matching index |
 | --- | --- | --- | --- | --- |
 | `Verdure/Verdure/Models/SocialService.swift:210` | invites / COLLECTION | — | createdAt DESCENDING | `Automatic collection index: createdAt:DESCENDING` |
 | `Verdure/Verdure/Models/SocialService.swift:230` | notifications / COLLECTION | — | createdAt DESCENDING | `Automatic collection index: createdAt:DESCENDING` |
 | `functions/scripts/audit-volunteer-supply-local.mjs:13` | events / COLLECTION | category == | Implicit/default | `Automatic collection index: category:ASCENDING` |
+| `functions/scripts/backfill-annotate.mjs:52` | events / COLLECTION | — | __name__ ASCENDING | `Built-in document-name index` |
 | `functions/scripts/backfill-classify.mjs:53` | events / COLLECTION | — | __name__ ASCENDING | `Built-in document-name index` |
 | `functions/scripts/backfill-classify.mjs:72` | events / COLLECTION | — | __name__ ASCENDING | `Built-in document-name index` |
 | `functions/src/account.ts:59` | posts / COLLECTION | authorID == | Implicit/default | `Automatic collection index: authorID:ASCENDING` |
@@ -114,6 +115,7 @@ See [Firebase index types](https://firebase.google.com/docs/firestore/query-data
 | `functions/src/groupPlans.ts:44` | groupPlans / COLLECTION | memberUIDs array-contains | Implicit/default | `Automatic collection index: memberUIDs:CONTAINS` |
 | `functions/src/groupPlans.ts:45` | groupPlans / COLLECTION | pendingUIDs array-contains | Implicit/default | `Automatic collection index: pendingUIDs:CONTAINS` |
 | `functions/src/groupPlans.ts:61` | groupPlans / COLLECTION | ownerUid == | Implicit/default | `Automatic collection index: ownerUid:ASCENDING` |
+| `functions/src/ingest/store.ts:113` | rejectedListings / COLLECTION | areaId == | Implicit/default | `Automatic collection index: areaId:ASCENDING` |
 | `functions/src/moderation.ts:251` | reports / COLLECTION | queueId == | Implicit/default | `Automatic collection index: queueId:ASCENDING` |
 | `functions/src/moderation.ts:317` | moderationQueue / COLLECTION | status == | Implicit/default | `Automatic collection index: status:ASCENDING` |
 | `functions/src/moderation.ts:332` | moderationQueue / COLLECTION | status in | Implicit/default | `Automatic collection index: status:ASCENDING` |
@@ -129,10 +131,10 @@ See [Firebase index types](https://firebase.google.com/docs/firestore/query-data
 | `functions/src/offline/packs.ts:79` | eventPlanSessions / COLLECTION | uid == | Implicit/default | `Automatic collection index: uid:ASCENDING` |
 | `functions/src/offline/packs.ts:80` | groupPlans / COLLECTION | memberUIDs array-contains | Implicit/default | `Automatic collection index: memberUIDs:CONTAINS` |
 | `functions/src/offline/packs.ts:241` | offlinePacks / COLLECTION_GROUP | stageExpiresAt <= | stageExpiresAt ASCENDING | `fieldOverrides: COLLECTION_GROUP/offlinePacks/stageExpiresAt:ASCENDING` |
-| `functions/src/organizers.ts:55` | organizers / COLLECTION | status == | Implicit/default | `Automatic collection index: status:ASCENDING` |
-| `functions/src/organizers.ts:56` | organizers / COLLECTION | approvedAt > | Implicit/default | `Automatic collection index: approvedAt:ASCENDING` |
-| `functions/src/organizers.ts:62` | organizers / COLLECTION | ownerUid == | Implicit/default | `Automatic collection index: ownerUid:ASCENDING` |
-| `functions/src/organizers.ts:146` | events / COLLECTION | organizerId == | Implicit/default | `Automatic collection index: organizerId:ASCENDING` |
+| `functions/src/organizers.ts:56` | organizers / COLLECTION | status == | Implicit/default | `Automatic collection index: status:ASCENDING` |
+| `functions/src/organizers.ts:57` | organizers / COLLECTION | approvedAt > | Implicit/default | `Automatic collection index: approvedAt:ASCENDING` |
+| `functions/src/organizers.ts:63` | organizers / COLLECTION | ownerUid == | Implicit/default | `Automatic collection index: ownerUid:ASCENDING` |
+| `functions/src/organizers.ts:147` | events / COLLECTION | organizerId == | Implicit/default | `Automatic collection index: organizerId:ASCENDING` |
 | `functions/src/parks/api.ts:126` | features / COLLECTION | parkIds array-contains | Implicit/default | `Automatic collection index: parkIds:CONTAINS` |
 | `functions/src/parks/store.ts:174` | parkGenerations / COLLECTION | createdAt < | Implicit/default | `Automatic collection index: createdAt:ASCENDING` |
 | `functions/src/place-stories.ts:107` | placeStoryOwnership / COLLECTION | — | __name__ ASCENDING | `Built-in document-name index` |

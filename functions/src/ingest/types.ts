@@ -77,6 +77,15 @@ export interface IngestResult {
   markedStale: number;
   deactivated: number;
   skipped: number;
+  /** W1.4: sightings that needed no write (unchanged hash, missedCycles 0, lastSeenAt fresh). */
+  unchanged: number;
+  /** W1.3: merges found only by John's fuzzy rule. */
+  fuzzyMerged: number;
+  /** W1.2: listings that failed a blocking rule, written to /rejectedListings. */
+  rejected: number;
+  rejectedByReason: Record<string, number>;
+  /** Document writes this run issued (upsertBatch + markStale), the number the free-tier budget is measured in. */
+  writes: number;
   errors: string[];
   durationMs: number;
 }
