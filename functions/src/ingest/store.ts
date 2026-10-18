@@ -381,3 +381,143 @@ export async function markStale(
   if (pending) await batch.commit();
   return { markedStale, deactivated };
 }
+
+// ── Fuzzy duplicate rule — port of reference/verdure-discovery/verdure/dedupe.py ──
+//
+// Today's cross-source matcher needs an EXACTLY equal normalised title, so
+// "Toddler Storytime" and "Storytime: Toddlers" at one branch both survive.
+// John's rule: title-token Jaccard ≥ 0.7 after stop-words, start within 30
+// minutes, and same venue (venue-token Jaccard ≥ 0.5) or within 0.25 miles.
+// These functions are pure so the baseline script can run them in report-only
+// mode over the stored corpus, and so the write path can reuse them verbatim.
+
+/** Port of dedupe.py: STOPWORDS */
+export const FUZZY_STOPWORDS = new Set(["the", "a", "an", "and", "of", "at", "in", "for", "with", "to", "on", "&"]);
+/** Port of dedupe.py: START_TOLERANCE_SECONDS (30 * 60) */
+export const FUZZY_START_TOLERANCE_MS = 30 * 60 * 1000;
+/** Port of dedupe.py: TITLE_SIMILARITY */
+export const FUZZY_TITLE_SIMILARITY = 0.7;
+/** Port of dedupe.py: _same_place() distance (0.25 mi) */
+export const FUZZY_PLACE_MILES = 0.25;
+const FUZZY_PLACE_METERS = FUZZY_PLACE_MILES * 1609.344;
+
+/** The minimal listing shape the rule needs; built from a stored document or a NormalizedEvent. */
+export interface FuzzyListing {
+  title: string;
+  startMs: number;
+  venue: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  url?: string | null;
+  /** John's `format == "online"`. */
+  online?: boolean;
+}
+
+/**
+ * Port of dedupe.py: _tokens(), with ONE documented deviation for John's
+ * review: a trailing "s" is folded off tokens longer than three letters, so
+ * "Toddler Storytime" and "Storytime: Toddlers" (the sprint's own example of a
+ * surviving duplicate) share every token. John's title tokens are exact words;
+ * his category patterns already accept an optional plural, and this applies the
+ * same tolerance here. It only ever increases recall.
+ */
+export function fuzzyTokens(text: string): Set<string> {
+  const words = String(text ?? "").toLowerCase().match(/[a-z0-9]+/g) ?? [];
+  return new Set(words.filter((w) => !FUZZY_STOPWORDS.has(w)).map((w) => (w.length > 3 && w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w)));
+}
+
+/** Port of dedupe.py: _jaccard() */
+export function jaccard(a: Set<string>, b: Set<string>): number {
+  if (!a.size || !b.size) return 0;
+  let common = 0;
+  for (const w of a) if (b.has(w)) common++;
+  return common / (a.size + b.size - common);
+}
+
+/** Port of dedupe.py: _norm_url() */
+export function normUrl(url: string): string {
+  return String(url ?? "").trim().toLowerCase().replace(/^https?:\/\/(www\.)?/, "").replace(/\/+$/, "").split("?")[0];
+}
+
+function hasCoords(l: FuzzyListing): l is FuzzyListing & { latitude: number; longitude: number } {
+  return typeof l.latitude === "number" && typeof l.longitude === "number" &&
+    Number.isFinite(l.latitude) && Number.isFinite(l.longitude);
+}
+
+/** Port of dedupe.py: _same_place() */
+export function fuzzySamePlace(a: FuzzyListing, b: FuzzyListing): boolean {
+  if (a.online && b.online) return true;
+  if (a.venue && b.venue && jaccard(fuzzyTokens(a.venue), fuzzyTokens(b.venue)) >= 0.5) return true;
+  if (hasCoords(a) && hasCoords(b)) return distanceMeters(a.latitude, a.longitude, b.latitude, b.longitude) <= FUZZY_PLACE_METERS;
+  return false;
+}
+
+/** Port of dedupe.py: is_duplicate() (the `uid` short-circuit is the exact source-key match, handled before this is called). */
+export function isFuzzyDuplicate(a: FuzzyListing, b: FuzzyListing): boolean {
+  if (a.url && b.url && normUrl(a.url) === normUrl(b.url) && a.startMs === b.startMs) return true;
+  if (Math.abs(a.startMs - b.startMs) > FUZZY_START_TOLERANCE_MS) return false;
+  if (jaccard(fuzzyTokens(a.title), fuzzyTokens(b.title)) < FUZZY_TITLE_SIMILARITY) return false;
+  return fuzzySamePlace(a, b);
+}
+
+/** Build the rule's input from a stored /events document. */
+export function fuzzyListingFromDoc(data: FirebaseFirestore.DocumentData): FuzzyListing | null {
+  const startMs = data.date?.toMillis?.();
+  if (!Number.isFinite(startMs)) return null;
+  return {
+    title: String(data.title ?? ""), startMs,
+    venue: venueKey(String(data.locationName ?? "")) ? String(data.locationName ?? "") : "",
+    latitude: typeof data.latitude === "number" ? data.latitude : null,
+    longitude: typeof data.longitude === "number" ? data.longitude : null,
+    url: typeof data.website === "string" ? data.website : null,
+    online: data.virtual === true,
+  };
+}
+
+/** Build the rule's input from a normalized record about to be written. */
+export function fuzzyListingFromRecord(rec: NormalizedEvent): FuzzyListing {
+  return {
+    title: rec.title, startMs: rec.start.getTime(),
+    venue: venueKey(rec.locationName) ? rec.locationName : "",
+    latitude: rec.latitude ?? null, longitude: rec.longitude ?? null, url: rec.website ?? null,
+    online: false,
+  };
+}
+
+/**
+ * Port of dedupe.py: deduplicate(), in REPORT-ONLY mode over the in-memory
+ * area index. Walks events richest-first (qualityScore), bucketed by hour and
+ * compared against the neighbouring hours exactly as John's engine does, and
+ * counts the listings his rule would have merged. Nothing is written.
+ */
+export function auditFuzzyDuplicates(index: Pick<AreaIndex, "all">, now = Date.now()): {
+  active: number; duplicates: number; rate: number; sample: Array<{ keep: string; drop: string }>;
+} {
+  const rows = index.all
+    .filter((ev) => ev.data.active !== false && ev.data.hidden !== true && (ev.data.date?.toMillis?.() ?? 0) >= now)
+    .map((ev) => ({ id: ev.id, quality: Number(ev.data.qualityScore) || 0, listing: fuzzyListingFromDoc(ev.data) }))
+    .filter((row): row is { id: string; quality: number; listing: FuzzyListing } => row.listing !== null)
+    .sort((a, b) => b.quality - a.quality || a.id.localeCompare(b.id));
+  const buckets = new Map<number, Array<{ id: string; listing: FuzzyListing }>>();
+  const sample: Array<{ keep: string; drop: string }> = [];
+  let duplicates = 0;
+  for (const row of rows) {
+    const hour = Math.floor(row.listing.startMs / 3_600_000);
+    let match: { id: string; listing: FuzzyListing } | undefined;
+    for (const h of [hour - 1, hour, hour + 1]) {
+      for (const kept of buckets.get(h) ?? []) {
+        if (isFuzzyDuplicate(kept.listing, row.listing)) { match = kept; break; }
+      }
+      if (match) break;
+    }
+    if (match) {
+      duplicates++;
+      if (sample.length < 25) sample.push({ keep: match.id, drop: row.id });
+      continue;
+    }
+    const list = buckets.get(hour) ?? [];
+    list.push({ id: row.id, listing: row.listing });
+    buckets.set(hour, list);
+  }
+  return { active: rows.length, duplicates, rate: rows.length ? duplicates / rows.length : 0, sample };
+}

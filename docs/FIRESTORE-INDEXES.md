@@ -8,7 +8,7 @@ Run `cd functions && npm run check:indexes`. The command scans the current sourc
 
 ## Coverage and interpretation
 
-Source roots: `functions/src`, `Verdure/Verdure`, `Verdure-website--main/src`. Operational scripts: `functions/scripts/backfill-classify.mjs`, `functions/scripts/list-low-confidence.mjs`, `functions/scripts/coverage-check.mjs`, `functions/scripts/audit-volunteer-supply-local.mjs`. Tests and fixtures are excluded. New operational scripts containing queries are rejected until explicitly inventoried. The website console calls Firebase Functions; its Firestore queries appear under the server handlers below. Supabase SQL is outside this Firestore inventory.
+Source roots: `functions/src`, `Verdure/Verdure`, `Verdure-website--main/src`. Operational scripts: `functions/scripts/backfill-classify.mjs`, `functions/scripts/list-low-confidence.mjs`, `functions/scripts/coverage-check.mjs`, `functions/scripts/audit-volunteer-supply-local.mjs`, `functions/scripts/baseline.mjs`. Tests and fixtures are excluded. New operational scripts containing queries are rejected until explicitly inventoried. The website console calls Firebase Functions; its Firestore queries appear under the server handlers below. Supabase SQL is outside this Firestore inventory.
 
 TypeScript is parsed structurally, including variable aliases, conditional reassignments, finite collection names, and query helper parameters. Swift chains use a comment/string-aware balanced scanner. Unknown fields, operators, receivers, predicates, modular Web Firestore imports or dynamic directions fail closed and require a resolver extension. No whole-file hash substitutes for query inspection. Query values and pagination bounds do not alter index shape. Locations identify the last filter/order builder in a chain.
 
@@ -18,7 +18,7 @@ Every multiple-field query has an explicit matching composite, including equalit
 
 See [Firebase index types](https://firebase.google.com/docs/firestore/query-data/index-overview) and [index configuration schema](https://firebase.google.com/docs/reference/firestore/indexes).
 
-## Compound mappings (38)
+## Compound mappings (39)
 
 | Query location | Collection/scope | Filters | Explicit ordering | Matching index |
 | --- | --- | --- | --- | --- |
@@ -27,6 +27,7 @@ See [Firebase index types](https://firebase.google.com/docs/firestore/query-data
 | `Verdure/Verdure/Models/EventsAPIService.swift:459` | events / COLLECTION | hidden ==; active ==; broadcast ==; date >= | date ASCENDING | `COLLECTION/events/hidden:ASCENDING,active:ASCENDING,broadcast:ASCENDING,date:ASCENDING` |
 | `Verdure/Verdure/Models/EventsAPIService.swift:483` | events / COLLECTION | hidden ==; active ==; organizerId ==; date >= | Implicit/default | `COLLECTION/events/active:ASCENDING,hidden:ASCENDING,organizerId:ASCENDING,date:ASCENDING` |
 | `Verdure/Verdure/Models/FirestoreService.swift:182` | posts / COLLECTION | hidden == | createdAt DESCENDING | `COLLECTION/posts/hidden:ASCENDING,createdAt:DESCENDING` |
+| `functions/scripts/baseline.mjs:112` | events / COLLECTION | areaId ==; active == | Implicit/default | `COLLECTION/events/areaId:ASCENDING,active:ASCENDING` |
 | `functions/scripts/coverage-check.mjs:35` | events / COLLECTION | areaId ==; active == | Implicit/default | `COLLECTION/events/areaId:ASCENDING,active:ASCENDING` |
 | `functions/scripts/list-low-confidence.mjs:38` | events / COLLECTION | classificationConfidence < | classificationConfidence ASCENDING; __name__ ASCENDING | `COLLECTION/events/classificationConfidence:ASCENDING,__name__:ASCENDING` |
 | `functions/src/account.ts:216` | moderationQueue / COLLECTION | targetType ==; targetId == | Implicit/default | `COLLECTION/moderationQueue/targetId:ASCENDING,targetType:ASCENDING` |
