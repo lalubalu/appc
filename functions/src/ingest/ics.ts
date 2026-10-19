@@ -28,6 +28,8 @@ export interface IcsEvent {
   allDay: boolean;
   geo?: { lat: number; lng: number };
   organizer?: string;
+  /** RFC 5545 STATUS: CONFIRMED | TENTATIVE | CANCELLED. */
+  status?: string;
   /** For expanded recurrences: the occurrence start as ISO, appended to the uid. */
   recurrenceId?: string;
 }
@@ -222,6 +224,7 @@ function buildEvents(props: Prop[], defaultTz: string, opts: ParseOptions): IcsE
     allDay: start.allDay,
     geo,
     organizer,
+    status: get("STATUS")?.value?.trim().toUpperCase() || undefined,
   };
 
   const durationMs = end ? Math.max(0, end.date.getTime() - start.date.getTime()) : 0;

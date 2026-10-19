@@ -203,8 +203,13 @@ export async function runSuggestionDigest(nowMs = Date.now()): Promise<{ conside
     const qualifying: string[] = [];
     for (const r of ranked) {
       if (suppressed.has(r.id)) continue;
+      // W3.8: under ranking v2 John's eligibility rule decides (score ≥ 0.70, starts within 4 days,
+      // not saved) — "not already notified" is the suppressed set above. The weekly cap, quiet hours
+      // and preferences below are unchanged; his max_per_user_per_day is deliberately not ported.
+      if (r.version === "v2" && r.notify !== true) continue;
       const ev = await db.collection("events").doc(r.id).get();
       if (ev.data()?.category === "Program" || ev.data()?.opportunitySubtype === "program") continue;
+      if (ev.data()?.adultOnly === true && data?.ageBand !== "adult") continue;   // minor protection (W2)
       const startMs = (ev.data()?.date as Timestamp)?.toMillis?.() ?? 0;
       if (startMs < nowMs || startMs > horizonMs) continue;
       qualifying.push(r.id);

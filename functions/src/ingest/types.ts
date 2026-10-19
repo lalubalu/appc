@@ -59,6 +59,10 @@ export interface NormalizedEvent {
   /** Activity metadata kept separate from audiences/topics and search tag caps. */
   eventTypes?: string[];
   audiences?: string[];
+  /** John's Event.status, when the feed says (Ticketmaster dates.status.code, iCal STATUS). "postponed" is NOT blocking. */
+  status?: "scheduled" | "cancelled" | "postponed";
+  /** John's format == "online", when the feed says so structurally. */
+  virtual?: boolean;
 }
 
 /** What one ingest run did, per source. */

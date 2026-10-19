@@ -97,7 +97,7 @@ export interface UpsertStats {
  * that reappears in its feed has to reattach to its existing document (with the
  * provenance other feeds already merged into it), not be recreated from scratch.
  */
-export async function loadAreaIndex(area: LaunchArea, now = new Date()): Promise<AreaIndex> {
+export async function loadAreaIndex(area: LaunchArea, now = new Date(Date.now())): Promise<AreaIndex> {
   const query = db.collection("events")
     .where("areaId", "==", area.id)
     .where("date", ">=", Timestamp.fromMillis(now.getTime() - 2 * 86_400_000))
@@ -240,7 +240,7 @@ export function contentHash(rec: AnnotatedEvent): string {
     qualityScore: rec.qualityScore, inferredCost: rec.inferredCost, ageSuitability: rec.ageSuitability, endInferred: rec.endInferred,
     isFree: rec.isFree ?? null, priceMin: rec.priceMin ?? null, website: rec.website ?? null, imageURL: rec.imageURL ?? null,
     tags: rec.tags.slice(0, 8), eventTypes: rec.eventTypes ?? [], audiences: rec.audiences ?? [],
-    adultOnly: rec.adultOnly, adultOnlyReason: rec.adultOnlyReason, topicTags: rec.topicTags,
+    adultOnly: rec.adultOnly, adultOnlyReason: rec.adultOnlyReason, topicTags: rec.topicTags, virtual: isOnlineListing(rec),
   };
   return createHash("sha1").update(JSON.stringify(material)).digest("hex");
 }
@@ -297,6 +297,7 @@ function fullDocument(rec: AnnotatedEvent, now: Timestamp): FirebaseFirestore.Do
     tags: rec.tags.slice(0, 8),
     eventTypes: rec.eventTypes ?? [],
     audiences: rec.audiences ?? [],
+    virtual: isOnlineListing(rec),
     ...enrichmentFields(rec),
     contentHash: contentHash(rec),
     ingestedAt: now,
@@ -313,7 +314,7 @@ function fullDocument(rec: AnnotatedEvent, now: Timestamp): FirebaseFirestore.Do
 }
 
 /** Fields refreshed on every sighting from the PRIMARY source. */
-function refreshFromPrimary(rec: AnnotatedEvent, hash: string): FirebaseFirestore.DocumentData {
+function refreshFromPrimary(rec: AnnotatedEvent, hash: string, existing: FirebaseFirestore.DocumentData): FirebaseFirestore.DocumentData {
   const upd: FirebaseFirestore.DocumentData = {
     title: rec.title, description: rec.description, organizer: rec.organizer,
     date: Timestamp.fromDate(rec.start), time: rec.time, locationName: rec.locationName,
@@ -321,9 +322,16 @@ function refreshFromPrimary(rec: AnnotatedEvent, hash: string): FirebaseFirestor
     titleKey: titleKey(rec.title), venueKey: venueKey(rec.locationName), startBucket: startBucket(rec.start),
     isFree: rec.isFree ?? null, tags: rec.tags.slice(0, 8),
     eventTypes: rec.eventTypes ?? [], audiences: rec.audiences ?? [],
+    virtual: isOnlineListing(rec),
     ...enrichmentFields(rec),
+    // Err toward true across feeds: a secondary feed that said "21+" is not undone by the primary's refresh,
+    // and labels contributed by other feeds survive it.
+    adultOnly: rec.adultOnly || existing.adultOnly === true,
+    adultOnlyReason: rec.adultOnly ? rec.adultOnlyReason : existing.adultOnly === true ? (existing.adultOnlyReason ?? null) : null,
+    topicTags: [...new Set([...rec.topicTags, ...(Array.isArray(existing.topicTags) ? existing.topicTags : [])])].filter((t) => t !== "other").slice(0, 19),
     contentHash: hash,
   };
+  if (!upd.topicTags.length) upd.topicTags = ["other"];
   if (rec.end) upd.endDate = Timestamp.fromDate(rec.end);
   if (rec.latitude !== undefined) upd.latitude = rec.latitude;
   if (rec.longitude !== undefined) upd.longitude = rec.longitude;
@@ -375,11 +383,28 @@ export type RejectionReason =
 export const ENDED_GRACE_MS = 2 * 3_600_000;
 
 const ONLINE_LOCATION = /\b(?:virtual|online|zoom|webinar|livestream|live stream|teams meeting|google meet)\b/i;
-const CANCELLED_TITLE = /^\s*(?:\[?\(?\s*)?(?:cancel+ed|postponed|rescheduled)\b/i;
+/** A title that LEADS with a virtual marker ("*Virtual* Mock Interview", "(Virtual) Math Club", "Online: Book Club"); "Virtual Reality Lab" does not count. */
+const ONLINE_TITLE = /^\s*[\(\[\*]?\s*(?:virtual|online|webinar)\s*[\)\]\*:\-–—]/i;
+/**
+ * The feed said cancelled, or the title says so outright. DEVIATION from
+ * validate.py noted for John: a leading "CANCELED --" in a title is treated as
+ * his structured status (several library feeds have no status field and write
+ * it into the title). "Postponed" and "rescheduled" are NOT blocking — John
+ * keeps them as status "postponed", and so does this.
+ */
+const CANCELLED_TITLE = /^\s*(?:\[?\(?\s*)?cancel+ed\b/i;
+/** Placeholder venues the feeds use when they have no location; John keeps these as text, this port treats them as no location (DEVIATION, noted). */
+const PLACEHOLDER_VENUES = new Set(["", "locationtba", "tba", "tbd", "online", "virtual", "seewebsite", "seelisting", "na", "none"]);
 
-/** John's `format == "online"`: the feed has no format field, so the location (or title) must say so. */
-export function isOnlineListing(rec: NormalizedEvent & { virtual?: boolean }): boolean {
-  return rec.virtual === true || ONLINE_LOCATION.test(rec.locationName) || /\b(?:virtual|online|webinar)\b/i.test(rec.title);
+/** John's `format == "online"`: the feed's structured flag, or a location/title that says so. */
+export function isOnlineListing(rec: Pick<NormalizedEvent, "title" | "locationName"> & { virtual?: boolean }): boolean {
+  return rec.virtual === true || ONLINE_LOCATION.test(rec.locationName ?? "") || ONLINE_TITLE.test(rec.title ?? "");
+}
+
+/** Port of validate.py has_location: a venue name counts in ANY script; only an empty string or a known placeholder is "no location". */
+export function hasVenueText(locationName: string): boolean {
+  const bare = String(locationName ?? "").toLowerCase().normalize("NFKD").replace(/[^\p{L}\p{N}]/gu, "");
+  return !PLACEHOLDER_VENUES.has(bare);
 }
 
 /**
@@ -401,7 +426,7 @@ export function listingChecks(rec: NormalizedEvent & { status?: string; virtual?
   const online = isOnlineListing(rec);
   const hasCoords = typeof rec.latitude === "number" && typeof rec.longitude === "number";
   if (hasCoords && !online && !isInsideArea(area, rec.latitude!, rec.longitude!)) reasons.push("outside_region");
-  if (!online && !hasCoords && !venueKey(rec.locationName ?? "")) reasons.push("missing_location_in_person");
+  if (!online && !hasCoords && !hasVenueText(rec.locationName ?? "")) reasons.push("missing_location_in_person");
   return reasons;
 }
 
@@ -499,6 +524,15 @@ export async function upsertBatch(
       continue;
     }
 
+    // A listing that was rejected on an earlier run and is valid now drops its rejected row (one write, once).
+    if (withCoords.sourceEventId) {
+      const rejectedId = eventDocId(withCoords.source, withCoords.sourceEventId);
+      if (index.rejected.has(rejectedId)) {
+        index.rejected.delete(rejectedId);
+        await queue((b) => b.delete(db.collection("rejectedListings").doc(rejectedId)));
+      }
+    }
+
     // 1. Horizon: not a rejection, just not ingested yet.
     if (!isWithinHorizon(withCoords, runMs)) { stats.skipped++; continue; }
 
@@ -509,8 +543,10 @@ export async function upsertBatch(
 
     // 2. Same source key: refresh, or skip the write when nothing changed.
     if (seen) {
-      const isPrimary = seen.data.source === rec.source;
-      const fieldUpdate = isPrimary ? refreshFromPrimary(rec, hash) : fillFromSecondary(seen.data, rec);
+      // The primary is the record this document was CREATED from. A second record from the same feed that
+      // merged in later (a same-source duplicate) is secondary, or its title would flip the document every run.
+      const isPrimary = seen.data.source === rec.source && String(seen.data.sourceEventId ?? "") === rec.sourceEventId;
+      const fieldUpdate = isPrimary ? refreshFromPrimary(rec, hash, seen.data) : fillFromSecondary(seen.data, rec);
       const skippable = isPrimary ? unchangedSighting(seen.data, hash, runMs)
         : (changesNothing(seen.data, fieldUpdate) && unchangedSighting(seen.data, String(seen.data.contentHash ?? ""), runMs));
       if (skippable) {
@@ -678,7 +714,7 @@ export function fuzzyListingFromDoc(data: FirebaseFirestore.DocumentData): Fuzzy
     latitude: typeof data.latitude === "number" ? data.latitude : null,
     longitude: typeof data.longitude === "number" ? data.longitude : null,
     url: typeof data.website === "string" ? data.website : null,
-    online: data.virtual === true,
+    online: data.virtual === true || isOnlineListing({ title: String(data.title ?? ""), locationName: String(data.locationName ?? "") }),
   };
 }
 

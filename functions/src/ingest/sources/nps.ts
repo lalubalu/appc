@@ -28,7 +28,7 @@ interface NpsEvent {
 export async function fetchNps(area: LaunchArea, apiKey: string, fetchImpl: typeof fetch = fetch): Promise<NormalizedEvent[]> {
   if (!apiKey) throw new Error("NPS_API_KEY not configured");
   const out: NormalizedEvent[] = [];
-  for (const parkCode of area.nps.parkCodes) {
+  for (const parkCode of (area as LaunchArea & { nps?: { parkCodes: string[] } }).nps?.parkCodes ?? []) {
     const q = new URLSearchParams({ parkCode, pageSize: "100", api_key: apiKey });
     const res = await fetchImpl(`https://developer.nps.gov/api/v1/events?${q}`, { signal: AbortSignal.timeout(20_000) });
     if (!res.ok) throw new Error(`NPS HTTP ${res.status} (${parkCode})`);

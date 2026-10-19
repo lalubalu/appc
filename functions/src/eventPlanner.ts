@@ -196,10 +196,15 @@ export const planEvents = onCall({ secrets: [ANTHROPIC_API_KEY] }, async (req) =
   const areaId = safeText(req.data?.areaId, 60) || "san-jose-ca";
   if (areaId.includes("/")) throw new HttpsError("invalid-argument", "Invalid area.");
   const ranked = await recommendFor(uid, areaId, input.lat, input.lng, 60, input.nowMs);
-  const docs = await Promise.all(ranked.slice(0, 50).map((r) => db.collection("events").doc(r.id).get()));
+  const [docs, viewer] = await Promise.all([
+    Promise.all(ranked.slice(0, 50).map((r) => db.collection("events").doc(r.id).get())),
+    db.collection("users").doc(uid).get(),
+  ]);
+  const viewerIsAdult = viewer.data()?.ageBand === "adult";
   const rows: EventPlanCandidate[] = docs.flatMap((doc, i) => {
     const x = doc.data();
     if (!x || x.hidden === true || x.active !== true || x.broadcast !== true || x.category === "Program" || x.opportunitySubtype === "program") return [];
+    if (x.adultOnly === true && !viewerIsAdult) return [];   // minor protection (W2)
     return [{ id: doc.id, title: safeText(x.title, 120), category: safeText(x.category, 50),
       organizer: safeText(x.organizer, 100), startMs: x.date instanceof Timestamp ? x.date.toMillis() : 0,
       locationName: safeText(x.locationName, 200), isFree: x.isFree === true,

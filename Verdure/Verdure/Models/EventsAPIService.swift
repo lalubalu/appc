@@ -70,6 +70,34 @@ final class EventsAPIService {
     private var everythingAreaId: String?
     private var everythingStartAt = Date()
 
+    // MARK: - Adult-only gate (W2)
+    //
+    // The rules serve an adultOnly listing only to a signed-in account whose
+    // server-written ageBand is "adult". Rules are not filters: a query from a
+    // minor, unknown-age or signed-out session that does not itself constrain
+    // adultOnly == false is denied outright. So every /events query below exists
+    // in two spellings — the adult one and the filtered one — chosen by
+    // `viewerIsAdult`. (They are written out in full rather than through a
+    // helper because the Firestore index inventory, functions/scripts/
+    // firestore-query-inventory.mjs, follows only literal query chains and
+    // fails closed on anything it cannot read.)
+    private(set) var viewerIsAdult = false
+    private var viewerAgeUID: String?
+
+    /// Re-reads the caller's age band when the account changes or is not yet
+    /// known to be adult. Unknown age fails closed and browses like a minor.
+    func refreshViewerAgeBand() async {
+        guard let uid = Auth.auth().currentUser?.uid else { viewerIsAdult = false; viewerAgeUID = nil; return }
+        if viewerAgeUID == uid && viewerIsAdult { return }
+        do {
+            let snapshot = try await db.collection("users").document(uid).getDocument(source: .server)
+            viewerIsAdult = (snapshot.data()?["ageBand"] as? String) == "adult"
+        } catch {
+            viewerIsAdult = false
+        }
+        viewerAgeUID = uid
+    }
+
     // Cache
     private let cacheKey = "cachedEventsJSON.v2"
     private let cacheCenterKey = "cachedEventsCenter.v2"
@@ -218,15 +246,26 @@ final class EventsAPIService {
         everythingLoading = true
         everythingError = nil
         defer { everythingLoading = false }
+        await refreshViewerAgeBand()
         do {
-            var query: Query = db.collection("events")
-                .whereField("hidden", isEqualTo: false)
-                .whereField("active", isEqualTo: true)
-                .whereField("broadcast", isEqualTo: true)
-                .whereField("areaId", isEqualTo: area)
-                .whereField("date", isGreaterThanOrEqualTo: Timestamp(date: everythingStartAt))
-                .order(by: "date")
-                .limit(to: 40)
+            var query: Query = viewerIsAdult
+                ? db.collection("events")
+                    .whereField("hidden", isEqualTo: false)
+                    .whereField("active", isEqualTo: true)
+                    .whereField("broadcast", isEqualTo: true)
+                    .whereField("areaId", isEqualTo: area)
+                    .whereField("date", isGreaterThanOrEqualTo: Timestamp(date: everythingStartAt))
+                    .order(by: "date")
+                    .limit(to: 40)
+                : db.collection("events")
+                    .whereField("hidden", isEqualTo: false)
+                    .whereField("active", isEqualTo: true)
+                    .whereField("broadcast", isEqualTo: true)
+                    .whereField("areaId", isEqualTo: area)
+                    .whereField("adultOnly", isEqualTo: false)
+                    .whereField("date", isGreaterThanOrEqualTo: Timestamp(date: everythingStartAt))
+                    .order(by: "date")
+                    .limit(to: 40)
             if let everythingCursor { query = query.start(afterDocument: everythingCursor) }
             // An empty local Firestore cache is not a successful feed refresh.
             let page = try await query.getDocuments(source: .server)
@@ -413,13 +452,23 @@ final class EventsAPIService {
     /// chronological discovery cards. Public rule constraints also work signed out.
     private func fetchVolunteerSupply() async {
         let now = Timestamp(date: Date())
-        let query = db.collection("events")
-            .whereField("hidden", isEqualTo: false)
-            .whereField("active", isEqualTo: true)
-            .whereField("broadcast", isEqualTo: true)
-            .whereField("category", isEqualTo: "Volunteer")
-            .whereField("date", isGreaterThan: now)
-            .order(by: "date")
+        await refreshViewerAgeBand()
+        let query: Query = viewerIsAdult
+            ? db.collection("events")
+                .whereField("hidden", isEqualTo: false)
+                .whereField("active", isEqualTo: true)
+                .whereField("broadcast", isEqualTo: true)
+                .whereField("category", isEqualTo: "Volunteer")
+                .whereField("date", isGreaterThan: now)
+                .order(by: "date")
+            : db.collection("events")
+                .whereField("hidden", isEqualTo: false)
+                .whereField("active", isEqualTo: true)
+                .whereField("broadcast", isEqualTo: true)
+                .whereField("category", isEqualTo: "Volunteer")
+                .whereField("adultOnly", isEqualTo: false)
+                .whereField("date", isGreaterThan: now)
+                .order(by: "date")
         do {
             var docs: [QueryDocumentSnapshot] = []
             var cursor: DocumentSnapshot?
@@ -452,16 +501,26 @@ final class EventsAPIService {
     /// (public listings — readable signed out) or the caller follows the organizer.
     /// Returns nil when the read fails so callers keep their cache.
     private func fetchFirestoreEvents() async -> [Event]? {
+        await refreshViewerAgeBand()
         do {
             let now = Timestamp(date: Date().addingTimeInterval(-3600))
-            let snapshot = try await db.collection("events")
-                .whereField("hidden", isEqualTo: false)
-                .whereField("active", isEqualTo: true)
-                .whereField("broadcast", isEqualTo: true)
-                .whereField("date", isGreaterThanOrEqualTo: now)
-                .order(by: "date")
-                .limit(to: maxEvents)
-                .getDocuments(source: .server)
+            let snapshot = try await (viewerIsAdult
+                ? db.collection("events")
+                    .whereField("hidden", isEqualTo: false)
+                    .whereField("active", isEqualTo: true)
+                    .whereField("broadcast", isEqualTo: true)
+                    .whereField("date", isGreaterThanOrEqualTo: now)
+                    .order(by: "date")
+                    .limit(to: maxEvents)
+                : db.collection("events")
+                    .whereField("hidden", isEqualTo: false)
+                    .whereField("active", isEqualTo: true)
+                    .whereField("broadcast", isEqualTo: true)
+                    .whereField("adultOnly", isEqualTo: false)
+                    .whereField("date", isGreaterThanOrEqualTo: now)
+                    .order(by: "date")
+                    .limit(to: maxEvents)
+            ).getDocuments(source: .server)
             return snapshot.documents.compactMap { Self.mapFirestoreDocument($0) }
         } catch {
             lastError = "Couldn't reach the event store. Showing what was saved on this device."
@@ -477,15 +536,24 @@ final class EventsAPIService {
         guard Auth.auth().currentUser != nil, !organizerIDs.isEmpty else { return [] }
         var out: [Event] = []
         let cutoff = Timestamp(date: Date().addingTimeInterval(-3600))
+        await refreshViewerAgeBand()
         for orgId in organizerIDs.prefix(20) {
             do {
-                let snap = try await db.collection("events")
-                    .whereField("hidden", isEqualTo: false)
-                    .whereField("active", isEqualTo: true)
-                    .whereField("organizerId", isEqualTo: orgId)
-                    .whereField("date", isGreaterThanOrEqualTo: cutoff)
-                    .limit(to: 100)
-                    .getDocuments(source: .server)
+                let snap = try await (viewerIsAdult
+                    ? db.collection("events")
+                        .whereField("hidden", isEqualTo: false)
+                        .whereField("active", isEqualTo: true)
+                        .whereField("organizerId", isEqualTo: orgId)
+                        .whereField("date", isGreaterThanOrEqualTo: cutoff)
+                        .limit(to: 100)
+                    : db.collection("events")
+                        .whereField("hidden", isEqualTo: false)
+                        .whereField("active", isEqualTo: true)
+                        .whereField("organizerId", isEqualTo: orgId)
+                        .whereField("adultOnly", isEqualTo: false)
+                        .whereField("date", isGreaterThanOrEqualTo: cutoff)
+                        .limit(to: 100)
+                ).getDocuments(source: .server)
                 out.append(contentsOf: snap.documents.compactMap { Self.mapFirestoreDocument($0) })
             } catch {
                 print("[EventsAPI] organizer \(orgId) query failed: \(error.localizedDescription)")
@@ -552,7 +620,8 @@ final class EventsAPIService {
             recurring: data["recurring"] as? Bool,
             virtual: data["virtual"] as? Bool,
             applicationDeadline: (data["applicationDeadline"] as? Timestamp)?.dateValue(),
-            opportunitySubtype: data["opportunitySubtype"] as? String
+            opportunitySubtype: data["opportunitySubtype"] as? String,
+            adultOnly: data["adultOnly"] as? Bool ?? false
         )
     }
 

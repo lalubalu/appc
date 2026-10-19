@@ -23,7 +23,7 @@ import { getAuth, connectAuthEmulator, signInWithEmailAndPassword } from "fireba
 import {
   getFirestore as clientFirestore, connectFirestoreEmulator,
   doc, setDoc, updateDoc, deleteDoc, getDoc, increment, serverTimestamp,
-  collection, query, getDocs, writeBatch,
+  collection, query, where, getDocs, writeBatch,
 } from "firebase/firestore";
 
 const PROJECT = "connectify-19dd8";
@@ -322,6 +322,61 @@ async function main() {
       imagePlaceholder: "bag.fill", pointValue: 100000,
       creatorID: atk.uid, createdAt: serverTimestamp(),
     }))) === "permission-denied");
+
+
+  // ══ 5b. MINOR PROTECTION (W2): adult-only listings vs. a minor and a guest ══
+  console.log("\n── Adult-only listings vs. a minor ──");
+  const seedListing = (id, title, adultOnly) => db.doc(`events/${id}`).set({ title, organizer: "V", date: new Date(Date.now() + 3 * 86_400_000), time: "9 PM",
+    locationName: "Downtown", attendeeCount: 0, category: "Social", imagePlaceholder: "cup.and.saucer.fill", pointValue: 100, creatorID: "system:ingest",
+    createdAt: new Date(), hidden: false, active: true, broadcast: true, source: "ics", areaId: "san-jose-ca", adultOnly, adultOnlyReason: adultOnly ? "alcohol" : null,
+    topicTags: ["social"], contentHash: "rt", qualityScore: 0.8, latitude: 37.3382, longitude: -121.8863 });
+  await seedListing("rt-adult-only", "Bar Crawl", true);
+  await seedListing("rt-ordinary", "Park Chess", false);
+  await db.doc("feedCaches/san-jose-ca").delete().catch(() => {});
+  const teen = await signUp(`teen-${Date.now()}@evil.test`, pw);
+  await call("registerAgeBand", { birthYear: new Date().getUTCFullYear() - 15 }, teen.idToken);
+  const teenApp = clientInit({ projectId: PROJECT, apiKey: "fake-api-key" }, "teen");
+  const teenAuth = getAuth(teenApp);
+  connectAuthEmulator(teenAuth, EMULATORS.auth.url, { disableWarnings: true });
+  const teenDb = clientFirestore(teenApp);
+  connectFirestoreEmulator(teenDb, EMULATORS.firestore.host, EMULATORS.firestore.port);
+  await signInWithEmailAndPassword(teenAuth, teen.email, pw);
+  const guestDb = clientFirestore(clientInit({ projectId: PROJECT, apiKey: "fake-api-key" }, "guest-rt"));
+  connectFirestoreEmulator(guestDb, EMULATORS.firestore.host, EMULATORS.firestore.port);
+  const listCode = async (fdb, withFilter) => {
+    const c = [where("hidden", "==", false), where("active", "==", true), where("broadcast", "==", true)];
+    if (withFilter) c.push(where("adultOnly", "==", false));
+    c.push(where("date", ">=", new Date()));
+    try { return { code: "ok", ids: (await getDocs(query(collection(fdb, "events"), ...c))).docs.map((d) => d.id) }; } catch (e) { return { code: e.code, ids: [] }; }
+  };
+  expectBlocked("a minor cannot promote itself to adult (ageBand is server-owned)",
+    (await tryWrite(() => updateDoc(doc(teenDb, `users/${teen.uid}`), { ageBand: "adult" }))) === "permission-denied");
+  expectBlocked("a minor cannot list /events without the adultOnly filter", (await listCode(teenDb, false)).code === "permission-denied");
+  expectBlocked("a minor cannot read an adult-only listing by id", (await tryWrite(() => getDoc(doc(teenDb, "events/rt-adult-only")))) === "permission-denied");
+  expectBlocked("a signed-out client cannot read an adult-only listing by id", (await tryWrite(() => getDoc(doc(guestDb, "events/rt-adult-only")))) === "permission-denied");
+  expectBlocked("a signed-out client cannot list /events without the adultOnly filter", (await listCode(guestDb, false)).code === "permission-denied");
+  const teenFeed = await call("recommendedEvents", { areaId: "san-jose-ca", lat: 37.3382, lng: -121.8863, limit: 50 }, teen.idToken);
+  const teenFeedIds = (teenFeed.result?.events ?? []).map((e) => e.id);
+  const teenFeedAdult = (await Promise.all(teenFeedIds.map((id) => db.doc(`events/${id}`).get()))).filter((d) => d.data()?.adultOnly === true).map((d) => d.id);
+  expectBlocked("a minor's ranked feed carries no adult-only listing", teenFeedIds.length > 0 && teenFeedAdult.length === 0, `adult ids in feed: ${teenFeedAdult}`);
+  const teenRsvp = await call("rsvpToEvent", { eventId: "rt-adult-only", going: true }, teen.idToken);
+  expectBlocked("a minor cannot RSVP to an adult-only listing", teenRsvp.error?.status === "PERMISSION_DENIED", JSON.stringify(teenRsvp));
+  const teenList = await listCode(teenDb, true);
+  expectWorks("a minor still browses ordinary broadcast events with the app's filtered query", teenList.code === "ok" && teenList.ids.includes("rt-ordinary") && !teenList.ids.includes("rt-adult-only"), JSON.stringify(teenList));
+  const guestList = await listCode(guestDb, true);
+  expectWorks("a signed-out guest still browses ordinary broadcast events", guestList.code === "ok" && guestList.ids.includes("rt-ordinary") && !guestList.ids.includes("rt-adult-only"), JSON.stringify(guestList));
+  const clientEvent = (over) => ({ title: "Craft Beer Night", organizer: "Me", date: new Date(Date.now() + 3 * 86_400_000), time: "9 PM", locationName: "Downtown",
+    attendeeCount: 0, category: "Social", imagePlaceholder: "cup.and.saucer.fill", pointValue: 100, creatorID: atk.uid, createdAt: serverTimestamp(),
+    hidden: false, active: true, source: "community", adultOnly: false, latitude: 37.3382, longitude: -121.8863, ...over });
+  expectBlocked("a client cannot attach its event to an organizer (organizerId is server-owned at create)",
+    (await tryWrite(() => setDoc(doc(cdb, "events/rt-forged-org"), clientEvent({ organizerId: "some-organizer" })))) === "permission-denied");
+  expectBlocked("a client cannot create a broadcast event with a self-declared adultOnly=false",
+    (await tryWrite(() => setDoc(doc(cdb, "events/rt-self-broadcast"), clientEvent({ broadcast: true })))) === "permission-denied");
+  expectBlocked("a client cannot create an event without the adultOnly flag",
+    (await tryWrite(() => setDoc(doc(cdb, "events/rt-no-flag"), (() => { const e = clientEvent({}); delete e.adultOnly; return e; })()))) === "permission-denied");
+  const selfOnly = await tryWrite(() => setDoc(doc(cdb, "events/rt-self-only"), clientEvent({})));
+  expectWorks("a client's own non-broadcast community event is still accepted", selfOnly === "ok", selfOnly);
+  expectBlocked("…and a minor cannot read it: it reaches nobody but its creator", (await tryWrite(() => getDoc(doc(teenDb, "events/rt-self-only")))) === "permission-denied");
 
   // ══ 6. SOCIAL MANIPULATION ══
   console.log("\n── Social manipulation ──");

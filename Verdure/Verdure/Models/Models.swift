@@ -111,6 +111,9 @@ struct Event: Identifiable, Hashable {
     var virtual: Bool? = nil
     var applicationDeadline: Date? = nil
     var opportunitySubtype: String? = nil
+    /// Server-annotated: alcohol service, an age limit or an alcohol-brand presenter.
+    /// Served only to signed-in adults; carried so detail copy can say why.
+    var adultOnly: Bool = false
 
     var isProgram: Bool { category == .program || opportunitySubtype == "program" }
     func programIsCurrent(now: Date = Date()) -> Bool {

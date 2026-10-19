@@ -2,7 +2,7 @@
 //   npm run build && node scripts/backfill-annotate.mjs            # dry run (default)
 //   npm run build && node scripts/backfill-annotate.mjs --write    # apply
 //
-// Idempotent and resumable: documents that already carry all three fields are
+// Idempotent (re-running proposes zero changes): documents that already carry all three fields are
 // left alone, so a second pass proposes zero changes. Reports counts per source
 // and the adultOnly / topicTag distribution, which is the evidence W1 asks for.
 // Refuses production unless FIRESTORE_EMULATOR_HOST is unset AND --live is passed.

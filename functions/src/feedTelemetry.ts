@@ -8,6 +8,7 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { db, requireUid, enforceRateLimit, safeText } from "./common.js";
 import type { ScoredEvent } from "./ranking.js";
+import { markShown } from "./ranking-v2.js";
 
 const outcomes = ["impression", "tap", "save", "rsvp", "dismiss"] as const;
 const weight: Record<string, number> = { ignored: 0, tap: 1, save: 2, rsvp: 3, dismiss: 4 };
@@ -17,6 +18,7 @@ export async function createFeedSession(uid: string, areaId: string, events: Sco
   await db.collection("feedSessions").doc(id).create({
     uid, areaId, events: events.slice(0, 100).map((e, position) => ({
       id: e.id, position, score: Number(e.score.toFixed(4)), parts: e.parts,
+      ...(e.version ? { version: e.version } : {}),
     })), createdAt: FieldValue.serverTimestamp(),
   });
   return id;
@@ -35,11 +37,13 @@ export const recordFeedEvent = onCall(async (req) => {
   const sessionRef = db.collection("feedSessions").doc(sessionId);
   const eventRef = db.collection("feedImpressions").doc(`${uid}_${sessionId}_${eventId}`);
   return db.runTransaction(async (tx) => {
-    const [session, existing] = await Promise.all([tx.get(sessionRef), tx.get(eventRef)]);
+    // Every read happens before the first write: Firestore transactions refuse a read after a write.
+    const userRef = db.collection("users").doc(uid);
+    const [session, existing, user] = await Promise.all([tx.get(sessionRef), tx.get(eventRef), action === "impression" ? tx.get(userRef) : Promise.resolve(null)]);
     if (session.data()?.uid !== uid) throw new HttpsError("not-found", "Feed not found.");
     const created = session.data()?.createdAt?.toMillis?.() ?? 0;
     if (Date.now() - created > 24 * 3_600_000) throw new HttpsError("failed-precondition", "Feed expired.");
-    const row = (session.data()?.events as Array<{ id: string; position: number; score: number; parts: Record<string, number> }> | undefined)
+    const row = (session.data()?.events as Array<{ id: string; position: number; score: number; parts: Record<string, number>; version?: string }> | undefined)
       ?.find((e) => e.id === eventId);
     if (!row) throw new HttpsError("permission-denied", "Event was not in this feed.");
     const next = action === "impression" ? "ignored" : action;
@@ -48,9 +52,17 @@ export const recordFeedEvent = onCall(async (req) => {
     tx.set(eventRef, {
       uid, sessionId, eventId, areaId: session.data()?.areaId,
       position: row.position, score: row.score, parts: row.parts,
+      ...(row.version ? { version: row.version } : {}),
       outcome, createdAt: existing.exists ? existing.data()?.createdAt : FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
+    // W3.6 novelty: a presented card is "first shown" once, in one bounded map on the user document.
+    if (action === "impression" && user) {
+      const current = user.data()?.firstShown;
+      if (!(current && typeof current === "object" && typeof current[eventId] === "number")) {
+        tx.set(userRef, { firstShown: markShown(current && typeof current === "object" ? current : undefined, [eventId], Date.now()) }, { merge: true });
+      }
+    }
     return { recorded: true, outcome };
   });
 });

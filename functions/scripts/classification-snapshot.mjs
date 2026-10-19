@@ -4,6 +4,7 @@ import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { gzipSync, gunzipSync } from "node:zlib";
 import { createHash } from "node:crypto";
 import { SAN_JOSE } from "../lib/ingest/areas.js";
+import { seedsOfType } from "../lib/ingest/sources-config.js";
 import { enrichEvent } from "../lib/ingest/classify.js";
 import { fetchBiblioCommons } from "../lib/ingest/sources/bibliocommons.js";
 import { fetchLibCal } from "../lib/ingest/sources/libcal.js";
@@ -49,8 +50,8 @@ async function add(feed, call) {
   groups.push({ feed, events });
   console.error(`${feed}: ${events.length} upcoming`);
 }
-for (const f of SAN_JOSE.bibliocommons) await add(f.name, () => fetchBiblioCommons(SAN_JOSE, f, snapshotFetch));
-for (const f of SAN_JOSE.libcal) await add(f.name, () => fetchLibCal(SAN_JOSE, f, snapshotFetch));
+for (const s of seedsOfType("bibliocommons", SAN_JOSE.id)) await add(s.params.name, () => fetchBiblioCommons(SAN_JOSE, s.params, snapshotFetch));
+for (const s of seedsOfType("libcal", SAN_JOSE.id)) await add(s.params.name, () => fetchLibCal(SAN_JOSE, s.params, snapshotFetch));
 for (const f of SAN_JOSE.localist) await add(f.name, () => fetchLocalist(SAN_JOSE, f.host, f.name, snapshotFetch));
 for (const f of SAN_JOSE.livewhale) await add(f.name, () => fetchLiveWhale(SAN_JOSE, f.host, f.name, snapshotFetch, capturedAt));
 for (const f of SAN_JOSE.midpen) await add(f.name, () => fetchMidpen(SAN_JOSE, f, snapshotFetch));

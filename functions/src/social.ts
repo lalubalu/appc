@@ -151,7 +151,7 @@ export const followUser = onCall(async (req) => {
 // ── Going / RSVP ────────────────────────────────────────────────────────────
 
 /** Is this event something a member may RSVP to right now? */
-async function loadRsvpableEvent(eventId: string) {
+async function loadRsvpableEvent(eventId: string, uid?: string) {
   const snap = await db.collection("events").doc(eventId).get();
   if (!snap.exists) throw new HttpsError("not-found", "That event no longer exists.");
   const ev = snap.data()!;
@@ -159,7 +159,16 @@ async function loadRsvpableEvent(eventId: string) {
   if (ev.hidden === true || ev.removed === true || ev.active === false) {
     throw new HttpsError("failed-precondition", "That event isn't available.");
   }
+  // Minor protection (W2): only a recorded adult may RSVP to, or invite anyone to, an adult-only listing.
+  if (ev.adultOnly === true && uid && !(await isAdultAccount(uid))) {
+    throw new HttpsError("permission-denied", "This listing is for adults.");
+  }
   return { ref: snap.ref, data: ev };
+}
+
+/** registerAgeBand recorded this account as an adult. Missing or unknown age reads as a minor. */
+export async function isAdultAccount(uid: string): Promise<boolean> {
+  return (await db.collection("users").doc(uid).get()).data()?.ageBand === "adult";
 }
 
 /**
@@ -177,7 +186,7 @@ export const rsvpToEvent = onCall(async (req) => {
   const going = safeBool(req.data?.going, true);
   if (!eventId || eventId.includes("/")) throw new HttpsError("invalid-argument", "Missing eventId.");
 
-  const { ref: eventRef, data: ev } = await loadRsvpableEvent(eventId);
+  const { ref: eventRef, data: ev } = await loadRsvpableEvent(eventId, uid);
   // An event from an organizer who blocked you (or whom you blocked) is off limits.
   const organizerOwner = safeString(ev.organizerOwnerUid) || (safeString(ev.creatorID).startsWith("system") ? "" : safeString(ev.creatorID));
   if (going && organizerOwner && organizerOwner !== uid && await isBlockedEitherWay(uid, organizerOwner)) {
@@ -280,13 +289,15 @@ export const inviteToEvent = onCall(async (req) => {
   if (!eventId || eventId.includes("/")) throw new HttpsError("invalid-argument", "Missing eventId.");
   if (!toUids.length) throw new HttpsError("invalid-argument", "Choose at least one friend.");
 
-  const { data: ev } = await loadRsvpableEvent(eventId);
+  const { data: ev } = await loadRsvpableEvent(eventId, uid);
   const me = await profileBits(uid);
   const delivered: string[] = [], skipped: string[] = [];
 
   for (const target of toUids) {
     if (!(await areFriends(uid, target))) { skipped.push(target); continue; }
     if (await isBlockedEitherWay(uid, target)) { skipped.push(target); continue; }
+    // A minor is never invited to an adult-only listing, even by an adult friend.
+    if (ev.adultOnly === true && !(await isAdultAccount(target))) { skipped.push(target); continue; }
     const inviteRef = db.doc(`users/${target}/invites/${docIdFrom(eventId, uid)}`);
     const existing = await inviteRef.get();
     if (existing.exists) { skipped.push(target); continue; }
@@ -359,7 +370,7 @@ export const friendsGoing = onCall(async (req) => {
 export const friendsUpcoming = onCall(async (req) => {
   const uid = requireUid(req.auth);
   await enforceRateLimit(uid, "friendsUpcoming");
-  const [ids, blocked] = await Promise.all([friendIds(uid, 100), blockedSetFor(uid)]);
+  const [ids, blocked, viewerIsAdult] = await Promise.all([friendIds(uid, 100), blockedSetFor(uid), isAdultAccount(uid)]);
   const visible = ids.filter((id) => !blocked.has(id));
   const profiles = await Promise.all(visible.map((id) => db.collection("users").doc(id).get()));
   const people = new Map<string, string[]>();
@@ -381,6 +392,7 @@ export const friendsUpcoming = onCall(async (req) => {
     const x = doc.data();
     const startsAt = typeof x?.date?.toMillis === "function" ? x.date.toMillis() as number : 0;
     if (!x || x.active !== true || x.hidden === true || startsAt < now) return [];
+    if (x.adultOnly === true && !viewerIsAdult) return [];   // minor protection (W2)
     return [{
       id: doc.id, title: safeText(x.title, 120),
       locationName: safeText(x.locationName, 100), startsAt,

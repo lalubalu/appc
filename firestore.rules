@@ -77,6 +77,19 @@ service cloud.firestore {
     match /sourceHealth/{sourceId} {
       allow read, write: if false;
     }
+    // W4.1 — sources are data. Staff can read the registry (status, decision,
+    // inspection evidence); only server code (migration, discovery, removal,
+    // self-healing) writes it. The deny-list is enforced in code, not here.
+    match /sources/{sourceId} {
+      allow read: if request.auth != null && request.auth.token.admin == true;
+      allow write: if false;
+    }
+    // Server configuration (config/ranking: the v1/v2 switch and W6 thresholds).
+    // Written by the blind-judge script and the live comparison, read by the
+    // functions; never a client surface.
+    match /config/{docId} {
+      allow read, write: if false;
+    }
     // Listings that failed a blocking rule (W1.2), with their reasons and a
     // 30-day expiry. Operational data for staff; never a client surface.
     match /rejectedListings/{listingId} {
@@ -338,11 +351,20 @@ service cloud.firestore {
       // "Rules are not filters": a LIST must constrain these fields itself, which
       // is exactly what the two client queries do (broadcast == true for the
       // feed; organizerId == X for a followed organizer's calendar).
+      //
+      // ADULT-ONLY (W2). An adultOnly document is served only to a signed-in
+      // account whose server-written ageBand is "adult" (or to its creator).
+      // Rules are not filters: a minor, unknown-age or signed-out LIST must
+      // itself constrain adultOnly == false — every client query does — or the
+      // whole query is denied. Ranking alone is not enough because Everything,
+      // the map and search read /events directly.
       allow get: if resource.data.hidden == false
+                 && adultOnlyAllowed(resource.data)
                  && (resource.data.broadcast == true
                      || (request.auth != null && resource.data.creatorID == request.auth.uid)
                      || (request.auth != null && followsOrganizer(resource.data)));
       allow list: if resource.data.hidden == false
+                  && adultOnlyAllowed(resource.data)
                   && (resource.data.broadcast == true
                       || (request.auth != null && resource.data.creatorID == request.auth.uid)
                       || (request.auth != null && followsOrganizer(resource.data)));
@@ -504,6 +526,9 @@ service cloud.firestore {
           && data.adultOnly is bool
           && !('adultOnlyReason' in data) && !('topicTags' in data) && !('contentHash' in data)
           && (!('broadcast' in data) || data.broadcast == false)
+          // Only createEvent (server) attaches an event to an organizer; a client
+          // that could set organizerId would reach that organizer's followers.
+          && !('organizerId' in data)
           && !('sources' in data) && !('sourceKeys' in data) && !('areaId' in data)
           && !('organizerOwnerUid' in data) && !('lastSeenAt' in data) && !('missedCycles' in data)
           && !('categories' in data) && !('classificationConfidence' in data)
@@ -529,6 +554,25 @@ service cloud.firestore {
     function blockedEitherWay(otherUid) {
       return exists(/databases/$(database)/documents/users/$(request.auth.uid)/blocks/$(otherUid))
           || exists(/databases/$(database)/documents/users/$(otherUid)/blocks/$(request.auth.uid));
+    }
+
+    // Signed in AND recorded as an adult by registerAgeBand (ageBand is
+    // server-owned; see noServerOwnedFieldChanges). A missing profile or an
+    // unknown age is treated as a minor: the gate fails closed.
+    function isAdultViewer() {
+      return request.auth != null
+          && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('ageBand', '') == 'adult';
+    }
+
+    // adultOnly == false is the only branch a signed-out or minor reader can
+    // satisfy, which is why their list queries must carry that filter. The
+    // creator may always see their own listing (so a hidden flag is visible).
+    function adultOnlyAllowed(data) {
+      // A missing flag is treated as adult-only (fail closed), never as an error that denies everyone.
+      return data.get('adultOnly', true) == false
+          || (request.auth != null && data.creatorID == request.auth.uid)
+          || isAdultViewer();
     }
 
     // Does the caller follow the organizer that published this event?
@@ -629,7 +673,11 @@ service cloud.firestore {
         'notificationPrefs', 'notifyBudget',
         // Last known coarse location + area, used by the digest to rank without
         // asking the device while it is asleep.
-        'areaId', 'lastLat', 'lastLng'
+        'areaId', 'lastLat', 'lastLng',
+        // W3.6 ranking state, written only by recordEventFeedback / recordFeedEvent:
+        // a precomputed category-affinity map, the bounded "first shown" map that
+        // drives novelty, and the events this user hid or reported.
+        'affinity', 'firstShown', 'hiddenEventIDs'
       ];
       let noExtraFields = data.keys().hasOnly(allowedFields);
 
@@ -792,8 +840,10 @@ service cloud.firestore {
       let validDeadline = !('applicationDeadline' in data) || data.applicationDeadline is timestamp;
       let validRecurring = !('recurring' in data) || data.recurring is bool;
       let validVirtual = !('virtual' in data) || data.virtual is bool;
+      let validAdultReason = !('adultOnlyReason' in data) || data.adultOnlyReason == null
+          || data.adultOnlyReason in ['structured-age-limit', 'age-limit', 'alcohol', 'alcohol-venue', 'alcohol-brand'];
       return validAge && validSize && validSpace && validAccess && validVenue && validMinimum && validMaximum
-          && validDeadline && validRecurring && validVirtual
+          && validDeadline && validRecurring && validVirtual && validAdultReason
           && (!('opportunitySubtype' in data) || data.opportunitySubtype in ['volunteer', 'workshop', 'program']);
     }
 
@@ -835,7 +885,10 @@ service cloud.firestore {
                    // The weekly push budget. A client that could reset it could
                    // un-cap its own notifications; more importantly a malicious
                    // one could not, because the cap protects the USER from us.
-                   'notifyBudget']);
+                   'notifyBudget',
+                   // W3.6 ranking state. A client that could write its own affinity
+                   // or un-hide an event it hid would make feedback meaningless.
+                   'affinity', 'firstShown', 'hiddenEventIDs']);
     }
 
     // On create, server-owned fields must be absent or zero/empty — a fresh client
@@ -865,7 +918,8 @@ service cloud.firestore {
           && !('activeProfileId' in data)
           && !('savedFilterSets' in data)
           && !('recentPlanEventIDs' in data)
-          && !('redemptionBudget' in data);
+          && !('redemptionBudget' in data)
+          && !('affinity' in data) && !('firstShown' in data) && !('hiddenEventIDs' in data);
     }
 
     // Prevent changing fields that should be immutable after creation

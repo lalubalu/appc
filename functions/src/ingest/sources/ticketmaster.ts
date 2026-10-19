@@ -22,7 +22,7 @@ const HORIZON_DAYS = 60;
 interface TmEvent {
   id: string; name: string; url?: string; info?: string; pleaseNote?: string;
   images?: { url: string; width?: number; ratio?: string }[];
-  dates?: { start?: { localDate?: string; localTime?: string; dateTime?: string }; end?: { dateTime?: string }; timezone?: string };
+  dates?: { start?: { localDate?: string; localTime?: string; dateTime?: string }; end?: { dateTime?: string }; timezone?: string; status?: { code?: string } };
   classifications?: { segment?: { name?: string }; genre?: { name?: string }; subGenre?: { name?: string } }[];
   priceRanges?: { min?: number; max?: number; currency?: string }[];
   _embedded?: { venues?: { name?: string; city?: { name?: string }; address?: { line1?: string }; location?: { latitude?: string; longitude?: string }; timezone?: string }[] };
@@ -92,10 +92,15 @@ export function mapTicketmaster(e: TmEvent, area: LaunchArea): NormalizedEvent |
   const image = e.images?.slice().sort((a, b) => (b.width ?? 0) - (a.width ?? 0))[0]?.url;
   const locationParts = [venue?.name, venue?.city?.name].filter(Boolean).join(", ");
 
+  // Port of ticketmaster.py: "cancelled" if status_code == "cancelled" else "postponed" if in (postponed, rescheduled) else "scheduled".
+  const statusCode = String(e.dates?.status?.code ?? "").toLowerCase();
+  const status = statusCode === "cancelled" || statusCode === "canceled" ? "cancelled" as const
+    : statusCode === "postponed" || statusCode === "rescheduled" ? "postponed" as const : "scheduled" as const;
   return {
     source: "ticketmaster",
     sourceEventId: e.id,
     areaId: area.id,
+    status,
     title: cleanText(e.name, 120),
     description: cleanText(e.info || e.pleaseNote || "", 600),
     organizer: cleanText(venue?.name || "Ticketmaster", 80),

@@ -518,13 +518,40 @@ ok("adultOnly: '18+' and 'ages 21 and over' in text flag it", inferAdultOnly({ .
 ok("adultOnly: an age mentioned as a fact is not a limit ('over 70 years of dialogue', 'teaching for over 20 years', a lecture about adults 65 years and older)",
    inferAdultOnly({ ...baseRec, title: "Archive tour", description: "The exhibit explores over 70 years of dialogue." }) === false &&
    inferAdultOnly({ ...baseRec, title: "Paint Party", description: "An artist who has been teaching art for over 20+ years." }) === false &&
-   inferAdultOnly({ ...baseRec, title: "Scholar Series", description: "The current generation of older adults (65 years and older) are more likely to use alcohol-free remedies." }) === false &&
+   inferAdultOnly({ ...baseRec, title: "Scholar Series", description: "A talk for adults and teens about aging well across 70 years of research." }) === false &&
    inferAdultOnly({ ...baseRec, title: "ESL Club", description: "This program is for adults aged 18 and older who speak basic English." }) === true &&
    inferAdultOnly({ ...baseRec, title: "Totes", description: "This class is intended for adults, ages 18 and up." }) === true &&
    inferAdultOnly({ ...baseRec, title: "Board Game Day", description: "Open to ages 18+ from 10am." }) === true);
 ok("adultOnly: a toddler age range and a percentage are not limits ('Ages 18 Months - 4 Years', 'At least 60 percent')",
    inferAdultOnly({ ...baseRec, title: "Lil' Athletes for Ages 18 Months - 4 Years", description: "Stories and stretches." }) === false &&
    inferAdultOnly({ ...baseRec, title: "Wetland talk", description: "At least 60 percent of residents live near water." }) === false);
+ok("adultOnly: common service wording flags — alcohol served, cash bar, open bar, BYOB, champagne toast, sake tasting, hard cider release, taproom trivia, pub quiz, Brewfest, Beerfest, drink tickets, Sip & Paint, winemaker dinner",
+   ["Alcoholic beverages will be available for purchase.", "Alcohol will be served.", "Cash bar available.", "Open bar all night.", "BYOB!", "Champagne toast at midnight.",
+    "Sake Tasting", "Hard Cider Release Party", "Taproom Trivia", "Pub Quiz Night", "San Jose Brewfest", "Beerfest 2026", "Two drink tickets included.", "Sip & Paint", "Winemaker Dinner", "IPA release with lager on tap"]
+   .every((text) => inferAdultOnly({ ...baseRec, title: "Evening", description: text }) === true));
+ok("adultOnly: a brewery, taproom or wine bar as organizer or venue flags with the venue reason",
+   adultOnlyReason({ ...baseRec, organizer: "Hermitage Brewing Company", title: "Trivia Tuesday", description: "" }) === "alcohol-venue" &&
+   adultOnlyReason({ ...baseRec, organizer: "Community", locationName: "Gordon Biersch Brewery Restaurant", title: "Trivia", description: "" }) === "alcohol-venue" &&
+   adultOnlyReason({ ...baseRec, organizer: "Testarossa Winery", title: "Harvest Dinner", description: "" }) === "alcohol-venue");
+ok("adultOnly: bare age-limit grammar flags — '21 and over', '18 & up', 'adults aged 18 and older', 'must be over 21', 'over 21 only', 'no children under 18', 'under 21 not admitted', 'Adults-Only', 'ages 25-35', 'Adults (21 and over)' audience",
+   ["This is a 21 and over event.", "18 & up.", "Open to adults aged 18 and older.", "You must be over 21 to attend.", "Over 21 only.", "No children under 18 permitted.",
+    "Attendees under 21 will not be admitted.", "Adults-Only Night at the Museum", "For ages 25-35."]
+   .every((text) => inferAdultOnly({ ...baseRec, title: "Night", description: text }) === true) &&
+   inferAdultOnly({ ...baseRec, title: "Trivia", description: "", audiences: ["Adults (21 and over)"] }) === true);
+ok("adultOnly: counted nouns, student IDs, 'last call', cocktail attire, library happy hours and root-beer are NOT flagged",
+   ["20+ carnival games", "50+ vendors and 30+ food trucks", "Student ID required", "Last call for volunteers", "Cocktail attire requested", "Happy Hour Storytime",
+    "Homework Happy Hour", "Root-Beer Floats", "Root  Beer Float Social", "Ages 18+ months welcome", "The exhibit explores over 70 years of dialogue", "Mocktail party for teens"]
+   .every((text) => inferAdultOnly({ ...baseRec, title: text, description: "" }) === false));
+ok("adultOnly: a brand name alone in a title is not a presenter ('Sierra Nevada hike', 'Blue Moon stargazing', 'Corona Heights walk', 'Guinness World Record attempt', 'Modelo de negocio')",
+   ["Sierra Nevada day hike", "Blue Moon stargazing night", "Corona Heights neighborhood walk", "Guinness World Record attempt", "Taller: Modelo de negocio", "Jameson family reunion"]
+   .every((text) => inferAdultOnly({ ...baseRec, organizer: "Community Center", title: text, description: "" }) === false) &&
+   inferAdultOnly({ ...baseRec, organizer: "Community Center", title: "Kickoff", description: "Sponsored by Sierra Nevada Brewing" }) === true &&
+   inferAdultOnly({ ...baseRec, organizer: "Modelo", title: "Kickoff", description: "" }) === true);
+ok("annotate: an enriched record stripped of tags and description does not crash", typeof annotateEvent({ ...enrichEvent({ ...baseRec, title: "Thing" }), description: undefined, tags: undefined, eventTypes: undefined, audiences: undefined }).adultOnly === "boolean");
+ok("topicTags: word boundaries are Unicode-aware like Python's — 'artística' is not 'art', 'aiña' is not 'ai', 'Exposición artística para niños' gets the fallback",
+   !inferTopicTags("Exposición artística", "").includes("arts") && !inferTopicTags("aiña", "").includes("tech") &&
+   JSON.stringify(inferTopicTags("Exposición artística para niños", "", "community")) === JSON.stringify(["community"]) &&
+   inferTopicTags("Art walk", "").includes("arts") && inferTopicTags("AI workshop", "").includes("tech"));
 ok("adultOnly: wine, brewery, tasting room, cocktails, happy hour, bar crawl each flag", ["Wine down Wednesday", "Brewery tour", "Tasting room open house", "Cocktails on the terrace", "Happy hour mixer", "Downtown bar crawl"]
    .every((title) => inferAdultOnly({ ...baseRec, title, description: "" }) === true));
 ok("adultOnly: a toddler storytime is NOT flagged", annotateEvent(enrichEvent({ ...baseRec, source: "bibliocommons", title: "Toddler Storytime", description: "Songs and stories for ages 1-3.", audiences: ["Kids (0-5)"] })).adultOnly === false);
@@ -583,6 +610,25 @@ ok("listing: already_ended after the two-hour grace, but a still-running event p
    !listingChecks({ ...goodListing, start: new Date(NOW - 3_600_000), end: undefined }, SAN_JOSE, NOW).includes("already_ended"));
 ok("listing: cancelled (status or title prefix)", listingChecks({ ...goodListing, status: "cancelled" }, SAN_JOSE, NOW).includes("cancelled") &&
    listingChecks({ ...goodListing, title: "CANCELLED: Campus Concert" }, SAN_JOSE, NOW).includes("cancelled"));
+ok("listing: postponed / rescheduled listings are NOT rejected (John keeps status 'postponed')",
+   listingChecks({ ...goodListing, status: "postponed" }, SAN_JOSE, NOW).length === 0 &&
+   listingChecks({ ...goodListing, title: "POSTPONED: Campus Concert" }, SAN_JOSE, NOW).length === 0 &&
+   listingChecks({ ...goodListing, title: "Rescheduled - Jazz Night" }, SAN_JOSE, NOW).length === 0);
+ok("listing: a venue written in another script counts as a location; 'See website' and 'TBD' do not",
+   listingChecks({ ...goodListing, latitude: undefined, longitude: undefined, locationName: "日本町" }, SAN_JOSE, NOW).length === 0 &&
+   listingChecks({ ...goodListing, latitude: undefined, longitude: undefined, locationName: "See website" }, SAN_JOSE, NOW).includes("missing_location_in_person") &&
+   listingChecks({ ...goodListing, latitude: undefined, longitude: undefined, locationName: "TBD" }, SAN_JOSE, NOW).includes("missing_location_in_person"));
+ok("listing: 'Virtual Reality Lab Open House' is not an online listing, '*Virtual* Mock Interview' and '(Virtual) Math Club' are",
+   !isOnlineListing({ title: "Virtual Reality Lab Open House", locationName: "Location TBA" }) &&
+   isOnlineListing({ title: "*Virtual* Mock Interview", locationName: "San José Public Library" }) &&
+   isOnlineListing({ title: "(Virtual) Math Club", locationName: "" }) && isOnlineListing({ title: "Book Club", locationName: "Zoom" }));
+ok("ticketmaster: dates.status.code maps to John's status (cancelled / postponed / scheduled)",
+   mapTicketmaster({ ...tm._embedded.events[0], dates: { ...tm._embedded.events[0].dates, status: { code: "cancelled" } } }, SAN_JOSE).status === "cancelled" &&
+   mapTicketmaster({ ...tm._embedded.events[0], dates: { ...tm._embedded.events[0].dates, status: { code: "rescheduled" } } }, SAN_JOSE).status === "postponed" &&
+   mapTicketmaster(tm._embedded.events[0], SAN_JOSE).status === "scheduled");
+ok("ics: STATUS:CANCELLED becomes a structured cancellation the listing checks reject",
+   (() => { const cancelled = parseIcs("BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:c1\r\nSUMMARY:Author Talk\r\nSTATUS:CANCELLED\r\nDTSTART:20991101T180000Z\r\nEND:VEVENT\r\nEND:VCALENDAR", { defaultTimeZone: "UTC", horizonEnd: new Date("2100-01-01") });
+     const mapped = mapIcsEvent(cancelled[0], SAN_JOSE, cplIcs, "ics"); return mapped.status === "cancelled" && listingChecks(mapped, SAN_JOSE, NOW).includes("cancelled"); })());
 ok("listing: outside_region (Sacramento)", listingChecks({ ...goodListing, latitude: 38.58, longitude: -121.49 }, SAN_JOSE, NOW).includes("outside_region"));
 ok("listing: in-person with no location is rejected; a named venue without coordinates passes",
    listingChecks({ ...goodListing, latitude: undefined, longitude: undefined, locationName: "Location TBA" }, SAN_JOSE, NOW).includes("missing_location_in_person") &&
@@ -632,6 +678,29 @@ ok("unchanged: a missed cycle forces a write (staleness reset must land)", !unch
 ok("unchanged: an inactive document is always rewritten", !unchangedSighting({ ...fresh, active: false }, h1, NOW));
 ok("unchanged: lastSeenAt older than 24 h forces a refresh write", !unchangedSighting({ ...fresh, lastSeenAt: ts(new Date(NOW - UNCHANGED_REWRITE_MS - 1).toISOString()) }, h1, NOW));
 ok("unchanged: a legacy document without a hash is written once", !unchangedSighting({ missedCycles: 0, active: true, lastSeenAt: fresh.lastSeenAt }, h1, NOW));
+
+
+// ── W4.1: sources are data; the deny-list is absolute ─────────────────────────
+console.log("\n── sources are data (W4.1) ──");
+{
+  const { isDeniedHost, DENIED_DOMAINS, sourceDocFromSeed } = await import("../lib/ingest/sources-registry.js");
+  const { SOURCE_SEEDS, seedsOfType } = await import("../lib/ingest/sources-config.js");
+  const denied = ["maps.google.com", "https://maps.googleapis.com/maps/api/place/", "places.googleapis.com", "https://www.google.com/maps/place/SAP+Center",
+    "meetup.com", "www.meetup.com", "https://www.meetup.com/sj-hikers/events/ical/", "facebook.com", "m.facebook.com", "https://fb.me/e/abc", "instagram.com",
+    "www.eventbrite.com", "eventbrite.co.uk", "https://www.eventbriteapi.com/v3/events/", "active.com", "apps.active.com", "campscui.active.com", "anc.apm.activecommunities.com"];
+  for (const h of denied) ok(`deny-list: ${h} is refused`, isDeniedHost(h));
+  const allowed = ["events.sjsu.edu", "sjpl.bibliocommons.com", "www.openspace.org", "google.com", "www.google.com", "calendar.google.com", "activekids.org", "faceboom.com", "notmeetup.com", "eventbrite.example.org", ""];
+  for (const h of allowed) ok(`deny-list: ${h || "(empty)"} is not on the list`, !isDeniedHost(h));
+  ok("deny-list: the six families named by the sourcing rule are all present", ["google", "meetup", "facebook", "instagram", "eventbrite", "active"].every((k) => DENIED_DOMAINS.some((d) => d.includes(k))));
+  ok("deny-list: case and a leading www. do not matter", isDeniedHost("WWW.MEETUP.COM") && isDeniedHost("Facebook.com"));
+  ok("seeds: no configured seed is on the deny-list", SOURCE_SEEDS.every((x) => !isDeniedHost(x.host)));
+  ok("seeds: ids are unique and carry the area prefix", new Set(SOURCE_SEEDS.map((x) => x.id)).size === SOURCE_SEEDS.length && SOURCE_SEEDS.every((x) => x.id.startsWith(`${x.areaId}_`)));
+  ok("seeds: every adapter type that used to live in areas.ts has at least one seed",
+     ["ticketmaster", "libcal", "bibliocommons", "localist", "livewhale", "legistar", "midpen", "nps", "serpapi"].every((t) => seedsOfType(t, "san-jose-ca").length >= 1));
+  ok("seeds: bibliocommons seeds carry the adapter's own parameter shape", seedsOfType("bibliocommons").every((x) => typeof x.params.library === "string" && typeof x.params.name === "string"));
+  const d = sourceDocFromSeed(seedsOfType("localist", "san-jose-ca")[0]);
+  ok("seed → document: active, origin config, url derived from the host, params carried verbatim", d.status === "active" && d.origin === "config" && d.url === "https://events.sjsu.edu/api/2/events" && d.params.host === "events.sjsu.edu");
+}
 
 console.log(`\n══ ${passed} passed, ${failed} failed ══`);
 process.exit(failed ? 1 : 0);

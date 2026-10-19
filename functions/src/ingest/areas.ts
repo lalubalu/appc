@@ -60,6 +60,17 @@
  * below and no branch silently missing coordinates.
  */
 
+/**
+ * W4.1 — SOURCES ARE DATA. The per-area feed entries that used to live here
+ * (libcal, bibliocommons, midpen, localist, livewhale, legistar, nps, ics,
+ * ticketmaster, serpapi) are now documents in Firestore /sources/{id}, seeded
+ * from functions/src/ingest/sources-config.ts by scripts/migrate-sources.mjs
+ * and extended by automatic discovery (W4). Ingestion reads only sources whose
+ * status is "active". This file keeps the area geometry and the policy above.
+ * The adapter parameter shapes (IcsFeed, LibCalFeed, …) stay here because the
+ * frozen adapters import them.
+ */
+
 export interface IcsFeed {
   /** Shown as the organizer when the feed has no ORGANIZER line. */
   name: string;
@@ -115,25 +126,6 @@ export interface LaunchArea {
   center: { lat: number; lng: number };
   radiusMiles: number;
   timeZone: string;
-  ticketmaster: { enabled: boolean };
-  /** Springshare LibCal calendars (one per library system). */
-  libcal: LibCalFeed[];
-  /** BiblioCommons library systems (one per library system). */
-  bibliocommons: BiblioFeed[];
-  /** Midpeninsula Regional Open Space District (HTML listing; no feed exists). */
-  midpen: MidpenFeed[];
-  /** Localist calendar hosts (city / university / community college). */
-  localist: { host: string; name: string }[];
-  /** LiveWhale Calendar hosts (public JSON v2 feeds). */
-  livewhale: { host: string; name: string }[];
-  /** Public legislative meeting calendars through the Legistar Web API. */
-  legistar: { client: string; name: string }[];
-  /** National Park Service park codes with events near the area. */
-  nps: { parkCodes: string[] };
-  /** Plain .ics / iCal feeds — city, parks, community centres. */
-  ics: IcsFeed[];
-  /** SerpApi (Google Events) — gap-filler only, quota-capped. */
-  serpapi: { enabled: boolean; query: string };
 }
 
 export const SAN_JOSE: LaunchArea = {
@@ -144,92 +136,6 @@ export const SAN_JOSE: LaunchArea = {
   center: { lat: 37.3382, lng: -121.8863 },
   radiusMiles: 25,
   timeZone: "America/Los_Angeles",
-  ticketmaster: { enabled: true },
-  // Mountain View Library's public RSS calendar, distinct from its bookmobile.
-  libcal: [{
-    name: "Mountain View Public Library",
-    calendarId: "8800",
-    rssUrl: "https://mountainview.libcal.com/rss.php?m=month&cid=8800",
-    tags: ["library"],
-  }],
-  bibliocommons: [
-    {
-      // Verified 2026-09-13: gateway reports 6,477 events. calendar.ics → 404.
-      name: "San José Public Library",
-      library: "sjpl",
-      host: "sjpl.bibliocommons.com",
-      tags: ["library"],
-    },
-    {
-      // Verified 2026-09-13: gateway reports 2,106 events.
-      name: "Santa Clara County Library District",
-      library: "sccl",
-      host: "sccl.bibliocommons.com",
-      // Page 13 at 150 returns HTTP 500; pages of 100 work through the same range.
-      pageSize: 100,
-      tags: ["library"],
-    },
-    {
-      // Verified 2026-09-26: public gateway reports 457 upcoming records.
-      name: "Palo Alto City Library",
-      library: "paloalto",
-      host: "paloalto.bibliocommons.com",
-      tags: ["library"],
-    },
-    {
-      // Fremont, Newark, Centerville and Union City are inside the radius;
-      // other Alameda County branches are not. Missing coordinates are excluded.
-      name: "Alameda County Library",
-      library: "aclibrary",
-      host: "aclibrary.bibliocommons.com",
-      requireInAreaCoordinates: true,
-      tags: ["library"],
-    },
-    {
-      // Eastern San Mateo County branches reach the area, western ones do not.
-      name: "San Mateo County Libraries",
-      library: "smcl",
-      host: "smcl.bibliocommons.com",
-      requireInAreaCoordinates: true,
-      tags: ["library"],
-    },
-  ],
-  localist: [
-    // Verified 2026-09-13: /api/2/events returns a full page with geo.
-    { host: "events.sjsu.edu", name: "San José State University" },
-    // Verified 2026-09-13. Palo Alto is ~17 mi from centre, inside the radius.
-    { host: "events.stanford.edu", name: "Stanford University" },
-  ],
-  livewhale: [
-    // Verified 2026-09-26: public JSON v2 returns ~520 events/60 days.
-    // The old Localist probe was a platform mismatch, not proof of no feed.
-    { host: "events.scu.edu", name: "Santa Clara University" },
-  ],
-  legistar: [{ client: "sanjose", name: "City of San José" }],
-  midpen: [
-    // Verified 2026-09-13: 64 events across 22 preserves, 19 of which geocode
-    // INSIDE the radius. This is what replaces NPS for this area — see below.
-    { name: "Midpeninsula Regional Open Space District", tags: ["outdoors", "parks"] },
-  ],
-  nps: {
-    // No NPS unit sits inside the radius. Pinnacles is ~80 mi and Golden Gate
-    // ~50 mi, both outside it, and isInsideArea would discard their events
-    // anyway. Empty is the honest value; the previous area had Cuyahoga Valley
-    // genuinely inside its radius, and this one has nothing.
-    //
-    // The ADAPTER stays in the tree deliberately. It is verified, it costs
-    // nothing to keep, and the next launch area may well have a park in range.
-    // Outdoor/nature supply for THIS area comes from `midpen` above, which is
-    // nearer, larger and carries more family programming than Cuyahoga Valley
-    // did — so the category is replaced, not absorbed as a loss.
-    parkCodes: [],
-  },
-  ics: [
-    // City of San José returns 403 to its calendar ICS endpoint from servers.
-    // Midpeninsula Regional Open Space and County Parks publish no iCal.
-    // Recruit these via organizer accounts instead.
-  ],
-  serpapi: { enabled: true, query: "events in San Jose, CA" },
 };
 
 export const LAUNCH_AREAS: LaunchArea[] = [SAN_JOSE];

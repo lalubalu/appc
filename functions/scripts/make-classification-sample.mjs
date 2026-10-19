@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import { SAN_JOSE } from "../lib/ingest/areas.js";
+import { seedsOfType } from "../lib/ingest/sources-config.js";
 import { enrichEvent } from "../lib/ingest/classify.js";
 import { fetchBiblioCommons } from "../lib/ingest/sources/bibliocommons.js";
 import { fetchLibCal } from "../lib/ingest/sources/libcal.js";
@@ -41,8 +42,8 @@ if (snapshotPath) {
     groups.push({ name, records: events.sort((a, b) => hash(a).localeCompare(hash(b))), total: events.length });
   }
 } else {
-for (const feed of SAN_JOSE.bibliocommons) await add(feed.name, () => fetchBiblioCommons(SAN_JOSE, feed));
-for (const feed of SAN_JOSE.libcal) await add(feed.name, () => fetchLibCal(SAN_JOSE, feed));
+for (const s of seedsOfType("bibliocommons", SAN_JOSE.id)) await add(s.params.name, () => fetchBiblioCommons(SAN_JOSE, s.params));
+for (const s of seedsOfType("libcal", SAN_JOSE.id)) await add(s.params.name, () => fetchLibCal(SAN_JOSE, s.params));
 for (const feed of SAN_JOSE.localist) await add(feed.name, () => fetchLocalist(SAN_JOSE, feed.host, feed.name));
 for (const feed of SAN_JOSE.livewhale) await add(feed.name, () => fetchLiveWhale(SAN_JOSE, feed.host, feed.name));
 for (const feed of SAN_JOSE.midpen) await add(feed.name, () => fetchMidpen(SAN_JOSE, feed));

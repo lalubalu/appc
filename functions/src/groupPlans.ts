@@ -13,10 +13,11 @@ const validId = (value: unknown, max = 100) => {
   return id;
 };
 
-async function validEvent(id: string): Promise<boolean> {
+async function validEvent(id: string, viewerIsAdult = false): Promise<boolean> {
   const snap = await db.collection("events").doc(id).get();
   const data = snap.data();
   return !!data && data.category !== "Program" && data.opportunitySubtype !== "program" && data.active === true && data.broadcast === true && data.hidden !== true &&
+    (data.adultOnly !== true || viewerIsAdult) &&   // minor protection (W2)
     data.date instanceof Timestamp && data.date.toMillis() > Date.now();
 }
 
@@ -39,6 +40,7 @@ export const manageGroupPlan = onCall(async (req) => {
   const uid = requireUid(req.auth);
   await enforceRateLimit(uid, "manageGroupPlan");
   const action = safeText(req.data?.action, 20);
+  const viewerIsAdult = (await db.collection("users").doc(uid).get()).data()?.ageBand === "adult";
   if (action === "list") {
     const [member, invited] = await Promise.all([
       plans.where("memberUIDs", "array-contains", uid).limit(20).get(),
@@ -63,7 +65,7 @@ export const manageGroupPlan = onCall(async (req) => {
     if (source.data()?.uid !== uid) throw new HttpsError("not-found", "Plan session not found.");
     if (owned.size >= 20) throw new HttpsError("resource-exhausted", "Delete an older group plan first.");
     const eventIDs: string[] = Array.isArray(source.data()?.selectedIDs) ? source.data()?.selectedIDs.slice(0, 4) : [];
-    if (eventIDs.length < 2 || !(await Promise.all(eventIDs.map(validEvent))).every(Boolean)) {
+    if (eventIDs.length < 2 || !(await Promise.all(eventIDs.map((id) => validEvent(id, viewerIsAdult)))).every(Boolean)) {
       throw new HttpsError("failed-precondition", "Start with at least two active real events.");
     }
     const ref = plans.doc(randomBytes(12).toString("base64url"));
@@ -135,7 +137,7 @@ export const manageGroupPlan = onCall(async (req) => {
   } else if (action === "add") {
     if (!members.includes(uid)) throw new HttpsError("permission-denied", "Accept the invitation first.");
     const eventId = validId(req.data?.eventId, 180);
-    if (!await validEvent(eventId)) throw new HttpsError("not-found", "Event unavailable.");
+    if (!await validEvent(eventId, viewerIsAdult)) throw new HttpsError("not-found", "Event unavailable.");
     await db.runTransaction(async (tx) => {
       const latest = await tx.get(ref);
       const row = latest.data();

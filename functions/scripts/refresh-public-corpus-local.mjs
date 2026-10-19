@@ -4,6 +4,8 @@ import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
 import { SAN_JOSE } from "../lib/ingest/areas.js";
 import { runSource } from "../lib/ingest/index.js";
+import { seedSourcesFromConfig } from "../lib/ingest/sources-registry.js";
+await seedSourcesFromConfig();   // W4.1: ingestion reads /sources
 assert.equal(process.env.FIRESTORE_EMULATOR_HOST, "127.0.0.1:8899");
 assert.equal(process.env.GCLOUD_PROJECT, "connectify-19dd8");
 const output = process.argv[2];

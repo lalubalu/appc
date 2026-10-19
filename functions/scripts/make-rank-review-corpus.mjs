@@ -12,6 +12,7 @@ import { fetchLiveWhale } from "../lib/ingest/sources/livewhale.js";
 import { fetchMidpen } from "../lib/ingest/sources/midpen.js";
 import { fetchLegistar } from "../lib/ingest/sources/legistar.js";
 import { fetchIcsFeed } from "../lib/ingest/sources/icsfeed.js";
+import { seedsOfType } from "../lib/ingest/sources-config.js";
 
 const area = SAN_JOSE;
 const snapshotAtMs = Date.now();
@@ -24,13 +25,13 @@ async function add(name, fetcher) {
   groups.push({ name, records });
   console.log(`${name}: ${records.length} raw`);
 }
-for (const feed of area.bibliocommons) await add(feed.name, () => fetchBiblioCommons(area, feed));
-for (const feed of area.libcal) await add(feed.name, () => fetchLibCal(area, feed));
-for (const feed of area.localist) await add(feed.name, () => fetchLocalist(area, feed.host, feed.name));
-for (const feed of area.livewhale) await add(feed.name, () => fetchLiveWhale(area, feed.host, feed.name));
-for (const feed of area.midpen) await add(feed.name, () => fetchMidpen(area, feed));
-for (const feed of area.legistar) await add(feed.name, () => fetchLegistar(area, feed.client, feed.name));
-for (const feed of area.ics) await add(feed.name, () => fetchIcsFeed(area, feed, "ics"));
+for (const s of seedsOfType("bibliocommons", area.id)) await add(s.params.name, () => fetchBiblioCommons(area, s.params));
+for (const s of seedsOfType("libcal", area.id)) await add(s.params.name, () => fetchLibCal(area, s.params));
+for (const s of seedsOfType("localist", area.id)) await add(s.params.name, () => fetchLocalist(area, s.params.host, s.params.name));
+for (const s of seedsOfType("livewhale", area.id)) await add(s.params.name, () => fetchLiveWhale(area, s.params.host, s.params.name));
+for (const s of seedsOfType("midpen", area.id)) await add(s.params.name, () => fetchMidpen(area, s.params));
+for (const s of seedsOfType("legistar", area.id)) await add(s.params.name, () => fetchLegistar(area, s.params.client, s.params.name));
+for (const s of seedsOfType("ics", area.id)) await add(s.params.name, () => fetchIcsFeed(area, s.params, "ics"));
 
 const bySourceId = new Map();
 for (const group of groups) for (const rec of group.records) {

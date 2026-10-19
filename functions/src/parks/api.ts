@@ -93,6 +93,8 @@ export function visibleParkEvent(data: FirebaseFirestore.DocumentData, profile: 
     blocked.has(data.creatorID) || blocked.has(data.organizerId)) return false;
   // Participant ages on general activities remain discoverable by parents.
   if (typeof data.minimumAge === "number" && data.minimumAge >= 18 && profile.ageBand !== "adult") return false;
+  // Adult-only listings (alcohol, age limits — W1 annotation) reach recorded adults only.
+  if (data.adultOnly === true && profile.ageBand !== "adult") return false;
   if (data.applicationDeadline?.toMillis && data.applicationDeadline.toMillis() <= now) return false;
   return true;
 }

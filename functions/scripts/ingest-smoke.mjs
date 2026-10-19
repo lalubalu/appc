@@ -21,6 +21,7 @@ import { fetchLocalist } from "../lib/ingest/sources/localist.js";
 import { fetchLiveWhale } from "../lib/ingest/sources/livewhale.js";
 import { fetchLegistar } from "../lib/ingest/sources/legistar.js";
 import { fetchNps } from "../lib/ingest/sources/nps.js";
+import { seedsOfType } from "../lib/ingest/sources-config.js";
 
 const area = SAN_JOSE;
 let failures = 0;
@@ -53,16 +54,16 @@ console.log(`── Live ingest smoke — ${area.name} (${area.radiusMiles} mi) 
 if (process.env.TICKETMASTER_KEY) {
   await run("ticketmaster", () => fetchTicketmaster(area, process.env.TICKETMASTER_KEY));
 } else console.log("⏭  ticketmaster: TICKETMASTER_KEY not set");
-for (const feed of area.libcal) await run(`libcal · ${feed.name}`, () => fetchLibCal(area, feed));
-for (const feed of area.bibliocommons ?? []) await run(`bibliocommons · ${feed.name}`, () => fetchBiblioCommons(area, feed));
-for (const cal of area.localist) await run(`localist · ${cal.name}`, () => fetchLocalist(area, cal.host, cal.name));
-for (const cal of area.livewhale) await run(`livewhale · ${cal.name}`, () => fetchLiveWhale(area, cal.host, cal.name));
-for (const cal of area.legistar) await run(`legistar · ${cal.name}`, () => fetchLegistar(area, cal.client, cal.name));
-if (process.env.NPS_API_KEY) {
-  await run("nps", () => fetchNps(area, process.env.NPS_API_KEY));
-} else console.log("⏭  nps: NPS_API_KEY not set");
-for (const feed of area.midpen ?? []) await run(`midpen · ${feed.name}`, () => fetchMidpen(area, feed));
-for (const feed of area.ics) await run(`ics · ${feed.name}`, () => fetchIcsFeed(area, feed, "ics"));
+for (const s of seedsOfType("libcal", area.id)) await run(`libcal · ${s.params.name}`, () => fetchLibCal(area, s.params));
+for (const s of seedsOfType("bibliocommons", area.id)) await run(`bibliocommons · ${s.params.name}`, () => fetchBiblioCommons(area, s.params));
+for (const s of seedsOfType("localist", area.id)) await run(`localist · ${s.params.name}`, () => fetchLocalist(area, s.params.host, s.params.name));
+for (const s of seedsOfType("livewhale", area.id)) await run(`livewhale · ${s.params.name}`, () => fetchLiveWhale(area, s.params.host, s.params.name));
+for (const s of seedsOfType("legistar", area.id)) await run(`legistar · ${s.params.name}`, () => fetchLegistar(area, s.params.client, s.params.name));
+if (process.env.NPS_API_KEY && seedsOfType("nps", area.id).some((s) => s.params.parkCodes.length)) {
+  await run("nps", () => fetchNps({ ...area, nps: { parkCodes: seedsOfType("nps", area.id).flatMap((s) => s.params.parkCodes) } }, process.env.NPS_API_KEY));
+} else console.log("⏭  nps: NPS_API_KEY not set or no park codes in range");
+for (const s of seedsOfType("midpen", area.id)) await run(`midpen · ${s.params.name}`, () => fetchMidpen(area, s.params));
+for (const s of seedsOfType("ics", area.id)) await run(`ics · ${s.params.name}`, () => fetchIcsFeed(area, s.params, "ics"));
 
 console.log(failures ? `\n${failures} source(s) returned nothing or failed` : "\nall configured sources returned real data");
 process.exit(failures ? 1 : 0);

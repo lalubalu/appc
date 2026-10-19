@@ -63,6 +63,9 @@ const { db } = await import("../lib/common.js");
 const { loadAreaIndex, auditSuspectedDuplicates, auditFuzzyDuplicates } = await import("../lib/ingest/store.js");
 const { recommendFor } = await import("../lib/ranking.js");
 const { loadRecordedCorpus, corpusSources, recordsFor } = await import("./corpus-fixture.mjs");
+const { seedSourcesFromConfig } = await import("../lib/ingest/sources-registry.js");
+// W4.1: the registry exists from the halfway run on; the start run predates it (sourceDocuments reads null there).
+await seedSourcesFromConfig();
 
 const args = process.argv.slice(2);
 const flag = (name, fallback) => { const i = args.indexOf(`--${name}`); return i >= 0 ? args[i + 1] : fallback; };
@@ -172,8 +175,16 @@ for (const [name] of Object.entries(profiles)) {
   const before2 = snapshotMeter();
   const rankedWarm = await recommendFor(uid, area.id, area.center.lat, area.center.lng, 50, now);
   const warm = diffMeter(before2);
-  reads[name] = { coldCache: cold, warmCache: warm, ranked: ranked.length, rankedWarm: rankedWarm.length, topFive: ranked.slice(0, 5).map((r) => r.id) };
-  console.log(`  reads/${name}: cold ${cold.chargedReads} warm ${warm.chargedReads} (ranked ${ranked.length})`);
+  reads[name] = { version: ranked[0]?.version ?? rankingVersion, coldCache: cold, warmCache: warm, ranked: ranked.length, rankedWarm: rankedWarm.length, topFive: ranked.slice(0, 5).map((r) => r.id) };
+  // Both versions are callable for the same request (W3.2); measure each on the warm cache.
+  for (const version of ["v1", "v2"]) {
+    try {
+      const b = snapshotMeter();
+      const out = await recommendFor(uid, area.id, area.center.lat, area.center.lng, 50, now, { version });
+      reads[name][`warm_${version}`] = { ...diffMeter(b), ranked: out.length, topFive: out.slice(0, 5).map((r) => r.id), reasonsSample: out.slice(0, 3).map((r) => r.reasons ?? []) };
+    } catch (e) { reads[name][`warm_${version}`] = { error: String(e?.message ?? e) }; }
+  }
+  console.log(`  reads/${name}: cold ${cold.chargedReads} warm ${warm.chargedReads} (ranked ${ranked.length}; v1 warm ${reads[name].warm_v1?.chargedReads ?? "n/a"}, v2 warm ${reads[name].warm_v2?.chargedReads ?? "n/a"})`);
 }
 const cache = (await db.doc(`feedCaches/${area.id}`).get()).data();
 

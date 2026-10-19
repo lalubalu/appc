@@ -160,6 +160,24 @@ jobs:
              --project connectify-19dd8
              "node functions/scripts/redteam.mjs"
 
+      # W1 — the ingest write path against a disposable Firestore: John's blocking
+      # listing checks, the fuzzy second pass, write-only-what-changed (real SDK
+      # writes are metered, not just the counter) and staleness on schedule.
+      - name: Ingest write-path E2E
+        run: npx firebase-tools@13 emulators:exec
+             --only firestore
+             --project connectify-19dd8
+             "node functions/scripts/ingest-write-path-e2e.mjs"
+
+      # W4.1 — sources are data: the migration is idempotent, per-feed event
+      # counts are identical through /sources and through the seeds, a paused or
+      # deny-listed source is never read, a newly active one is picked up.
+      - name: Sources registry E2E
+        run: npx firebase-tools@13 emulators:exec
+             --only firestore
+             --project connectify-19dd8
+             "node functions/scripts/sources-e2e.mjs"
+
   # ── Firestore rules must always compile ───────────────────────────────────
   rules:
     name: Firestore rules compile

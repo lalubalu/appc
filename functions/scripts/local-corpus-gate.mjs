@@ -13,8 +13,9 @@ if (!/^(127\.0\.0\.1|localhost):\d+$/.test(host)) {
   throw new Error("Refusing to ingest: FIRESTORE_EMULATOR_HOST must be local.");
 }
 
-const sources = ["libcal", "bibliocommons", "localist", "livewhale", "legistar", "midpen"];
-if (SAN_JOSE.ics.length) sources.push("ics");
+const { seedSourcesFromConfig } = await import("../lib/ingest/sources-registry.js");
+await seedSourcesFromConfig();   // W4.1: ingestion reads /sources; a disposable emulator starts empty
+const sources = ["libcal", "bibliocommons", "localist", "livewhale", "legistar", "midpen", "ics"];
 const results = [];
 for (const source of sources) {
   const result = await runSource(source, SAN_JOSE, {});

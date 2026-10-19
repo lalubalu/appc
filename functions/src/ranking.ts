@@ -36,6 +36,8 @@ import { db, requireUid, enforceRateLimit, safeText, blockedSetFor, utcMonthKey,
 import type { InterestProfile } from "./profiles.js";
 import { friendIds } from "./friendships.js";
 import { createFeedSession } from "./feedTelemetry.js";
+import { rankEventsV2, reasonsForV1, constraintsFromFilters, applyFeedback, coerceRankingConfig, EXCLUDING_ACTIONS, ACTION_WEIGHTS,
+  type V2Constraints, type AffinityState, type RankingVersion, type RankingConfig, type ClientFilterInput } from "./ranking-v2.js";
 
 export const WEIGHTS = {
   /** Does it match what they said they liked, or what they've actually attended? */
@@ -102,6 +104,19 @@ export interface RankableEvent {
   minimumAge?: number;
   endMs?: number;
   accessibilityFeatures?: string[];
+  /** Server-annotated at ingest (W1). Excluded for every viewer who is not a recorded adult. */
+  adultOnly?: boolean;
+  // Fields ranking v2 (ranking-v2.ts) reads; all optional so v1 candidates stay valid.
+  source?: string;
+  titleKey?: string;
+  venueKey?: string;
+  locationName?: string;
+  virtual?: boolean;
+  indoorOutdoor?: string;
+  isFree?: boolean;
+  priceMin?: number;
+  topicTags?: string[];
+  maximumAge?: number;
 }
 
 export interface RankingContext {
@@ -128,6 +143,20 @@ export interface RankingContext {
   lat?: number;
   lng?: number;
   nowMs: number;
+  /** registerAgeBand recorded this account as an adult. Unknown age is treated as a minor. */
+  viewerIsAdult?: boolean;
+  // W3: fields ranking v2 reads (all optional; v1 ignores them).
+  /** John's hard constraints, mapped from the app's existing filters (W3.5). */
+  constraints?: V2Constraints;
+  /** Precomputed per-user affinity state (W3.6). */
+  affinity?: AffinityState;
+  /** Per-user "first shown" map for novelty (W3.6), capped at 500. */
+  firstShown?: Record<string, number>;
+  /** Events the user hid or reported: never shown again. */
+  hiddenEventIDs?: string[];
+  rsvpEventIDs?: string[];
+  /** Events the digest already pushed (notification eligibility). */
+  notifiedEventIDs?: string[];
 }
 
 const MILE_M = 1609.344;
@@ -272,7 +301,16 @@ export function feedbackScore(ev: RankableEvent, ctx: RankingContext): number {
   return Math.max(0, Math.min(1, score));
 }
 
-export interface ScoredEvent { id: string; score: number; parts: Record<string, number> }
+export interface ScoredEvent {
+  id: string; score: number; parts: Record<string, number>;
+  /** Up to three plain-language reasons, each backed by a component value (W5). */
+  reasons?: string[];
+  /** Later dates of a collapsed recurring series (ISO), v2 only. */
+  moreDates?: string[];
+  /** John's notification eligibility (v2 only); delivery stays inside MAX_PUSH_PER_WEEK. */
+  notify?: boolean;
+  version?: RankingVersion;
+}
 
 /** Score one event. Exported so tests can assert a single term in isolation. */
 export function scoreEvent(ev: RankableEvent, ctx: RankingContext): ScoredEvent {
@@ -347,9 +385,11 @@ const MAX_CANDIDATES = 400;
 const CACHE_MS = 5 * 60_000;
 const DIVERSITY_CATEGORIES = ["Cleanup", "Sports", "Social", "Workshop", "Market", "Festival", "Hackathon", "Meetup", "Volunteer", "Program"];
 
-function rankableFromDoc(d: FirebaseFirestore.DocumentSnapshot): RankableEvent | null {
+export function rankableFromDoc(d: FirebaseFirestore.DocumentSnapshot): RankableEvent | null {
   const x = d.data();
   if (!x || x.hidden === true || x.broadcast !== true || x.active !== true) return null;
+  // Partners never organic (W3.4): anything carrying partner fields is not a candidate, whatever collection it came from.
+  if (x.partnerId !== undefined || x.sponsored !== undefined || x.perkId !== undefined || x.kind === "perk" || x.pointCost !== undefined) return null;
   return {
     id: d.id, title: x.title, description: x.description,
     category: x.category, organizer: x.organizer,
@@ -363,7 +403,24 @@ function rankableFromDoc(d: FirebaseFirestore.DocumentSnapshot): RankableEvent |
     endMs: x.endDate instanceof Timestamp ? x.endDate.toMillis() : undefined,
     accessibilityFeatures: Array.isArray(x.accessibilityFeatures)
       ? x.accessibilityFeatures.filter((v: unknown): v is string => typeof v === "string").slice(0, 10) : [],
+    // A document missing the flag (pre-W1) is treated as adult-only: fail closed.
+    adultOnly: x.adultOnly !== false,
+    source: safeText(x.source, 40) || undefined,
+    titleKey: safeText(x.titleKey, 80) || undefined,
+    venueKey: safeText(x.venueKey, 40) || undefined,
+    locationName: safeText(x.locationName, 120) || undefined,
+    virtual: typeof x.virtual === "boolean" ? x.virtual : undefined,
+    indoorOutdoor: safeText(x.indoorOutdoor, 10) || undefined,
+    isFree: typeof x.isFree === "boolean" ? x.isFree : undefined,
+    priceMin: typeof x.priceMin === "number" ? x.priceMin : undefined,
+    topicTags: Array.isArray(x.topicTags) ? x.topicTags.filter((v: unknown): v is string => typeof v === "string").slice(0, 8) : [],
+    maximumAge: typeof x.maximumAge === "number" ? x.maximumAge : undefined,
   };
+}
+
+/** Minor protection (W2): an adult-only listing never reaches a viewer who is not a recorded adult. */
+export function minorSafe<T extends { adultOnly?: boolean }>(events: T[], viewerIsAdult: boolean | undefined): T[] {
+  return viewerIsAdult ? events : events.filter((ev) => ev.adultOnly !== true);
 }
 
 /** One five-minute area snapshot serves many users. It merges soon, quality
@@ -406,7 +463,7 @@ async function areaCandidates(areaId: string, nowMs: number): Promise<RankableEv
 }
 
 /** Build a user's ranking context from Firestore. Shared by the callable and C/E. */
-export async function loadContext(uid: string, lat?: number, lng?: number, nowMs = Date.now()): Promise<RankingContext> {
+export async function loadContext(uid: string, lat?: number, lng?: number, nowMs = Date.now(), filters?: ClientFilterInput): Promise<RankingContext> {
   const [userSnap, accepted, blocked] = await Promise.all([
     db.collection("users").doc(uid).get(),
     friendIds(uid, 100),
@@ -481,17 +538,28 @@ export async function loadContext(uid: string, lat?: number, lng?: number, nowMs
     distancePreset: active?.distancePreset,
     attendedCategories, attendedOrganizers, weekendAttendanceRatio: totalAttended ? weekendAttended / totalAttended : undefined,
     savedEventIDs: Array.isArray(u.savedEventIDs) ? u.savedEventIDs.slice(-500) : [], eventFeedback: feedback,
-    friendsGoing, recentOrganizers: {}, lat, lng, nowMs };
+    friendsGoing, recentOrganizers: {}, lat, lng, nowMs, viewerIsAdult: u.ageBand === "adult",
+    // W3.6: precomputed, bounded per-user state; never re-aggregated from history.
+    affinity: u.affinity && typeof u.affinity === "object" && typeof u.affinity.asOfMs === "number" && typeof u.affinity.totals === "object"
+      ? { asOfMs: u.affinity.asOfMs, totals: u.affinity.totals } : undefined,
+    firstShown: u.firstShown && typeof u.firstShown === "object" ? u.firstShown : undefined,
+    hiddenEventIDs: Array.isArray(u.hiddenEventIDs) ? u.hiddenEventIDs.filter((v: unknown): v is string => typeof v === "string").slice(-500) : [],
+    rsvpEventIDs: Array.isArray(u.rsvpEventIDs) ? u.rsvpEventIDs.filter((v: unknown): v is string => typeof v === "string").slice(-500) : [],
+    constraints: constraintsFromFilters(filters, u, nowMs, active?.radiusMiles ?? (Number.isInteger(u.householdRadiusMiles) ? u.householdRadiusMiles : undefined)),
+    notifiedEventIDs: [] };
 }
 
 /** Explicit and implicit event signals. The bounded map lives on the profile
  * already read for ranking, so feedback does not add a per-feed query. */
+/** Every feedback action and its learning weight (W3.6; port of users.py ACTION_WEIGHTS). */
+export const FEEDBACK_KINDS = ["more", "less", "view", "rsvp", "link", "save", "share", "tap", "hide", "report"] as const;
+
 export const recordEventFeedback = onCall(async (req) => {
   const uid = requireUid(req.auth);
   await enforceRateLimit(uid, "recordEventFeedback");
   const eventId = safeText(req.data?.eventId, 180);
   const kind = safeText(req.data?.kind, 10);
-  if (!eventId || eventId.includes("/") || !["more", "less", "view"].includes(kind)) {
+  if (!eventId || eventId.includes("/") || !(FEEDBACK_KINDS as readonly string[]).includes(kind)) {
     throw new HttpsError("invalid-argument", "Invalid event feedback.");
   }
   const event = await db.collection("events").doc(eventId).get();
@@ -499,22 +567,50 @@ export const recordEventFeedback = onCall(async (req) => {
     throw new HttpsError("not-found", "Event unavailable.");
   }
   const ref = db.collection("users").doc(uid);
+  const topicTags: string[] = Array.isArray(event.data()?.topicTags) ? event.data()!.topicTags.filter((v: unknown): v is string => typeof v === "string") : [];
+  const nowMs = Date.now();
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
-    const existing = snap.data()?.eventFeedback;
-    const rows: Record<string, { category?: string; organizer?: string; kind: string; atMs: number }> =
-      typeof existing === "object" && existing !== null ? { ...existing } : {};
-    if (kind === "view" && (rows[eventId]?.kind === "more" || rows[eventId]?.kind === "less")) return;
-    rows[eventId] = {
-      category: safeText(event.data()?.category, 50), organizer: safeText(event.data()?.organizer, 100),
-      kind, atMs: Date.now(),
-    };
-    const ids = Object.keys(rows).sort((a, b) => rows[b].atMs - rows[a].atMs);
-    for (const stale of ids.slice(100)) delete rows[stale];
-    tx.set(ref, { eventFeedback: rows }, { merge: true });
+    const u = snap.data() ?? {};
+    const update: FirebaseFirestore.DocumentData = {};
+    // v1's bounded feedback map (more / less / view) — unchanged behaviour.
+    if (kind === "more" || kind === "less" || kind === "view") {
+      const existing = u.eventFeedback;
+      const rows: Record<string, { category?: string; organizer?: string; kind: string; atMs: number }> =
+        typeof existing === "object" && existing !== null ? { ...existing } : {};
+      if (!(kind === "view" && (rows[eventId]?.kind === "more" || rows[eventId]?.kind === "less"))) {
+        rows[eventId] = { category: safeText(event.data()?.category, 50), organizer: safeText(event.data()?.organizer, 100), kind, atMs: nowMs };
+        const ids = Object.keys(rows).sort((a, b) => rows[b].atMs - rows[a].atMs);
+        for (const stale of ids.slice(100)) delete rows[stale];
+        update.eventFeedback = rows;
+      }
+    }
+    // W3.6: precomputed category affinity (a view carries no weight and does not touch it).
+    if ((ACTION_WEIGHTS[kind] ?? 0) !== 0) {
+      const state: AffinityState | undefined = u.affinity && typeof u.affinity.asOfMs === "number" ? u.affinity : undefined;
+      update.affinity = applyFeedback(state, topicTags, kind, nowMs);
+    }
+    // hide (−1.0) and report (0.0, hidden for the reporter only): never show this event to this user again.
+    if (EXCLUDING_ACTIONS.has(kind)) {
+      const hidden: string[] = Array.isArray(u.hiddenEventIDs) ? u.hiddenEventIDs.filter((v: unknown): v is string => typeof v === "string") : [];
+      if (!hidden.includes(eventId)) update.hiddenEventIDs = [...hidden, eventId].slice(-500);
+    }
+    if (Object.keys(update).length) tx.set(ref, update, { merge: true });
   });
-  return { recorded: true };
+  return { recorded: true, weight: ACTION_WEIGHTS[kind] ?? 0, hidden: EXCLUDING_ACTIONS.has(kind) };
 });
+
+// ── config/ranking (W3.2): the switch, read with a short in-process cache ────
+let cachedConfig: { at: number; value: RankingConfig } | undefined;
+export async function rankingConfig(nowMs = Date.now()): Promise<RankingConfig> {
+  if (cachedConfig && nowMs - cachedConfig.at < 60_000) return cachedConfig.value;
+  const snap = await db.doc("config/ranking").get();
+  const value = coerceRankingConfig(snap.data());
+  cachedConfig = { at: nowMs, value };
+  return value;
+}
+/** Tests and the blind judge set the switch directly; this drops the cache so the next request sees it. */
+export function resetRankingConfigCache(): void { cachedConfig = undefined; }
 
 /**
  * Rank the area's upcoming events for one user.
@@ -523,12 +619,20 @@ export const recordEventFeedback = onCall(async (req) => {
  * path the user sees. A second ranking implementation for notifications would
  * drift from this one within a sprint.
  */
+export interface RecommendOptions {
+  /** Force a ranking version for this request (W3.2: both versions callable for the same request). */
+  version?: RankingVersion;
+  /** The app's current filter state (W3.5). */
+  filters?: ClientFilterInput;
+}
+
 export async function recommendFor(
-  uid: string, areaId: string, lat?: number, lng?: number, limit = 50, nowMs = Date.now(),
+  uid: string, areaId: string, lat?: number, lng?: number, limit = 50, nowMs = Date.now(), options: RecommendOptions = {},
 ): Promise<ScoredEvent[]> {
-  const [ctx, shared] = await Promise.all([
-    loadContext(uid, lat, lng, nowMs), areaCandidates(areaId, nowMs),
+  const [ctx, shared, config] = await Promise.all([
+    loadContext(uid, lat, lng, nowMs, options.filters), areaCandidates(areaId, nowMs), rankingConfig(nowMs),
   ]);
+  const version: RankingVersion = options.version ?? config.version;
   const candidates = new Map(shared.filter((ev) => ev.startMs >= nowMs).map((ev) => [ev.id, ev]));
   // Social candidates bypass the area and category sweeps; a friend going is
   // useful even when the event is far away or outside stated interests.
@@ -539,7 +643,14 @@ export async function recommendFor(
     if (ev && ev.startMs >= nowMs) candidates.set(ev.id, ev);
   }
   const excluded = new Set(ctx.excludedCategories ?? []);
-  return rankEvents(Array.from(candidates.values()).filter((ev) => !excluded.has(ev.category ?? "")), ctx).slice(0, limit);
+  const hidden = new Set(ctx.hiddenEventIDs ?? []);
+  const eligible = minorSafe(Array.from(candidates.values()), ctx.viewerIsAdult)
+    .filter((ev) => !excluded.has(ev.category ?? "") && !hidden.has(ev.id));
+  if (version === "v2") return rankEventsV2(eligible, ctx, { limit });
+  const byId = new Map(eligible.map((e) => [e.id, e]));
+  return rankEvents(eligible, ctx).slice(0, limit).map((s) => ({
+    ...s, version: "v1" as const, reasons: reasonsForV1(byId.get(s.id)!, ctx, s.parts),
+  }));
 }
 
 export const recommendedEvents = onCall(async (req) => {
@@ -563,8 +674,9 @@ export const recommendedEvents = onCall(async (req) => {
     areaId,
     feedSessionId,
     personalized: true,
+    rankingVersion: ranked[0]?.version ?? "v1",
     // `parts` ships so the client can explain a placement ("a friend is going")
     // and so a bad ranking is debuggable from a device instead of by guesswork.
-    events: ranked.map((r) => ({ id: r.id, score: Number(r.score.toFixed(4)), parts: r.parts })),
+    events: ranked.map((r) => ({ id: r.id, score: Number(r.score.toFixed(4)), parts: r.parts, reasons: r.reasons ?? [], moreDates: r.moreDates ?? [] })),
   };
 });

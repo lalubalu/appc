@@ -15,6 +15,10 @@
  *
  * The six frozen classifier files are not touched; this module is additive.
  * Nothing here is called "enrich": enrichEvent already exists in classify.ts.
+ *
+ * Word boundaries are Unicode-aware (\p{L}\p{N}_), matching Python's default
+ * `\b` in John's patterns, so "artística" never matches "art" and "Thai" never
+ * matches "ai" — in any script.
  */
 
 import type { NormalizedEvent } from "./types.js";
@@ -26,65 +30,89 @@ export interface AnnotatedEvent extends EnrichedEvent {
   topicTags: TopicTag[];
 }
 
+/** Python-style word boundaries: letters, digits and underscore in any script are word characters. */
+const B_START = "(?<![\\p{L}\\p{N}_])";
+const B_END = "(?![\\p{L}\\p{N}_])";
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 // ── adultOnly ───────────────────────────────────────────────────────────────
 
 /**
- * Alcohol service or age-limit language. Word-bounded; a few carefully chosen
- * exclusions keep children's programming out ("root beer floats", "ginger
- * beer", "apple cider" and "mocktails" are not alcohol).
+ * Alcohol service or drinking-venue language. Each term is matched as a whole
+ * word (Unicode boundaries). The exclusions keep children's and library
+ * programming out: root/ginger/birch beer, mocktails, "cocktail attire",
+ * "Happy Hour Storytime", "Homework Happy Hour".
  */
 export const ALCOHOL_TERMS: readonly string[] = [
-  "(?<!root |ginger |birch )beers?", "wines?", "winer(?:y|ies)", "wine tasting", "brewer(?:y|ies)", "brewpubs?", "craft brews?",
-  "tasting rooms?", "(?<!mock)cocktails?", "happy hours?", "(?:bar|pub) crawls?", "beer gardens?", "biergartens?",
-  "oktoberfest", "distiller(?:y|ies)", "hard seltzers?", "drink specials?", "bottomless mimosas?", "mimosas?", "sangria",
-  "tequila", "whisk(?:e)?y", "vodka", "bourbon", "margaritas?", "boozy", "booze", "liquor", "last call",
+  // service and the drinks themselves
+  "alcohol(?:ic)?", "(?<!root[\\s-]*|ginger[\\s-]*|birch[\\s-]*)beers?", "wines?", "winer(?:y|ies)", "winemakers?", "wine tasting", "wine bars?", "vineyards?", "sommeliers?",
+  "brewer(?:y|ies)", "brewing", "brewpubs?", "brews", "craft brews?", "brewfest", "beerfest", "oktoberfest", "biergartens?", "beer gardens?",
+  "taprooms?", "tap room", "tasting rooms?", "distiller(?:y|ies)", "cideries", "cidery", "hard ciders?", "cider releases?",
+  "ales?", "lagers?", "ipas?", "stouts?", "pilsners?", "sake tasting", "sake bar", "champagne", "prosecco", "mimosas?", "bottomless mimosas?", "sangria",
+  "tequila", "mezcal", "whisk(?:e)?y", "whiskies", "vodka", "bourbon", "gin tasting", "rum tasting", "margaritas?", "liquor", "spirits tasting",
+  "(?<!mock)cocktails?(?![\\s-]*(?:attire|dress))", "hard seltzers?",
+  // bars and service wording
+  "cash bar", "open bar", "no[\\s-]host bar", "full bar", "wine (?:and|&) beer", "beer (?:and|&) wine", "drink tickets?", "drink specials?", "sports bars?",
+  "cocktail bars?", "pubs?", "pub crawls?", "bar crawls?", "byob", "boozy", "booze", "sip (?:&|and) paint", "wine (?:&|and) paint",
+  "(?<!homework[\\s-]*|kids[\\s-]*|teens?[\\s-]*|family[\\s-]*)happy hours?(?![\\s-]*(?:storytime|story time|homework|crafts?|kids|teens?|family))",
 ];
-// Each term is tested as a whole word; a lookbehind-heavy alternation cannot
-// simply be wrapped in ..., so the guard is applied per term.
-const wholeWord = (term: string) => `(?<![a-z])(?:${term})(?![a-z])`;
-const ALCOHOL_WORDS = ALCOHOL_TERMS.map((w) => new RegExp(wholeWord(w), "i"));
-export const ALCOHOL_PATTERN = new RegExp(ALCOHOL_TERMS.map(wholeWord).join("|"), "i");
+const wholeWord = (term: string) => `${B_START}(?:${term})${B_END}`;
+const ALCOHOL_WORDS = ALCOHOL_TERMS.map((w) => new RegExp(wholeWord(w), "iu"));
+export const ALCOHOL_PATTERN = new RegExp(ALCOHOL_TERMS.map(wholeWord).join("|"), "iu");
 
 /**
- * "21+", "18+", "(19+)", "ages 65+", "ages 21 and over", "must be 21", "18 years and older",
- * "adults only", "no one under 21", "ID required". Any stated minimum of 18 or
- * above is an age limit a minor cannot meet; the library systems' structured
- * audience labels ("Adults, ages 18+", "Seniors, ages 65+") are exactly this.
+ * Age limits a minor cannot meet: any stated minimum of 18 or above.
+ *   "18+", "(21+)", "Comedy Night 18+", "open to ages 18+", "Adults (21+)"  — but not "20+ carnival games" or "Ages 18+ months"
+ *   "21 and over", "18 & up", "adults aged 18 and older", "ages 21 or older", "21 years of age and over"
+ *   "must be 21", "must be over 18", "minimum age 21", "over 21 only", "ages 25-35"
+ *   "no one under 21", "no children under 18", "under 21 not admitted"
+ *   "adults only", "adults-only"
+ * The library systems' structured audience labels ("Adults, ages 18+", "Seniors, ages 65+") are exactly this.
+ * Bare "ID required" is NOT an age limit (student ID, photo ID for a tour).
  */
 const ADULT_AGE = "(?:1[89]|[2-9][0-9])";
 export const AGE_LIMIT_PATTERN = new RegExp([
-  // "18+", "(21+)", "ages 65+" — but not "20+ years of teaching"
-  `(?<![0-9])${ADULT_AGE}\\s*\\+(?!\\s*(?:years?|yrs))`,
-  // "ages 18 and up", "adults aged 18 and older", "adults, ages 21 or over", "ages 21 years of age and over" — the age cue AND the open-ended bound
-  `\\b(?:ages?|aged|adults?,?\\s*ages?|adults? aged)\\s*${ADULT_AGE}\\b(?:\\s*years?(?:\\s*of age)?)?\\s*(?:and|&|or)\\s*(?:up|over|older)\\b`,
-  // "must be 21", "must be at least 18", "minimum age 21"
-  `\\b(?:must be(?: at least)?|minimum age(?: of| is)?)\\s*${ADULT_AGE}\\b`,
-  // "no one under 21", "no minors under 18"
-  `\\bno (?:one|minors?|guests?) under\\s*(?:the age of\\s*)?${ADULT_AGE}\\b`,
-  // "adults only", "ID required"
-  `\\badults?\\s*only\\b`, `\\bvalid (?:photo )?id required\\b`, `\\bid required\\b`,
-].join("|"), "i");
+  // "N+" with an age cue before it — never before a counted noun ("20+ vendors") or "months"
+  `(?:${B_START}(?:ages?|adults?,?\\s*(?:ages?)?|seniors?,?\\s*(?:ages?)?)\\s*|[(\\[]\\s*)${ADULT_AGE}\\s*\\+(?!\\s*(?:months?|years?|yrs))`,
+  // "N+" at the end of a phrase or before an event noun
+  `(?<![0-9])${ADULT_AGE}\\s*\\+(?=\\s*(?:$|[.,;:!?)\\]|]|only|event|show|night|party|crowd|audience|welcome|please|w\\/|with|and|&|to attend|to enter))(?!\\s*(?:months?|years?|yrs))`,
+  // "N and over / up / older", with or without an age cue
+  `(?<![0-9$])${ADULT_AGE}\\b(?:\\s*years?(?:\\s*of age)?)?\\s*(?:and|&|or|\\+)\\s*(?:up|over|older)${B_END}`,
+  // "must be 21", "must be over 18", "must be at least 21", "minimum age 21"
+  `${B_START}(?:must be(?: at least| over)?|minimum age(?: of| is)?|age minimum(?: of| is)?)\\s*${ADULT_AGE}${B_END}`,
+  // "over 21 only", "over 21 to attend/enter"
+  `${B_START}over\\s*${ADULT_AGE}\\s*(?:only|to attend|to enter|to drink|with (?:valid )?id)${B_END}`,
+  // "no one under 21", "no children under 18", "under 21 not admitted"
+  `${B_START}no (?:one|minors?|guests?|children|kids|persons?|patrons?) under\\s*(?:the age of\\s*)?${ADULT_AGE}${B_END}`,
+  `${B_START}under\\s*${ADULT_AGE}\\s*(?:are\\s*)?(?:not admitted|will not be admitted|not permitted|are not permitted|not allowed)${B_END}`,
+  // explicit adult-only wording
+  `${B_START}adults?[\\s-]*only${B_END}`,
+  // an age range that starts at 18 or above ("ages 25-35", "for ages 18 to 25")
+  `${B_START}(?:for\\s*)?ages?\\s*${ADULT_AGE}\\s*(?:-|–|—|to)\\s*[2-9][0-9]${B_END}`,
+].join("|"), "iu");
 
 /**
- * Brands that present or sponsor drinking events. Matched in the organizer and
- * in "presented by / sponsored by / brought to you by …" phrases, and anywhere
- * in the title (a "Modelo Kickoff" is a beer event). Lower-case, exact words.
+ * Brands that present or sponsor drinking events. Counted ONLY when they are
+ * the organizer or appear in a "presented / sponsored / brought to you by …"
+ * phrase (the spec's "an alcohol brand presenting the event"). A bare title
+ * mention is not evidence: "Sierra Nevada" is a mountain range, "Corona" a
+ * town, "Blue Moon" an idiom, "Guinness" a book of records.
  */
 export const ALCOHOL_BRANDS: readonly string[] = [
-  "modelo", "budweiser", "bud light", "coors", "miller lite", "miller high life", "heineken", "corona", "stella artois",
-  "michelob", "pacifico", "dos equis", "lagunitas", "sierra nevada", "anchor steam", "firestone walker", "ballast point",
-  "jack daniel's", "jack daniels", "jameson", "tito's", "titos", "smirnoff", "absolut", "grey goose", "bacardi",
-  "captain morgan", "jose cuervo", "patrón", "patron tequila", "don julio", "hennessy", "jägermeister", "jagermeister",
+  "modelo", "budweiser", "bud light", "coors", "miller lite", "miller high life", "heineken", "corona extra", "stella artois",
+  "michelob", "pacifico", "dos equis", "lagunitas", "sierra nevada brewing", "anchor steam", "firestone walker", "ballast point",
+  "jack daniel's", "jack daniels", "jameson irish whiskey", "tito's", "titos handmade", "smirnoff", "absolut", "grey goose", "bacardi",
+  "captain morgan", "jose cuervo", "patrón tequila", "patron tequila", "don julio", "hennessy", "jägermeister", "jagermeister",
   "white claw", "truly hard seltzer", "barefoot wine", "kendall-jackson", "josh cellars", "la crema", "robert mondavi",
-  "high noon", "cutwater", "fireball", "guinness", "blue moon", "new belgium", "gordon biersch", "21st amendment",
+  "high noon hard seltzer", "cutwater spirits", "guinness brewery", "blue moon brewing", "new belgium", "gordon biersch", "21st amendment brewery",
 ];
-const BRAND_PATTERNS = ALCOHOL_BRANDS.map((b) => new RegExp(`(?<![a-z])${b.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![a-z])`, "i"));
-const PRESENTER_PATTERN = /\b(?:presented|sponsored|hosted|brought to you|powered)\s+by\s+([^.;,\n]{2,60})/gi;
+const BRAND_PATTERNS = ALCOHOL_BRANDS.map((b) => new RegExp(wholeWord(escapeRegExp(b)), "iu"));
+const PRESENTER_PATTERN = /\b(?:presented|sponsored|hosted|brought to you|powered)\s+by\s+([^.;\n]{2,80})/giu;
 
-/** Structured feed fields that carry an age limit: audiences, event types, tags. */
+/** Structured feed fields that carry an age limit: minimumAge, audiences, event types, tags. */
 function structuredAgeLimit(rec: NormalizedEvent & { minimumAge?: number | null }): boolean | null {
   if (typeof rec.minimumAge === "number") return rec.minimumAge >= 18;
-  const structured = [...(rec.audiences ?? []), ...(rec.eventTypes ?? []), ...rec.tags].join(" | ");
+  const structured = [...(rec.audiences ?? []), ...(rec.eventTypes ?? []), ...(rec.tags ?? [])].join(" | ");
   if (!structured.trim()) return null;
   if (AGE_LIMIT_PATTERN.test(structured)) return true;
   return null;
@@ -95,30 +123,32 @@ export function mentionsAlcohol(text: string): boolean {
   return ALCOHOL_WORDS.some((w) => w.test(t));
 }
 
+/** A brand presents the event: it is the organizer, or named in a "presented by" phrase (which may also name a brewery or winery). */
 export function alcoholBrandPresents(rec: NormalizedEvent): boolean {
   const organizer = String(rec.organizer ?? "");
-  const title = String(rec.title ?? "");
-  if (BRAND_PATTERNS.some((p) => p.test(organizer) || p.test(title))) return true;
-  const text = `${rec.title} ${rec.description}`;
+  if (BRAND_PATTERNS.some((p) => p.test(organizer))) return true;
+  const text = `${rec.title ?? ""} ${rec.description ?? ""}`;
   for (const m of text.matchAll(PRESENTER_PATTERN)) {
-    if (BRAND_PATTERNS.some((p) => p.test(m[1]))) return true;
+    if (BRAND_PATTERNS.some((p) => p.test(m[1])) || mentionsAlcohol(m[1])) return true;
   }
   return false;
 }
 
-export type AdultOnlyReason = "structured-age-limit" | "age-limit" | "alcohol" | "alcohol-brand";
+export type AdultOnlyReason = "structured-age-limit" | "age-limit" | "alcohol" | "alcohol-venue" | "alcohol-brand";
 
 /**
  * Why a listing is adult-only, or null. Structured age fields win; otherwise
- * age-limit language, alcohol service or an alcohol brand presenting the event.
- * Stored alongside the flag so the share per source can be explained and so a
- * reason line can say "21+ event" rather than "adult only".
+ * age-limit language, alcohol service in the text, a drinking venue or brewery
+ * as organizer/location, or an alcohol brand presenting the event. Stored
+ * alongside the flag so the share per source can be explained and so a reason
+ * line can say "21+ event" rather than "adult only".
  */
 export function adultOnlyReason(rec: NormalizedEvent & { minimumAge?: number | null }): AdultOnlyReason | null {
   if (structuredAgeLimit(rec) === true) return "structured-age-limit";
-  const text = `${rec.title} ${rec.description}`;
+  const text = `${rec.title ?? ""} ${rec.description ?? ""}`;
   if (AGE_LIMIT_PATTERN.test(text)) return "age-limit";
   if (mentionsAlcohol(text)) return "alcohol";
+  if (mentionsAlcohol(`${rec.organizer ?? ""} · ${rec.locationName ?? ""}`)) return "alcohol-venue";
   if (alcoholBrandPresents(rec)) return "alcohol-brand";
   return null;
 }
@@ -160,10 +190,14 @@ export const CATEGORY_KEYWORDS: Record<Exclude<TopicTag, "community" | "campus" 
   social: ["meetup", "mixer", "social", "networking"],
 };
 
-const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-/** Port of models.py: _CATEGORY_PATTERNS — whole-word, optional plural "s", so "art" never matches "start" or "party" and "ai" never matches "Thai". */
+/**
+ * Port of models.py: _CATEGORY_PATTERNS — `\b(?:w1|w2)s?\b` per category.
+ * Python's `\b` is Unicode-aware; the JS equivalent uses lookarounds on
+ * \p{L}\p{N}_ so "art" never matches "start", "party" or "artística" and "ai"
+ * never matches "Thai".
+ */
 export const CATEGORY_PATTERNS: Record<string, RegExp> = Object.fromEntries(
-  Object.entries(CATEGORY_KEYWORDS).map(([cat, words]) => [cat, new RegExp(`\\b(?:${words.map(escapeRegExp).join("|")})s?\\b`, "i")]),
+  Object.entries(CATEGORY_KEYWORDS).map(([cat, words]) => [cat, new RegExp(`${B_START}(?:${words.map(escapeRegExp).join("|")})s?${B_END}`, "iu")]),
 );
 /** Port of models.py: _DESCRIPTION_IGNORED — a "Coding Club" that mentions building small games is not a sports event. */
 export const DESCRIPTION_IGNORED: ReadonlySet<string> = new Set(["sports", "theater"]);
@@ -208,7 +242,7 @@ export function interestsForTopics(tags: readonly string[]): string[] {
 
 /** The structured labels that join the title as John's "source's own category labels". */
 function structuredLabels(rec: NormalizedEvent): string {
-  return [...(rec.eventTypes ?? []), ...rec.tags.filter((t) => !/^(library|google-events)$/i.test(t))].join(" ");
+  return [...(rec.eventTypes ?? []), ...(rec.tags ?? []).filter((t) => !/^(library|google-events)$/i.test(t))].join(" ");
 }
 
 // ── The one call upsertBatch makes ──────────────────────────────────────────
@@ -216,7 +250,7 @@ function structuredLabels(rec: NormalizedEvent): string {
 /** Add adultOnly and topicTags to an enriched event. Pure; identical for fresh ingest and backfill. */
 export function annotateEvent(rec: EnrichedEvent & { minimumAge?: number | null }): AnnotatedEvent {
   const fallback = SOURCE_DEFAULT_TOPIC[rec.source];
-  const topicTags = inferTopicTags(`${rec.title} ${structuredLabels(rec)}`, rec.description, fallback);
+  const topicTags = inferTopicTags(`${rec.title ?? ""} ${structuredLabels(rec)}`, rec.description ?? "", fallback);
   const reason = adultOnlyReason(rec);
   return { ...rec, adultOnly: reason !== null, adultOnlyReason: reason, topicTags };
 }

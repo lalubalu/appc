@@ -60,6 +60,8 @@ export function mapIcsEvent(e: IcsEvent, area: LaunchArea, feed: IcsFeed, source
     source,
     sourceEventId,
     areaId: area.id,
+    // iCal STATUS:CANCELLED is John's structured cancellation (port of ical.py); TENTATIVE/CONFIRMED stay scheduled.
+    status: e.status === "CANCELLED" ? "cancelled" : "scheduled",
     title,
     description: cleanText(e.description, 600),
     organizer: cleanText(feed.name, 80),

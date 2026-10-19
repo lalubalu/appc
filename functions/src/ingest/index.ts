@@ -35,6 +35,8 @@ import { fetchSerpApi, serpApiBudgetAllows, SERPAPI_MONTHLY_CAP } from "./source
 import { cleanText, cleanUrl, cleanCoord, classify, formatLocalTime } from "./normalize.js";
 import { recordSourceHealth } from "./health.js";
 import { auditedStaffJob, staffReason } from "../staff-audit.js";
+import { loadActiveSources, isDeniedHost, type SourceDoc } from "./sources-registry.js";
+import type { IcsFeed, LibCalFeed, BiblioFeed, MidpenFeed } from "./areas.js";
 
 export const SOURCES: SourceId[] = ["ticketmaster", "libcal", "bibliocommons", "localist", "livewhale", "legistar", "nps", "midpen", "ics", "serpapi"];
 const TICKETED: SourceId[] = ["ticketmaster"];
@@ -42,63 +44,49 @@ const CIVIC: SourceId[] = ["libcal", "bibliocommons", "localist", "livewhale", "
 
 interface Keys { ticketmaster?: string; nps?: string; serpapi?: string; }
 
-/** Fetch one source for one area. Throws on a failed fetch (nothing is marked stale then). */
-async function fetchSource(source: SourceId, area: LaunchArea, keys: Keys): Promise<NormalizedEvent[]> {
-  switch (source) {
-    case "ticketmaster":
-      if (!area.ticketmaster.enabled) return [];
-      return fetchTicketmaster(area, keys.ticketmaster ?? "");
-    case "libcal": {
-      const all: NormalizedEvent[] = [];
-      for (const feed of area.libcal) all.push(...await fetchLibCal(area, feed));
-      return all;
-    }
-    case "bibliocommons": {
-      const all: NormalizedEvent[] = [];
-      for (const feed of area.bibliocommons ?? []) all.push(...await fetchBiblioCommons(area, feed));
-      return all;
-    }
-    case "midpen": {
-      const all: NormalizedEvent[] = [];
-      for (const feed of area.midpen ?? []) all.push(...await fetchMidpen(area, feed));
-      return all;
-    }
-    case "ics": {
-      const all: NormalizedEvent[] = [];
-      for (const feed of area.ics) all.push(...await fetchIcsFeed(area, feed, "ics"));
-      return all;
-    }
-    case "localist": {
-      const all: NormalizedEvent[] = [];
-      for (const cal of area.localist) all.push(...await fetchLocalist(area, cal.host, cal.name));
-      return all;
-    }
-    case "livewhale": {
-      const all: NormalizedEvent[] = [];
-      for (const cal of area.livewhale) all.push(...await fetchLiveWhale(area, cal.host, cal.name));
-      return all;
-    }
-    case "legistar": {
-      const all: NormalizedEvent[] = [];
-      for (const cal of area.legistar) all.push(...await fetchLegistar(area, cal.client, cal.name));
-      return all;
-    }
-    case "nps":
-      if (!area.nps.parkCodes.length) return [];
-      return fetchNps(area, keys.nps ?? "");
-    case "serpapi": {
-      if (!area.serpapi.enabled) return [];
-      // Quota gate — counted BEFORE the call so a crash mid-fetch still counts.
-      const allowed = await reserveSerpApiCall();
-      if (!allowed) {
-        console.warn(`[ingest] SerpApi monthly cap (${SERPAPI_MONTHLY_CAP}) reached — skipping; stale cache stands`);
-        throw new SkipSource("SerpApi monthly quota exhausted");
+/**
+ * Fetch every ACTIVE /sources document of one adapter type for one area (W4.1).
+ * `sources` may be supplied directly (tests, the migration check); otherwise
+ * they are read from Firestore. A denied host is refused here too, so the
+ * deny-list holds even if a bad document reached the collection. Throws on a
+ * failed fetch (nothing is marked stale then).
+ */
+export async function fetchSource(source: SourceId, area: LaunchArea, keys: Keys, sources?: SourceDoc[]): Promise<NormalizedEvent[]> {
+  const docs = (sources ?? await loadActiveSources(area.id, source)).filter((s) => s.type === source && s.areaId === area.id && !isDeniedHost(s.host));
+  const all: NormalizedEvent[] = [];
+  for (const s of docs) {
+    const p = s.params as Record<string, unknown>;
+    switch (source) {
+      case "ticketmaster":
+        if (p.enabled === true) all.push(...await fetchTicketmaster(area, keys.ticketmaster ?? ""));
+        break;
+      case "libcal": all.push(...await fetchLibCal(area, p as unknown as LibCalFeed)); break;
+      case "bibliocommons": all.push(...await fetchBiblioCommons(area, p as unknown as BiblioFeed)); break;
+      case "midpen": all.push(...await fetchMidpen(area, p as unknown as MidpenFeed)); break;
+      case "ics": all.push(...await fetchIcsFeed(area, p as unknown as IcsFeed, "ics")); break;
+      case "localist": all.push(...await fetchLocalist(area, String(p.host), String(p.name))); break;
+      case "livewhale": all.push(...await fetchLiveWhale(area, String(p.host), String(p.name))); break;
+      case "legistar": all.push(...await fetchLegistar(area, String(p.client), String(p.name))); break;
+      case "nps": {
+        const codes = Array.isArray(p.parkCodes) ? p.parkCodes.filter((c): c is string => typeof c === "string") : [];
+        if (codes.length) all.push(...await fetchNps({ ...area, nps: { parkCodes: codes } } as LaunchArea & { nps: { parkCodes: string[] } }, keys.nps ?? ""));
+        break;
       }
-      return fetchSerpApi(area, keys.serpapi ?? "");
+      case "serpapi": {
+        if (p.enabled !== true) break;
+        // Quota gate — counted BEFORE the call so a crash mid-fetch still counts.
+        const allowed = await reserveSerpApiCall();
+        if (!allowed) {
+          console.warn(`[ingest] SerpApi monthly cap (${SERPAPI_MONTHLY_CAP}) reached — skipping; stale cache stands`);
+          throw new SkipSource("SerpApi monthly quota exhausted");
+        }
+        all.push(...await fetchSerpApi({ ...area, serpapi: { enabled: true, query: String(p.query ?? `events in ${area.name}`) } } as LaunchArea & { serpapi: { enabled: boolean; query: string } }, keys.serpapi ?? ""));
+        break;
+      }
+      default: break;
     }
-    default:
-      return [];
   }
+  return all;
 }
 
 class SkipSource extends Error {}
@@ -116,7 +104,7 @@ export async function reserveSerpApiCall(): Promise<boolean> {
 }
 
 /** Run one source for one area end to end and log the result. */
-export async function runSource(source: SourceId, area: LaunchArea, keys: Keys, payload?: NormalizedEvent[]): Promise<IngestResult> {
+export async function runSource(source: SourceId, area: LaunchArea, keys: Keys, payload?: NormalizedEvent[], sources?: SourceDoc[]): Promise<IngestResult> {
   const started = Date.now();
   const runStart = new Date(started);
   const result: IngestResult = {
@@ -126,7 +114,7 @@ export async function runSource(source: SourceId, area: LaunchArea, keys: Keys, 
     errors: [], durationMs: 0,
   };
   try {
-    const records = payload ?? await fetchSource(source, area, keys);
+    const records = payload ?? await fetchSource(source, area, keys, sources);
     result.fetched = records.length;
     const index = await loadAreaIndex(area);
     const stats = await upsertBatch(records, area, index, runStart);

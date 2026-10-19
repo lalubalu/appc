@@ -99,6 +99,14 @@ for(const input of [{latitude:"37",longitude:0},{latitude:NaN,longitude:0},{lati
 const publicEvent={active:true,hidden:false,broadcast:true,minimumAge:0};
 check("guest can see all-ages public event without creating account",()=>assert.equal(visibleParkEvent(publicEvent,{},new Set(),now),true));
 for(const patch of [{active:false},{hidden:true},{broadcast:false},{removed:true},{virtual:true}])check(`guide omits ${Object.keys(patch)[0]} event`,()=>assert.equal(visibleParkEvent({...publicEvent,...patch},{},new Set(),now),false));
+check("adult-only park event is hidden from guests, minors and unknown-age accounts but shown to a recorded adult",()=>{
+  const adultEvent={...publicEvent,adultOnly:true};
+  assert.equal(visibleParkEvent(adultEvent,{},new Set(),now),false);
+  assert.equal(visibleParkEvent(adultEvent,{birthYear:2011,ageBand:"minor"},new Set(),now),false);
+  assert.equal(visibleParkEvent(adultEvent,{birthYear:1990},new Set(),now),false);
+  assert.equal(visibleParkEvent(adultEvent,{birthYear:1990,ageBand:"adult"},new Set(),now),true);
+  assert.equal(visibleParkEvent({...publicEvent,adultOnly:false},{},new Set(),now),true);
+});
 check("guide respects blocked creator and organizer",()=> {
  for(const patch of [{creatorID:"blocked"},{organizerId:"blocked"}])assert.equal(visibleParkEvent({...publicEvent,...patch},{},new Set(["blocked"]),now),false);
 });

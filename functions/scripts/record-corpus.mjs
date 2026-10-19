@@ -23,6 +23,7 @@ import { fetchLocalist } from "../lib/ingest/sources/localist.js";
 import { fetchLiveWhale } from "../lib/ingest/sources/livewhale.js";
 import { fetchLegistar } from "../lib/ingest/sources/legistar.js";
 import { CORPUS_DIR, saveRecordedCorpus } from "./corpus-fixture.mjs";
+import { seedsOfType } from "../lib/ingest/sources-config.js";
 
 const area = SAN_JOSE;
 const recordedAt = new Date();
@@ -49,13 +50,13 @@ if (process.env.TICKETMASTER_KEY) await feed("ticketmaster", "Ticketmaster Disco
 else corpus.skipped.push({ source: "ticketmaster", reason: "TICKETMASTER_KEY not set ($0 sprint; no key on this machine)" });
 corpus.skipped.push({ source: "serpapi", reason: "never recorded: every call spends monthly quota" });
 corpus.skipped.push({ source: "nps", reason: "no NPS unit inside the launch radius (areas.ts)" });
-for (const f of area.libcal) await feed("libcal", f.name, () => fetchLibCal(area, f));
-for (const f of area.bibliocommons ?? []) await feed("bibliocommons", f.name, () => fetchBiblioCommons(area, f));
-for (const c of area.localist) await feed("localist", c.name, () => fetchLocalist(area, c.host, c.name));
-for (const c of area.livewhale) await feed("livewhale", c.name, () => fetchLiveWhale(area, c.host, c.name));
-for (const c of area.legistar) await feed("legistar", c.name, () => fetchLegistar(area, c.client, c.name));
-for (const f of area.midpen ?? []) await feed("midpen", f.name, () => fetchMidpen(area, f));
-for (const f of area.ics) await feed("ics", f.name, () => fetchIcsFeed(area, f, "ics"));
+for (const s of seedsOfType("libcal", area.id)) await feed("libcal", s.params.name, () => fetchLibCal(area, s.params));
+for (const s of seedsOfType("bibliocommons", area.id)) await feed("bibliocommons", s.params.name, () => fetchBiblioCommons(area, s.params));
+for (const s of seedsOfType("localist", area.id)) await feed("localist", s.params.name, () => fetchLocalist(area, s.params.host, s.params.name));
+for (const s of seedsOfType("livewhale", area.id)) await feed("livewhale", s.params.name, () => fetchLiveWhale(area, s.params.host, s.params.name));
+for (const s of seedsOfType("legistar", area.id)) await feed("legistar", s.params.name, () => fetchLegistar(area, s.params.client, s.params.name));
+for (const s of seedsOfType("midpen", area.id)) await feed("midpen", s.params.name, () => fetchMidpen(area, s.params));
+for (const s of seedsOfType("ics", area.id)) await feed("ics", s.params.name, () => fetchIcsFeed(area, s.params, "ics"));
 
 const failed = corpus.feeds.filter((f) => f.error);
 const path = join(CORPUS_DIR, `${area.id}-${date}.json.gz`);

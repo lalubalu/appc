@@ -827,8 +827,11 @@ async function main() {
 
   r = await call("runIngest", { areaId: "san-jose-ca", source: "ticketmaster", payload: [A, C, OUT_OF_AREA] }, staff.idToken);
   let res = r.result?.results?.[0];
-  ok("ingest: payload run creates the in-area records and skips the out-of-area one",
-     res?.created === 2 && res?.skipped === 1 && res?.errors?.length === 0, JSON.stringify(res));
+  // W1.2: an out-of-area listing is now a REJECTION (John's outside_region rule) recorded in /rejectedListings, not a silent skip.
+  ok("ingest: payload run creates the in-area records and rejects the out-of-area one with a reason",
+     res?.created === 2 && res?.rejected === 1 && res?.rejectedByReason?.outside_region === 1 && res?.skipped === 0 && res?.errors?.length === 0, JSON.stringify(res));
+  ok("ingest: the rejection is recorded with its reason and a 30-day expiry",
+     await (async () => { const rej = (await db.doc("rejectedListings/ticketmaster-tmFAR").get()).data(); return rej?.reasons?.includes("outside_region") && rej?.source === "ticketmaster" && (rej?.expiresAt?.toMillis?.() ?? 0) > Date.now() + 29 * 86_400_000; })());
   ok("ingest: documents carry provenance + visibility flags",
      await (async () => {
        const d = (await db.doc("events/ticketmaster-tmA1").get()).data();
@@ -857,12 +860,14 @@ async function main() {
   // Re-running the same feed is idempotent (updates, no new docs).
   r = await call("runIngest", { areaId: "san-jose-ca", source: "libcal", payload: [B] }, staff.idToken);
   res = r.result?.results?.[0];
-  ok("ingest: re-seeing a merged source updates in place", res?.updated === 1 && res?.created === 0 && res?.merged === 0, JSON.stringify(res));
+  // W1.4: identical records minutes later are "unchanged" — seen, not rewritten.
+  ok("ingest: re-seeing a merged source is recorded as unchanged with zero event writes", res?.unchanged === 1 && res?.updated === 0 && res?.created === 0 && res?.merged === 0 && res?.writes === 0, JSON.stringify(res));
 
   // THE CLIENT READS FIRESTORE ONLY — with exactly the query the app uses.
+  // This account has no recorded age band, so the app's query carries the adultOnly filter (W2).
   const appQuery = query(collection(cdb, "events"),
     where("hidden", "==", false), where("active", "==", true), where("broadcast", "==", true),
-    where("date", ">=", new Date()));
+    where("adultOnly", "==", false), where("date", ">=", new Date()));
   let visibleIds = [];
   try { visibleIds = (await getDocs(appQuery)).docs.map((d) => d.id); } catch (e) { visibleIds = [`ERR:${e.code}`]; }
   ok("client: the app's Firestore query returns the ingested events (no upstream call)",
@@ -934,7 +939,7 @@ async function main() {
   try {
     guestIds = (await getDocs(query(collection(guestDb, "events"),
       where("hidden", "==", false), where("active", "==", true), where("broadcast", "==", true),
-      where("date", ">=", new Date())))).docs.map((d) => d.id);
+      where("adultOnly", "==", false), where("date", ">=", new Date())))).docs.map((d) => d.id);
   } catch (e) { guestIds = [`ERR:${e.code}`]; }
   ok("rules: a signed-out guest can read broadcast events (the app's query)",
      guestIds.includes("ticketmaster-tmC1"), JSON.stringify(guestIds));
@@ -960,6 +965,91 @@ async function main() {
   ok("rules: creator cannot flip broadcast on later", code2 === "permission-denied", `got ${code2}`);
   code2 = await userWrite("events/e2e-plain-community", { description: "edited by creator" });
   ok("rules: creator CAN still edit their own event copy", code2 === "ok", `got ${code2}`);
+
+
+  // ────────────────────────────────────────────────────────────────────────
+  // W2 — ADULT-ONLY LISTINGS. Rules, client queries and every server surface.
+  //
+  // A minor, an unknown-age account and a signed-out session can neither list
+  // nor get an adultOnly listing and never receive one from any server surface;
+  // a recorded adult can. Signed-out browsing of ordinary events keeps working.
+  // ────────────────────────────────────────────────────────────────────────
+  console.log("\n── Adult-only listings (W2) ──");
+  const nowYear = new Date().getUTCFullYear();
+  const mkAge = async (label, birthYear) => {
+    const em = `e2e-${label}-${Date.now()}@verdure.test`;
+    const u = await signUp(em, password);
+    const fdb = await clientAs(em, password, `age-${label}-${Date.now()}`);
+    await setDoc(doc(fdb, `users/${u.uid}`), { displayName: `${label} user`, email: em, interests: [], collectedPlaceIDs: [],
+      createdAt: serverTimestamp(), lastUpdated: serverTimestamp() });
+    if (birthYear) await call("registerAgeBand", { birthYear }, u.idToken);
+    return { ...u, email: em, fdb };
+  };
+  const minor = await mkAge("minor", nowYear - 16);
+  const unknownAge = await mkAge("unknownage", null);
+  const adult = await mkAge("adult", nowYear - 30);
+  ok("ages recorded: minor and adult", (await db.doc(`users/${minor.uid}`).get()).data()?.ageBand === "minor" &&
+     (await db.doc(`users/${adult.uid}`).get()).data()?.ageBand === "adult");
+  const soonMs = Date.now() + 2 * 86_400_000;
+  const w2Event = (id, title, extra) => db.doc(`events/${id}`).set({
+    title, organizer: "W2 Seed", date: new Date(soonMs), time: "6:00 PM", locationName: "Plaza de César Chávez", attendeeCount: 0,
+    category: "Social", imagePlaceholder: "cup.and.saucer.fill", pointValue: 100, creatorID: "system:ingest", createdAt: new Date(),
+    hidden: false, active: true, broadcast: true, source: "ics", areaId: "san-jose-ca", latitude: 37.3325, longitude: -121.8890,
+    qualityScore: 0.9, topicTags: ["community"], contentHash: "w2", ...extra });
+  await w2Event("w2-adult-beer", "Downtown Brewery Crawl", { adultOnly: true, adultOnlyReason: "alcohol" });
+  await w2Event("w2-ordinary-1", "Plaza Storytime", { adultOnly: false, adultOnlyReason: null });
+  await w2Event("w2-ordinary-2", "Community Walk", { adultOnly: false, adultOnlyReason: null });
+  await w2Event("w2-ordinary-3", "Chess in the Park", { adultOnly: false, adultOnlyReason: null });
+  await db.doc("feedCaches/san-jose-ca").delete().catch(() => {});
+
+  const listIds = async (fdb, withFilter) => {
+    const constraints = [where("hidden", "==", false), where("active", "==", true), where("broadcast", "==", true)];
+    if (withFilter) constraints.push(where("adultOnly", "==", false));
+    constraints.push(where("date", ">=", new Date()));
+    try { return (await getDocs(query(collection(fdb, "events"), ...constraints))).docs.map((d) => d.id); } catch (e) { return [`ERR:${e.code}`]; }
+  };
+  const getCode = async (fdb, id) => { try { const s = await getDoc(doc(fdb, `events/${id}`)); return s.exists() ? "ok" : "missing"; } catch (e) { return e.code; } };
+  const guest2 = clientFirestore(clientInit({ projectId: PROJECT, apiKey: "fake-api-key" }, "guest-w2"));
+  connectFirestoreEmulator(guest2, EMULATORS.firestore.host, EMULATORS.firestore.port);
+  let w2ids = await listIds(guest2, true);
+  ok("regression: a signed-out guest still browses ordinary broadcast events", w2ids.includes("w2-ordinary-1") && !w2ids.includes("w2-adult-beer"), JSON.stringify(w2ids));
+  ok("rules: a signed-out list WITHOUT the adultOnly filter is denied outright", (await listIds(guest2, false))[0] === "ERR:permission-denied");
+  ok("rules: a signed-out get of an adult-only listing is denied; an ordinary one works",
+     (await getCode(guest2, "w2-adult-beer")) === "permission-denied" && (await getCode(guest2, "w2-ordinary-1")) === "ok");
+  w2ids = await listIds(minor.fdb, true);
+  ok("rules: a minor's filtered list never contains an adult-only listing", w2ids.includes("w2-ordinary-1") && !w2ids.includes("w2-adult-beer"), JSON.stringify(w2ids));
+  ok("rules: a minor's unfiltered list is denied", (await listIds(minor.fdb, false))[0] === "ERR:permission-denied");
+  ok("rules: a minor cannot get an adult-only listing by id", (await getCode(minor.fdb, "w2-adult-beer")) === "permission-denied");
+  ok("rules: an unknown-age account is treated as a minor (filtered list works, unfiltered denied, adult get denied)",
+     (await listIds(unknownAge.fdb, true)).includes("w2-ordinary-1") && (await listIds(unknownAge.fdb, false))[0] === "ERR:permission-denied" &&
+     (await getCode(unknownAge.fdb, "w2-adult-beer")) === "permission-denied");
+  w2ids = await listIds(adult.fdb, false);
+  ok("rules: a recorded adult lists everything without the filter, adult-only included", w2ids.includes("w2-adult-beer") && w2ids.includes("w2-ordinary-1"), JSON.stringify(w2ids));
+  ok("rules: a recorded adult can get an adult-only listing", (await getCode(adult.fdb, "w2-adult-beer")) === "ok");
+  ok("rules: nobody can flip adultOnly from a client",
+     (await (async () => { try { await updateDoc(doc(adult.fdb, "events/w2-adult-beer"), { adultOnly: false }); return "ok"; } catch (e) { return e.code; } })()) === "permission-denied");
+  const recIds = async (u) => ((await call("recommendedEvents", { areaId: "san-jose-ca", lat: 37.3382, lng: -121.8863, limit: 50 }, u.idToken)).result?.events ?? []).map((e) => e.id);
+  const minorRec = await recIds(minor), unknownRec = await recIds(unknownAge), adultRec = await recIds(adult);
+  ok("ranking: a minor's and an unknown-age account's For You never contain the adult-only listing",
+     !minorRec.includes("w2-adult-beer") && !unknownRec.includes("w2-adult-beer") && minorRec.includes("w2-ordinary-1"), JSON.stringify(minorRec));
+  ok("ranking: a recorded adult's For You can contain it", adultRec.includes("w2-adult-beer"), JSON.stringify(adultRec));
+  r = await call("rsvpToEvent", { eventId: "w2-adult-beer", going: true }, minor.idToken);
+  ok("rsvp: a minor cannot RSVP to an adult-only listing", r.error?.status === "PERMISSION_DENIED", JSON.stringify(r));
+  r = await call("rsvpToEvent", { eventId: "w2-adult-beer", going: true }, adult.idToken);
+  ok("rsvp: a recorded adult can", r.result?.going === true, JSON.stringify(r));
+  const minorInvite = (await call("myFriendInvite", {}, minor.idToken)).result;
+  await call("sendFriendRequest", { targetUid: minor.uid, inviteToken: minorInvite?.token }, adult.idToken);
+  await call("respondToFriendRequest", { fromUid: adult.uid, accept: true }, minor.idToken);
+  const minorUpcoming = ((await call("friendsUpcoming", {}, minor.idToken)).result?.events ?? []).map((e) => e.id);
+  ok("friends upcoming: the minor never sees the adult friend's adult-only RSVP", !minorUpcoming.includes("w2-adult-beer"), JSON.stringify(minorUpcoming));
+  r = await call("inviteToEvent", { eventId: "w2-adult-beer", toUids: [minor.uid] }, adult.idToken);
+  ok("invites: an adult cannot invite a minor to an adult-only listing (skipped, never delivered)",
+     (r.result?.skipped ?? []).includes(minor.uid) && !(r.result?.delivered ?? []).includes(minor.uid), JSON.stringify(r));
+  const targetDate = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(soonMs));
+  r = await call("planEvents", { when: "Pick a date", targetDate, who: "Anyone", distance: "Anywhere nearby", budget: "Any", note: "", areaId: "san-jose-ca", lat: 37.3382, lng: -121.8863 }, minor.idToken);
+  ok("planner: a minor's plan is built from ordinary listings only", !!r.result && (r.result.stops ?? []).length >= 2 && !(r.result.stops ?? []).some((s) => s.eventId === "w2-adult-beer"), JSON.stringify(r.result ?? r.error));
+  r = await call("planEvents", { when: "Pick a date", targetDate, who: "Anyone", distance: "Anywhere nearby", budget: "Any", note: "brewery", areaId: "san-jose-ca", lat: 37.3382, lng: -121.8863 }, minor.idToken);
+  ok("planner: a minor asking for 'brewery' gets no plan rather than the adult-only listing", !!r.error, JSON.stringify(r.result ?? r.error));
 
   r = await call("listLaunchAreas", {}, rep1.idToken);
   ok("areas: any signed-in user can list launch areas (to explain coverage honestly)",
@@ -1008,7 +1098,7 @@ async function main() {
   await call("registerAgeBand", { birthYear: adultYear }, quinn.idToken);
   await call("registerAgeBand", { birthYear: adultYear }, blocker.idToken);
   const sharedEventId = `e2e-shared-past-${Date.now()}`;
-  await db.doc(`events/${sharedEventId}`).set({
+  await db.doc(`events/${sharedEventId}`).set({ adultOnly: false,
     title: "Shared Park Day", organizer: "Parks", date: new Date(Date.now() + 86_400_000),
     endDate: new Date(Date.now() + 90_000_000), active: true, hidden: false,
     creatorID: "system:ingest", attendeeCount: 0,
@@ -1351,10 +1441,11 @@ async function main() {
      orgEv?.publicVenue === true && orgEv?.recurring === true &&
      orgEv?.accessibilityFeatures?.includes("stepFree"));
 
+  // These accounts have no recorded age band, so every list carries the adultOnly filter the app adds (W2).
   const publicIds = (await getDocs(query(collection(nonfan.fdb, "events"),
-    where("hidden", "==", false), where("active", "==", true), where("broadcast", "==", true), where("date", ">=", new Date())))).docs.map((d) => d.id);
+    where("hidden", "==", false), where("active", "==", true), where("broadcast", "==", true), where("adultOnly", "==", false), where("date", ">=", new Date())))).docs.map((d) => d.id);
   ok("visibility: an unverified organizer's event is NOT in the public feed", !publicIds.includes(orgEventId));
-  const orgQuery = (fdb) => query(collection(fdb, "events"), where("hidden", "==", false), where("active", "==", true), where("organizerId", "==", organizerId));
+  const orgQuery = (fdb) => query(collection(fdb, "events"), where("hidden", "==", false), where("active", "==", true), where("organizerId", "==", organizerId), where("adultOnly", "==", false));
   try { await getDocs(orgQuery(nonfan.fdb)); ocode = "ok"; } catch (e) { ocode = e.code; }
   ok("visibility: a non-follower cannot read the organizer's calendar", ocode === "permission-denied", `got ${ocode}`);
 
@@ -1381,7 +1472,7 @@ async function main() {
      && (await db.doc(`events/${orgEventId}`).get()).data()?.broadcast === true
      && (await db.doc(`organizers/${organizerId}`).get()).data()?.status === "approved", JSON.stringify(r));
   const publicAfter = (await getDocs(query(collection(nonfan.fdb, "events"),
-    where("hidden", "==", false), where("active", "==", true), where("broadcast", "==", true), where("date", ">=", new Date())))).docs.map((d) => d.id);
+    where("hidden", "==", false), where("active", "==", true), where("broadcast", "==", true), where("adultOnly", "==", false), where("date", ">=", new Date())))).docs.map((d) => d.id);
   ok("visibility: after approval the event is in the public feed", publicAfter.includes(orgEventId));
   try { ocode = (await getDoc(doc(nonfan.fdb, `organizers/${organizerId}`))).exists() ? "ok" : "missing"; } catch (e) { ocode = e.code; }
   ok("rules: an approved organizer's profile is publicly readable", ocode === "ok", `got ${ocode}`);
@@ -1455,7 +1546,7 @@ async function main() {
   const profileUser = await mk("profileuser");
   const profileArea = `e2e-profiles-${Date.now()}`;
   for (const [id, category] of [["hack", "Hackathon"], ["clean", "Cleanup"]]) {
-    await db.doc(`events/${profileArea}-${id}`).set({
+    await db.doc(`events/${profileArea}-${id}`).set({ adultOnly: false,
       title: `${category} day`, description: "A public local activity", organizer: "Verdure QA",
       date: new Date(Date.now() + 3 * 86_400_000), time: "10:00 AM", locationName: "San Jose",
       attendeeCount: 0, category, pointValue: 100, creatorID: "system:ingest",
@@ -1492,7 +1583,7 @@ async function main() {
   // exercise the session quota and recent-history path without a model key.
   const plannerArea = `e2e-plan-${Date.now()}`;
   for (let i = 0; i < 8; i++) {
-    await db.doc(`events/${plannerArea}-${i}`).set({
+    await db.doc(`events/${plannerArea}-${i}`).set({ adultOnly: false,
       title: i % 2 ? `Community cleanup ${i}` : `Tech workshop ${i}`,
       description: "A public local activity", organizer: `Organizer ${i}`,
       date: new Date(Date.now() + (i + 1) * 86_400_000), time: "10:00 AM",

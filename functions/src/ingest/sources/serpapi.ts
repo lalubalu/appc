@@ -39,7 +39,7 @@ export function serpApiBudgetAllows(callsThisMonth: number): boolean {
 
 export async function fetchSerpApi(area: LaunchArea, apiKey: string, fetchImpl: typeof fetch = fetch): Promise<NormalizedEvent[]> {
   if (!apiKey) throw new Error("SERPAPI_KEY not configured");
-  const q = new URLSearchParams({ engine: "google_events", q: area.serpapi.query, api_key: apiKey, hl: "en", gl: "us" });
+  const q = new URLSearchParams({ engine: "google_events", q: (area as LaunchArea & { serpapi?: { query: string } }).serpapi?.query ?? `events in ${area.name}`, api_key: apiKey, hl: "en", gl: "us" });
   const res = await fetchImpl(`https://serpapi.com/search.json?${q}`, { signal: AbortSignal.timeout(25_000) });
   if (!res.ok) throw new Error(`SerpApi HTTP ${res.status}`);
   const body = await res.json() as { events_results?: SerpEvent[] };
