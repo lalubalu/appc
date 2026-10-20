@@ -25,6 +25,10 @@ export interface LegistarSeed { client: string; name: string }
 export interface TicketmasterSeed { name: string; enabled: boolean }
 export interface NpsSeed { name: string; parkCodes: string[] }
 export interface SerpApiSeed { name: string; enabled: boolean; query: string }
+/** W4.5 — discovered sources only; nothing in SOURCE_SEEDS uses these. */
+export interface WordPressTecSeed { name: string; siteUrl: string; tags?: string[] }
+export interface JsonLdSeed { name: string; siteUrl: string; sitemapUrl?: string; maxPages?: number; tags?: string[] }
+export interface RssIcsSeed { name: string; feedUrl: string; maxPages?: number; tags?: string[] }
 
 export type SourceParams =
   | { type: "ics"; params: IcsSeed }
@@ -36,7 +40,10 @@ export type SourceParams =
   | { type: "legistar"; params: LegistarSeed }
   | { type: "ticketmaster"; params: TicketmasterSeed }
   | { type: "nps"; params: NpsSeed }
-  | { type: "serpapi"; params: SerpApiSeed };
+  | { type: "serpapi"; params: SerpApiSeed }
+  | { type: "wordpress-tec"; params: WordPressTecSeed }
+  | { type: "jsonld"; params: JsonLdSeed }
+  | { type: "rss-ics"; params: RssIcsSeed };
 
 export type SourceSeed = SourceParams & {
   /** Stable document id in /sources. */

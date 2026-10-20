@@ -134,8 +134,41 @@ function seedUrl(seed: SourceParams & { host: string }): string | null {
     case "livewhale": return `https://${seed.params.host}/live/json/v2/events`;
     case "legistar": return `https://webapi.legistar.com/v1/${seed.params.client}/events`;
     case "midpen": return "https://www.openspace.org/events";
+    case "wordpress-tec": return `${seed.params.siteUrl.replace(/\/$/, "")}/wp-json/tribe/events/v1/events`;
+    case "jsonld": return seed.params.sitemapUrl ?? `${seed.params.siteUrl.replace(/\/$/, "")}/sitemap.xml`;
+    case "rss-ics": return seed.params.feedUrl;
     default: return null;
   }
+}
+
+// ── Discovery, self-healing and removal helpers (W4.3 / W4.6 / W4.7) ───────
+
+/** Stable document id for a discovered source: one per area, adapter and host. */
+export const discoveredSourceId = (areaId: string, type: SourceId, host: string): string =>
+  `${areaId}_${type}_${host.toLowerCase().replace(/^www\./, "").replace(/[^a-z0-9.-]/g, "-")}`;
+
+/** Every /sources document for one area with the given status (any adapter type). */
+export async function loadSourcesByStatus(areaId: string, status: SourceStatus): Promise<SourceDoc[]> {
+  const snap = await db.collection("sources").where("areaId", "==", areaId).where("status", "==", status).limit(500).get();
+  return snap.docs.map(sourceFromDoc).filter((s): s is SourceDoc => s !== null).sort((a, b) => a.id.localeCompare(b.id));
+}
+
+/** Every /sources document whose feed host is `host` (any area, any status). */
+export async function loadSourcesByHost(host: string): Promise<SourceDoc[]> {
+  const h = host.toLowerCase().replace(/^www\./, "");
+  const snap = await db.collection("sources").where("host", "in", [h, `www.${h}`]).limit(50).get();
+  return snap.docs.map(sourceFromDoc).filter((s): s is SourceDoc => s !== null);
+}
+
+/** W4.7: three consecutive failures, or a drop to zero from a source that usually has events, pause the source. */
+export const FAILURE_STREAK_TO_PAUSE = 3;
+export const ZERO_DROP_MIN_USUAL = 5;
+export function shouldPause(outcome: { ok: boolean; eventCount?: number }, before: { failureStreak?: number; lastEventCount?: number | null }): string | null {
+  const streak = (before.failureStreak ?? 0) + (outcome.ok ? 0 : 1);
+  if (!outcome.ok && streak >= FAILURE_STREAK_TO_PAUSE) return `${streak} consecutive failed runs`;
+  const usual = before.lastEventCount ?? null;
+  if (outcome.ok && outcome.eventCount === 0 && usual !== null && usual >= ZERO_DROP_MIN_USUAL) return `sudden drop to zero events (last run had ${usual})`;
+  return null;
 }
 
 /**

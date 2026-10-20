@@ -480,6 +480,10 @@ export {
 // Auth user last. See account.ts for what is deleted vs. anonymised and why.
 export { deleteAccount } from "./account.js";
 
+// W4 — automatic discovery, weekly re-check, intake, removal (no human approval anywhere).
+export { discoverSources, recheckSourcesWeekly, runDiscoveryNow, sourceIntake } from "./discovery/discover.js";
+export { requestSourceRemoval, removalToken } from "./discovery/removal.js";
+
 // ── Event ingestion (ingest-and-own) ────────────────────────────────────────
 // Scheduled jobs write the normalized /events store; the app reads Firestore
 // only. See ingest/index.ts and ingest/areas.ts (launch areas + verified feeds).

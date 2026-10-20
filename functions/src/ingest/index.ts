@@ -35,12 +35,16 @@ import { fetchSerpApi, serpApiBudgetAllows, SERPAPI_MONTHLY_CAP } from "./source
 import { cleanText, cleanUrl, cleanCoord, classify, formatLocalTime } from "./normalize.js";
 import { recordSourceHealth } from "./health.js";
 import { auditedStaffJob, staffReason } from "../staff-audit.js";
-import { loadActiveSources, isDeniedHost, type SourceDoc } from "./sources-registry.js";
+import { loadActiveSources, isDeniedHost, recordSourceRun, setSourceStatus, shouldPause, type SourceDoc } from "./sources-registry.js";
 import type { IcsFeed, LibCalFeed, BiblioFeed, MidpenFeed } from "./areas.js";
+import { fetchWordPressTec } from "./sources/wordpress-tec.js";
+import { fetchJsonLd } from "./sources/jsonld.js";
+import { fetchRssIcs } from "./sources/rss-ics.js";
+import { applyRemovals } from "../discovery/removal.js";
 
-export const SOURCES: SourceId[] = ["ticketmaster", "libcal", "bibliocommons", "localist", "livewhale", "legistar", "nps", "midpen", "ics", "serpapi"];
+export const SOURCES: SourceId[] = ["ticketmaster", "libcal", "bibliocommons", "localist", "livewhale", "legistar", "nps", "midpen", "ics", "serpapi", "wordpress-tec", "jsonld", "rss-ics"];
 const TICKETED: SourceId[] = ["ticketmaster"];
-const CIVIC: SourceId[] = ["libcal", "bibliocommons", "localist", "livewhale", "legistar", "nps", "midpen", "ics", "serpapi"];
+const CIVIC: SourceId[] = ["libcal", "bibliocommons", "localist", "livewhale", "legistar", "nps", "midpen", "ics", "serpapi", "wordpress-tec", "jsonld", "rss-ics"];
 
 interface Keys { ticketmaster?: string; nps?: string; serpapi?: string; }
 
@@ -51,45 +55,117 @@ interface Keys { ticketmaster?: string; nps?: string; serpapi?: string; }
  * deny-list holds even if a bad document reached the collection. Throws on a
  * failed fetch (nothing is marked stale then).
  */
-export async function fetchSource(source: SourceId, area: LaunchArea, keys: Keys, sources?: SourceDoc[]): Promise<NormalizedEvent[]> {
+export async function fetchSource(source: SourceId, area: LaunchArea, keys: Keys, sources?: SourceDoc[], fetchImpl: typeof fetch = fetch): Promise<NormalizedEvent[]> {
   const docs = (sources ?? await loadActiveSources(area.id, source)).filter((s) => s.type === source && s.areaId === area.id && !isDeniedHost(s.host));
   const all: NormalizedEvent[] = [];
-  for (const s of docs) {
-    const p = s.params as Record<string, unknown>;
-    switch (source) {
-      case "ticketmaster":
-        if (p.enabled === true) all.push(...await fetchTicketmaster(area, keys.ticketmaster ?? ""));
-        break;
-      case "libcal": all.push(...await fetchLibCal(area, p as unknown as LibCalFeed)); break;
-      case "bibliocommons": all.push(...await fetchBiblioCommons(area, p as unknown as BiblioFeed)); break;
-      case "midpen": all.push(...await fetchMidpen(area, p as unknown as MidpenFeed)); break;
-      case "ics": all.push(...await fetchIcsFeed(area, p as unknown as IcsFeed, "ics")); break;
-      case "localist": all.push(...await fetchLocalist(area, String(p.host), String(p.name))); break;
-      case "livewhale": all.push(...await fetchLiveWhale(area, String(p.host), String(p.name))); break;
-      case "legistar": all.push(...await fetchLegistar(area, String(p.client), String(p.name))); break;
-      case "nps": {
-        const codes = Array.isArray(p.parkCodes) ? p.parkCodes.filter((c): c is string => typeof c === "string") : [];
-        if (codes.length) all.push(...await fetchNps({ ...area, nps: { parkCodes: codes } } as LaunchArea & { nps: { parkCodes: string[] } }, keys.nps ?? ""));
-        break;
-      }
-      case "serpapi": {
-        if (p.enabled !== true) break;
-        // Quota gate — counted BEFORE the call so a crash mid-fetch still counts.
-        const allowed = await reserveSerpApiCall();
-        if (!allowed) {
-          console.warn(`[ingest] SerpApi monthly cap (${SERPAPI_MONTHLY_CAP}) reached — skipping; stale cache stands`);
-          throw new SkipSource("SerpApi monthly quota exhausted");
-        }
-        all.push(...await fetchSerpApi({ ...area, serpapi: { enabled: true, query: String(p.query ?? `events in ${area.name}`) } } as LaunchArea & { serpapi: { enabled: boolean; query: string } }, keys.serpapi ?? ""));
-        break;
-      }
-      default: break;
-    }
-  }
+  for (const s of docs) all.push(...await fetchOneSource(s, area, keys, fetchImpl));
   return all;
 }
 
+/** Run one /sources document through its adapter. Throws on a failed fetch. */
+export async function fetchOneSource(s: SourceDoc, area: LaunchArea, keys: Keys, fetchImpl: typeof fetch = fetch): Promise<NormalizedEvent[]> {
+  const p = s.params as Record<string, unknown>;
+  switch (s.type) {
+    case "ticketmaster": return p.enabled === true ? fetchTicketmaster(area, keys.ticketmaster ?? "", fetchImpl) : [];
+    case "libcal": return fetchLibCal(area, p as unknown as LibCalFeed, fetchImpl);
+    case "bibliocommons": return fetchBiblioCommons(area, p as unknown as BiblioFeed, fetchImpl);
+    case "midpen": return fetchMidpen(area, p as unknown as MidpenFeed, fetchImpl);
+    case "ics": return fetchIcsFeed(area, p as unknown as IcsFeed, "ics", fetchImpl);
+    case "localist": return fetchLocalist(area, String(p.host), String(p.name), fetchImpl);
+    case "livewhale": return fetchLiveWhale(area, String(p.host), String(p.name), fetchImpl);
+    case "legistar": return fetchLegistar(area, String(p.client), String(p.name), fetchImpl);
+    case "wordpress-tec": return fetchWordPressTec(area, { name: String(p.name), siteUrl: String(p.siteUrl), tags: Array.isArray(p.tags) ? p.tags as string[] : undefined }, fetchImpl);
+    case "jsonld": return fetchJsonLd(area, { name: String(p.name), siteUrl: String(p.siteUrl), sitemapUrl: typeof p.sitemapUrl === "string" ? p.sitemapUrl : undefined, maxPages: typeof p.maxPages === "number" ? p.maxPages : undefined, tags: Array.isArray(p.tags) ? p.tags as string[] : undefined }, fetchImpl);
+    case "rss-ics": return fetchRssIcs(area, { name: String(p.name), feedUrl: String(p.feedUrl), maxPages: typeof p.maxPages === "number" ? p.maxPages : undefined, tags: Array.isArray(p.tags) ? p.tags as string[] : undefined }, fetchImpl);
+    case "nps": {
+      const codes = Array.isArray(p.parkCodes) ? p.parkCodes.filter((c): c is string => typeof c === "string") : [];
+      return codes.length ? fetchNps({ ...area, nps: { parkCodes: codes } } as LaunchArea & { nps: { parkCodes: string[] } }, keys.nps ?? "", fetchImpl) : [];
+    }
+    case "serpapi": {
+      if (p.enabled !== true) return [];
+      // Quota gate — counted BEFORE the call so a crash mid-fetch still counts.
+      const allowed = await reserveSerpApiCall();
+      if (!allowed) {
+        console.warn(`[ingest] SerpApi monthly cap (${SERPAPI_MONTHLY_CAP}) reached — skipping; stale cache stands`);
+        throw new SkipSource("SerpApi monthly quota exhausted");
+      }
+      return fetchSerpApi({ ...area, serpapi: { enabled: true, query: String(p.query ?? `events in ${area.name}`) } } as LaunchArea & { serpapi: { enabled: boolean; query: string } }, keys.serpapi ?? "", fetchImpl);
+    }
+    default: return [];
+  }
+}
+
 class SkipSource extends Error {}
+/** W4.4: the feed answered 304 Not Modified to a conditional request — a successful, free run. */
+export class NotModified extends Error {}
+
+/**
+ * W4.4 conditional requests. The FIRST request an adapter makes (its feed URL)
+ * carries If-None-Match / If-Modified-Since from the source document; a 304
+ * stops the adapter before any parsing and counts as a successful run. The
+ * validators the feed returns are captured so the next run can send them.
+ */
+export function conditionalFetchFor(s: Pick<SourceDoc, "etag" | "lastModified">, inner: typeof fetch = fetch): { fetchImpl: typeof fetch; validators: () => { etag: string | null; lastModified: string | null } } {
+  let first = true;
+  let etag: string | null = null, lastModified: string | null = null;
+  const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (!first) return inner(input, init);
+    first = false;
+    const headers = new Headers(init?.headers ?? {});
+    if (s.etag) headers.set("if-none-match", s.etag);
+    if (s.lastModified) headers.set("if-modified-since", s.lastModified);
+    const res = await inner(input, { ...init, headers });
+    if (res.status === 304) throw new NotModified("304 Not Modified");
+    etag = res.headers.get("etag"); lastModified = res.headers.get("last-modified");
+    return res;
+  }) as typeof fetch;
+  return { fetchImpl, validators: () => ({ etag, lastModified }) };
+}
+
+export interface IsolatedFetch {
+  records: NormalizedEvent[];
+  attempted: number;
+  succeeded: number;
+  notModified: number;
+  failures: Array<{ id: string; error: string; paused: boolean }>;
+}
+
+/**
+ * W4.7: fetch every active source of one type with failures ISOLATED per
+ * source document. One broken feed no longer aborts its adapter type: the
+ * healthy feeds still ingest, the failing one records its failure streak, and
+ * after three consecutive failures (or a sudden drop to zero) it is paused
+ * automatically. Its events are kept until normal staleness removes them.
+ */
+export async function fetchSourcesIsolated(source: SourceId, area: LaunchArea, keys: Keys, sources?: SourceDoc[], inner: typeof fetch = fetch): Promise<IsolatedFetch> {
+  const docs = (sources ?? await loadActiveSources(area.id, source)).filter((s) => s.type === source && s.areaId === area.id && !isDeniedHost(s.host));
+  const out: IsolatedFetch = { records: [], attempted: docs.length, succeeded: 0, notModified: 0, failures: [] };
+  for (const s of docs) {
+    const cond = conditionalFetchFor(s, inner);
+    try {
+      const records = await fetchOneSource(s, area, keys, cond.fetchImpl);
+      out.records.push(...records);
+      out.succeeded++;
+      const pause = shouldPause({ ok: true, eventCount: records.length }, s);
+      await recordSourceRun(s.id, { ok: true, eventCount: records.length, ...cond.validators() });
+      if (pause) { await setSourceStatus(s.id, "paused", `self-healing: ${pause}`, { pausedAt: Timestamp.now(), pausedBy: "self-healing" }); out.failures.push({ id: s.id, error: pause, paused: true }); }
+    } catch (e) {
+      if (e instanceof NotModified) {
+        out.succeeded++; out.notModified++;
+        await recordSourceRun(s.id, { ok: true, eventCount: s.lastEventCount ?? undefined });
+        continue;
+      }
+      if (e instanceof SkipSource) { out.succeeded++; continue; }   // a quota skip is not a feed failure
+      const error = e instanceof Error ? e.message : String(e);
+      const pause = shouldPause({ ok: false }, s);
+      await recordSourceRun(s.id, { ok: false, error });
+      if (pause) await setSourceStatus(s.id, "paused", `self-healing: ${pause}`, { pausedAt: Timestamp.now(), pausedBy: "self-healing" });
+      out.failures.push({ id: s.id, error, paused: pause !== null });
+      console.error(`[ingest] ${s.id} failed${pause ? " and was paused" : ""}:`, error);
+    }
+  }
+  return out;
+}
 
 /** Increment this month's SerpApi counter in /treasury and say whether the call may proceed. */
 export async function reserveSerpApiCall(): Promise<boolean> {
@@ -114,7 +190,10 @@ export async function runSource(source: SourceId, area: LaunchArea, keys: Keys, 
     errors: [], durationMs: 0,
   };
   try {
-    const records = payload ?? await fetchSource(source, area, keys, sources);
+    // W4.7: live fetches are isolated per source document; payload mode (tests, migration check) is unchanged.
+    const isolated = payload ? null : await fetchSourcesIsolated(source, area, keys, sources);
+    const records = payload ?? isolated!.records;
+    if (isolated) for (const f of isolated.failures) result.errors.push(`${f.id}: ${f.error}${f.paused ? " (paused)" : ""}`);
     result.fetched = records.length;
     const index = await loadAreaIndex(area);
     const stats = await upsertBatch(records, area, index, runStart);
@@ -122,8 +201,11 @@ export async function runSource(source: SourceId, area: LaunchArea, keys: Keys, 
     const candidates = result.created + result.merged;
     result.mergeRate = candidates ? result.merged / candidates : 0;
     // A source that returned nothing at all is far more likely a feed outage
-    // than 100% cancellations. Only age the corpus when we actually saw records.
-    if (records.length > 0) {
+    // than 100% cancellations. Only age the corpus when we actually saw records,
+    // and (W4.7) only when EVERY feed of the type answered — a failing or
+    // unchanged (304) feed's events are kept, never aged by a run that did not read them.
+    const everyFeedRead = !isolated || (isolated.failures.length === 0 && isolated.notModified === 0);
+    if (records.length > 0 && everyFeedRead) {
       const stale = await markStale(source, area, index, runStart);
       result.markedStale = stale.markedStale;
       result.deactivated = stale.deactivated;
@@ -183,7 +265,11 @@ export const ingestCivic = onSchedule(
   { schedule: "every 24 hours", secrets: [NPS_API_KEY, SERPAPI_KEY], timeoutSeconds: 540, memory: "512MiB" },
   async () => {
     const keys = keysFromSecrets();
-    for (const area of LAUNCH_AREAS) for (const s of CIVIC) await runSource(s, area, keys);
+    for (const area of LAUNCH_AREAS) {
+      // W4.6: a source removed on request has its events hidden on the next cycle, before anything is read.
+      await applyRemovals(area);
+      for (const s of CIVIC) await runSource(s, area, keys);
+    }
   },
 );
 

@@ -78,6 +78,8 @@ export const createOrganizer = onCall(async (req) => {
   const category = safeString(req.data?.category, "other");
   const description = safeText(req.data?.description, 600);
   const website = cleanUrl(req.data?.website) ?? null;
+  // W4.4: an optional public calendar URL — only ever a URL for automatic inspection, never events to ingest.
+  const calendarUrl = cleanUrl(req.data?.calendarUrl) ?? null;
   if (displayName.length < 2) throw new HttpsError("invalid-argument", "Give your organization a name.");
   if (!(ORGANIZER_CATEGORIES as readonly string[]).includes(category)) throw new HttpsError("invalid-argument", "Unknown category.");
 
@@ -88,7 +90,7 @@ export const createOrganizer = onCall(async (req) => {
   const ref = db.collection("organizers").doc();
   await ref.set({
     ownerUid: uid,
-    displayName, category, description, website,
+    displayName, category, description, website, calendarUrl,
     status: "pending" as OrganizerStatus,
     kind: "organizer",           // a future merchant is the same record with `billing` set
     billing: null,
@@ -318,5 +320,5 @@ export const myOrganizer = onCall(async (req) => {
   const uid = requireUid(req.auth);
   const org = await organizerOwnedBy(uid);
   if (!org) return { organizer: null };
-  return { organizer: { id: org.id, ...pick(org.data(), ["displayName", "category", "description", "website", "status", "eventCount", "followerCount", "hidden"]) } };
+  return { organizer: { id: org.id, ...pick(org.data(), ["displayName", "category", "description", "website", "calendarUrl", "status", "eventCount", "followerCount", "hidden"]) } };
 });

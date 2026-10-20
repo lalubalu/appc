@@ -84,6 +84,22 @@ service cloud.firestore {
       allow read: if request.auth != null && request.auth.token.admin == true;
       allow write: if false;
     }
+    // W4 — automatic discovery. Candidates, removal requests, the never-discover
+    // list, daily budgets, the OSM cache and calendar-URL submissions are all
+    // server-owned. Staff may read candidates and removal requests (evidence);
+    // nothing here is ever a client surface, and only server code writes.
+    match /sourceCandidates/{candidateId} {
+      allow read: if request.auth != null && request.auth.token.admin == true;
+      allow write: if false;
+    }
+    match /removalRequests/{requestId} {
+      allow read: if request.auth != null && request.auth.token.admin == true;
+      allow write: if false;
+    }
+    match /removedHosts/{host} { allow read, write: if false; }
+    match /discoveryRuns/{docId}/{document=**} { allow read, write: if false; }
+    match /discoveryCache/{docId} { allow read, write: if false; }
+    match /sourceSubmissions/{docId} { allow read, write: if false; }
     // Server configuration (config/ranking: the v1/v2 switch and W6 thresholds).
     // Written by the blind-judge script and the live comparison, read by the
     // functions; never a client surface.
@@ -436,7 +452,13 @@ service cloud.firestore {
       allow update: if request.auth != null
                     && resource.data.ownerUid == request.auth.uid
                     && request.resource.data.diff(resource.data).affectedKeys()
-                        .hasOnly(['displayName', 'category', 'description', 'website', 'updatedAt'])
+                        .hasOnly(['displayName', 'category', 'description', 'website', 'calendarUrl', 'updatedAt'])
+                    // W4.4: an optional public calendar URL — a URL to inspect automatically, never an event to ingest.
+                    && (!('calendarUrl' in request.resource.data)
+                        || request.resource.data.calendarUrl == null
+                        || (request.resource.data.calendarUrl is string
+                            && request.resource.data.calendarUrl.size() <= 1000
+                            && request.resource.data.calendarUrl.matches('https?://.*')))
                     && request.resource.data.displayName is string
                     && request.resource.data.displayName.size() >= 2
                     && request.resource.data.displayName.size() <= 80

@@ -19,6 +19,12 @@ export type SourceId =
   | "nps"
   | "ics"
   | "serpapi"
+  /** W4.5: WordPress "The Events Calendar" REST API (with ?ical=1 fallback). */
+  | "wordpress-tec"
+  /** W4.5: schema.org Event JSON-LD on sitemap-listed event pages. */
+  | "jsonld"
+  /** W4.5: an RSS feed of event pages whose items each link a per-event iCalendar export (WordPress/uConnect). */
+  | "rss-ics"
   | "organizer"
   | "community";
 

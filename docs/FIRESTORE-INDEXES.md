@@ -18,7 +18,7 @@ Every multiple-field query has an explicit matching composite, including equalit
 
 See [Firebase index types](https://firebase.google.com/docs/firestore/query-data/index-overview) and [index configuration schema](https://firebase.google.com/docs/reference/firestore/indexes).
 
-## Compound mappings (45)
+## Compound mappings (48)
 
 | Query location | Collection/scope | Filters | Explicit ordering | Matching index |
 | --- | --- | --- | --- | --- |
@@ -35,12 +35,15 @@ See [Firebase index types](https://firebase.google.com/docs/firestore/query-data
 | `functions/scripts/coverage-check.mjs:35` | events / COLLECTION | areaId ==; active == | Implicit/default | `COLLECTION/events/areaId:ASCENDING,active:ASCENDING` |
 | `functions/scripts/list-low-confidence.mjs:38` | events / COLLECTION | classificationConfidence < | classificationConfidence ASCENDING; __name__ ASCENDING | `COLLECTION/events/classificationConfidence:ASCENDING,__name__:ASCENDING` |
 | `functions/src/account.ts:216` | moderationQueue / COLLECTION | targetType ==; targetId == | Implicit/default | `COLLECTION/moderationQueue/targetId:ASCENDING,targetType:ASCENDING` |
+| `functions/src/discovery/discover.ts:153` | sourceSubmissions / COLLECTION | areaId ==; processedAt == | Implicit/default | `COLLECTION/sourceSubmissions/areaId:ASCENDING,processedAt:ASCENDING` |
+| `functions/src/discovery/discover.ts:205` | sourceCandidates / COLLECTION | areaId ==; status ==; nextInspectAt <= | nextInspectAt ASCENDING | `COLLECTION/sourceCandidates/areaId:ASCENDING,status:ASCENDING,nextInspectAt:ASCENDING` |
 | `functions/src/ingest/health.ts:32` | ingestRuns / COLLECTION | source ==; areaId == | Implicit/default | `COLLECTION/ingestRuns/areaId:ASCENDING,source:ASCENDING` |
 | `functions/src/ingest/health.ts:34` | ingestRuns / COLLECTION | source ==; areaId == | runAt DESCENDING | `COLLECTION/ingestRuns/source:ASCENDING,areaId:ASCENDING,runAt:DESCENDING` |
 | `functions/src/ingest/health.ts:35` | ingestRuns / COLLECTION | source ==; areaId ==; errors == | runAt DESCENDING | `COLLECTION/ingestRuns/source:ASCENDING,areaId:ASCENDING,errors:ASCENDING,runAt:DESCENDING` |
-| `functions/src/ingest/index.ts:281` | events / COLLECTION | areaId ==; active == | Implicit/default | `COLLECTION/events/areaId:ASCENDING,active:ASCENDING` |
+| `functions/src/ingest/index.ts:367` | events / COLLECTION | areaId ==; active == | Implicit/default | `COLLECTION/events/areaId:ASCENDING,active:ASCENDING` |
 | `functions/src/ingest/sources-registry.ts:103` | sources / COLLECTION | areaId ==; status == | Implicit/default | `COLLECTION/sources/areaId:ASCENDING,status:ASCENDING` |
 | `functions/src/ingest/sources-registry.ts:104` | sources / COLLECTION | areaId ==; status ==; type == | Implicit/default | `COLLECTION/sources/areaId:ASCENDING,status:ASCENDING,type:ASCENDING` |
+| `functions/src/ingest/sources-registry.ts:152` | sources / COLLECTION | areaId ==; status == | Implicit/default | `COLLECTION/sources/areaId:ASCENDING,status:ASCENDING` |
 | `functions/src/ingest/store.ts:104` | events / COLLECTION | areaId ==; date >= | date ASCENDING | `COLLECTION/events/areaId:ASCENDING,date:ASCENDING` |
 | `functions/src/moderation.ts:294` | moderationQueue / COLLECTION | status ==; slaDeadline <= | Implicit/default | `COLLECTION/moderationQueue/status:ASCENDING,slaDeadline:ASCENDING` |
 | `functions/src/moderation.ts:334` | moderationQueue / COLLECTION | status ==; targetType == | Implicit/default | `COLLECTION/moderationQueue/status:ASCENDING,targetType:ASCENDING` |
@@ -51,7 +54,7 @@ See [Firebase index types](https://firebase.google.com/docs/firestore/query-data
 | `functions/src/moderation.ts:335` | moderationQueue / COLLECTION | status in | firstReportedAt ASCENDING | `COLLECTION/moderationQueue/status:ASCENDING,firstReportedAt:ASCENDING` |
 | `functions/src/offline/packs.ts:47` | eventPlanSessions / COLLECTION | uid == | __name__ ASCENDING | `COLLECTION/eventPlanSessions/uid:ASCENDING,__name__:ASCENDING` |
 | `functions/src/offline/packs.ts:47` | groupPlans / COLLECTION | memberUIDs array-contains | __name__ ASCENDING | `COLLECTION/groupPlans/memberUIDs:CONTAINS,__name__:ASCENDING` |
-| `functions/src/organizers.ts:172` | organizers / COLLECTION | status == | createdAt ASCENDING | `COLLECTION/organizers/status:ASCENDING,createdAt:ASCENDING` |
+| `functions/src/organizers.ts:174` | organizers / COLLECTION | status == | createdAt ASCENDING | `COLLECTION/organizers/status:ASCENDING,createdAt:ASCENDING` |
 | `functions/src/parks/api.ts:112` | events / COLLECTION | hidden ==; active ==; broadcast ==; date >=; date < | date ASCENDING | `COLLECTION/events/hidden:ASCENDING,active:ASCENDING,broadcast:ASCENDING,date:ASCENDING` |
 | `functions/src/partners.ts:187` | partnerPerks / COLLECTION | active == | __name__ ASCENDING | `COLLECTION/partnerPerks/active:ASCENDING,__name__:ASCENDING` |
 | `functions/src/place-stories.ts:173` | placeStoryOwnership / COLLECTION | ownerUid == | __name__ ASCENDING | `COLLECTION/placeStoryOwnership/ownerUid:ASCENDING,__name__:ASCENDING` |
@@ -68,7 +71,7 @@ See [Firebase index types](https://firebase.google.com/docs/firestore/query-data
 | `functions/src/staff-operations.ts:28` | events / COLLECTION | areaId ==; active ==; date >= | date ASCENDING | `COLLECTION/events/areaId:ASCENDING,active:ASCENDING,date:ASCENDING` |
 | `functions/src/staff-partners.ts:228` | partnerPerks / COLLECTION | partnerId == | __name__ ASCENDING | `COLLECTION/partnerPerks/partnerId:ASCENDING,__name__:ASCENDING` |
 
-## Single-field and document-name mappings (78)
+## Single-field and document-name mappings (81)
 
 | Query location | Collection/scope | Filters | Explicit ordering | Matching index |
 | --- | --- | --- | --- | --- |
@@ -111,7 +114,9 @@ See [Firebase index types](https://firebase.google.com/docs/firestore/query-data
 | `functions/src/account.ts:187` | groupPlans / COLLECTION | pendingUIDs array-contains | Implicit/default | `Automatic collection index: pendingUIDs:CONTAINS` |
 | `functions/src/account.ts:194` | fulfillments / COLLECTION | uid == | Implicit/default | `Automatic collection index: uid:ASCENDING` |
 | `functions/src/account.ts:212` | reports / COLLECTION | reporterUid == | Implicit/default | `Automatic collection index: reporterUid:ASCENDING` |
-| `functions/src/common.ts:263` | blocks / COLLECTION_GROUP | uid == | Implicit/default | `fieldOverrides: COLLECTION_GROUP/blocks/uid:ASCENDING` |
+| `functions/src/common.ts:267` | blocks / COLLECTION_GROUP | uid == | Implicit/default | `fieldOverrides: COLLECTION_GROUP/blocks/uid:ASCENDING` |
+| `functions/src/discovery/discover.ts:147` | organizers / COLLECTION | calendarUrl > | Implicit/default | `Automatic collection index: calendarUrl:ASCENDING` |
+| `functions/src/discovery/discover.ts:216` | sources / COLLECTION | host in | Implicit/default | `Automatic collection index: host:ASCENDING` |
 | `functions/src/economy.ts:328` | codes / COLLECTION | claimedBy == | Implicit/default | `Automatic collection index: claimedBy:ASCENDING` |
 | `functions/src/economy.ts:419` | fulfillments / COLLECTION | month == | Implicit/default | `Automatic collection index: month:ASCENDING` |
 | `functions/src/feedTelemetry.ts:76` | eventPlanSessions / COLLECTION | createdAt < | Implicit/default | `Automatic collection index: createdAt:ASCENDING` |
@@ -121,6 +126,7 @@ See [Firebase index types](https://firebase.google.com/docs/firestore/query-data
 | `functions/src/groupPlans.ts:46` | groupPlans / COLLECTION | memberUIDs array-contains | Implicit/default | `Automatic collection index: memberUIDs:CONTAINS` |
 | `functions/src/groupPlans.ts:47` | groupPlans / COLLECTION | pendingUIDs array-contains | Implicit/default | `Automatic collection index: pendingUIDs:CONTAINS` |
 | `functions/src/groupPlans.ts:63` | groupPlans / COLLECTION | ownerUid == | Implicit/default | `Automatic collection index: ownerUid:ASCENDING` |
+| `functions/src/ingest/sources-registry.ts:159` | sources / COLLECTION | host in | Implicit/default | `Automatic collection index: host:ASCENDING` |
 | `functions/src/ingest/store.ts:113` | rejectedListings / COLLECTION | areaId == | Implicit/default | `Automatic collection index: areaId:ASCENDING` |
 | `functions/src/moderation.ts:251` | reports / COLLECTION | queueId == | Implicit/default | `Automatic collection index: queueId:ASCENDING` |
 | `functions/src/moderation.ts:317` | moderationQueue / COLLECTION | status == | Implicit/default | `Automatic collection index: status:ASCENDING` |
@@ -140,7 +146,7 @@ See [Firebase index types](https://firebase.google.com/docs/firestore/query-data
 | `functions/src/organizers.ts:56` | organizers / COLLECTION | status == | Implicit/default | `Automatic collection index: status:ASCENDING` |
 | `functions/src/organizers.ts:57` | organizers / COLLECTION | approvedAt > | Implicit/default | `Automatic collection index: approvedAt:ASCENDING` |
 | `functions/src/organizers.ts:63` | organizers / COLLECTION | ownerUid == | Implicit/default | `Automatic collection index: ownerUid:ASCENDING` |
-| `functions/src/organizers.ts:147` | events / COLLECTION | organizerId == | Implicit/default | `Automatic collection index: organizerId:ASCENDING` |
+| `functions/src/organizers.ts:149` | events / COLLECTION | organizerId == | Implicit/default | `Automatic collection index: organizerId:ASCENDING` |
 | `functions/src/parks/api.ts:128` | features / COLLECTION | parkIds array-contains | Implicit/default | `Automatic collection index: parkIds:CONTAINS` |
 | `functions/src/parks/store.ts:174` | parkGenerations / COLLECTION | createdAt < | Implicit/default | `Automatic collection index: createdAt:ASCENDING` |
 | `functions/src/place-stories.ts:107` | placeStoryOwnership / COLLECTION | — | __name__ ASCENDING | `Built-in document-name index` |

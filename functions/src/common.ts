@@ -93,6 +93,10 @@ export interface RateLimit { max: number; windowMs: number; }
 const HOUR = 60 * 60 * 1000;
 
 export const RATE_LIMITS: Record<string, RateLimit> = {
+  // W4.6 / W4.4 public HTTP endpoints, keyed by a hash of the requester's address (see discovery/removal.ts).
+  requestSourceRemoval: { max: 5,  windowMs: 24 * HOUR },
+  removalToken:         { max: 30, windowMs: HOUR },
+  sourceIntake:         { max: 10, windowMs: 24 * HOUR },
   checkInToEvent:   { max: 20,  windowMs: HOUR },
   collectPlace:     { max: 60,  windowMs: HOUR },
   redeemReward:     { max: 15,  windowMs: HOUR },
