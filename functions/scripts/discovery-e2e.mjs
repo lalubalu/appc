@@ -37,7 +37,7 @@ const { HostThrottle, recordingFetch, replayFetch, recordedUrls } = await import
 const { runDiscovery, recheckSources, auditActiveSources, hostsFromCorpus, enqueueCandidates, recordSourceSubmission, DISCOVERY_LIMITS } = await import("../lib/discovery/discover.js");
 const { inspectSource } = await import("../lib/discovery/inspect.js");
 const { decideSource, isPublicInstitution } = await import("../lib/discovery/decide.js");
-const { processRemoval, applyRemovals, removalTokenFor, isRemovedHost, LARGE_SOURCE_EVENTS } = await import("../lib/discovery/removal.js");
+const { processRemoval, applyRemovals, removalTokenFor, isRemovedHost, activeEventsOf, LARGE_SOURCE_EVENTS } = await import("../lib/discovery/removal.js");
 const { loadRecordedCorpus, recordsFor } = await import("./corpus-fixture.mjs");
 
 let passed = 0, failed = 0;
@@ -54,13 +54,25 @@ const manifest = RECORD ? { label, recordedAt: new Date().toISOString(), now: ne
   : JSON.parse(readFileSync(manifestPath, "utf8"));
 const NOW = new Date(manifest.now);
 // Evidence hosts the unit suite and this file name explicitly (inspected even when no origin lists them).
-const EVIDENCE_HOSTS = ["www.cdm.org", "developer.active.com", "events.sjsu.edu", "sjpl.bibliocommons.com", "careercenter.sjsu.edu", "www.openspace.org"];
-const fetchImpl = RECORD ? recordingFetch(dir) : replayFetch(dir, (url) => {
+// www.sccgov.org answers 403 to everything including robots.txt (docs/FEED-SURVEY-SAN-JOSE.md): the "403 on
+// robots.txt rejects, never retried another way" proof.
+const EVIDENCE_HOSTS = ["www.cdm.org", "developer.active.com", "events.sjsu.edu", "sjpl.bibliocommons.com", "careercenter.sjsu.edu", "www.openspace.org", "www.sccgov.org"];
+// Recording keeps whole bodies up to 8 MB: the Overpass answer for a 25-mile radius is several MB of JSON and a
+// truncated recording would replay as a parse failure.
+const RECORD_BODY_CAP = 8_000_000;
+let replayMisses = 0;
+const fetchImpl = RECORD ? recordingFetch(dir, fetch, RECORD_BODY_CAP) : replayFetch(dir, (url) => {
   // Removal token checks against hosts that never published one, and anything a later code change
   // requests that the live run did not: answer 404 rather than reaching the internet.
+  replayMisses++;
   if (/\/\.well-known\/verdure-remove\.txt$/.test(url)) return new Response("", { status: 404 });
   return undefined;
 });
+// NO NETWORK ON REPLAY. Every module under test takes `fetchImpl` and defaults to the global fetch; a code path
+// that forgot to thread it through would reach the live internet silently. Replace the global so it throws instead.
+let realFetchCalls = 0;
+if (!RECORD) globalThis.fetch = async (input) => { realFetchCalls++; throw new Error(`replay must not reach the network: ${typeof input === "string" ? input : input?.url ?? input}`); };
+if (RECORD) { mkdirSync(dir, { recursive: true }); writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n"); }   // written first: a partial live run still replays
 // The live job's spacing is honoured when recording (that IS the limit); replay has no reason to wait.
 const throttle = new HostThrottle(RECORD ? DISCOVERY_LIMITS.hostIntervalMs ?? 10_000 : 0);
 console.log(`discovery-e2e ${RECORD ? "RECORD" : "replay"} fixtures=${label} now=${NOW.toISOString()}`);
@@ -92,6 +104,8 @@ ok("…and at least one of them came from the corpus or OpenStreetMap alone (not
 const cc = (await db.doc(`sources/${area.id}_rss-ics_careercenter.sjsu.edu`).get()).data();
 ok("careercenter.sjsu.edu (the expected example) is active through the RSS + per-event iCal adapter", cc?.status === "active" && cc.type === "rss-ics", JSON.stringify(cc?.decision?.failed ?? cc));
 ok("every rejected candidate carries the failed rules and their evidence", report.rejected.every((r) => r.failed.length > 0 && r.failed.every((f) => typeof r.evidence[f] === "string" && r.evidence[f].length > 0)), JSON.stringify(report.rejected.slice(0, 2)));
+const robots403 = report.rejected.filter((r) => r.failed.includes("robotsAllow") && /403/.test(r.evidence.robotsAllow));
+ok(`a 403 on robots.txt rejects on robotsAllow with the 403 as the evidence, never retried another way (${robots403.map((r) => r.host).join(", ") || "none in this cycle"})`, robots403.length >= 1 && robots403.every((r) => /not a licence to try harder/.test(r.evidence.robotsAllow)), JSON.stringify(robots403.slice(0, 2)));
 ok("a rejected source stores the matched terms sentence when terms failed", report.rejected.filter((r) => r.failed.includes("termsAllow")).every((r) => /"/.test(r.evidence.termsAllow)), JSON.stringify(report.rejected.filter((r) => r.failed.includes("termsAllow")).map((r) => r.host)));
 for (const id of report.activated) {
   const d = (await db.doc(`sources/${id}`).get()).data();
@@ -99,6 +113,7 @@ for (const id of report.activated) {
 }
 // The new sources ingest through the ordinary path (replayed through the same fixtures).
 let newEvents = 0;
+const createdBySource = {};
 // Ingestion itself is unthrottled (as in production); the recording run spaces its requests 2 s apart to be polite.
 const ingestFetch = RECORD ? (() => { const t = new HostThrottle(2_000); return async (input, init) => { await t.wait(new URL(String(input instanceof Request ? input.url : input)).hostname); return fetchImpl(input, init); }; })() : fetchImpl;
 for (const id of report.activated) {
@@ -106,6 +121,7 @@ for (const id of report.activated) {
   const out = await fetchSourcesIsolated(d.type, area, {}, [{ ...d, id }], ingestFetch);
   const r = await runSource(d.type, area, {}, out.records);
   newEvents += r.created;
+  createdBySource[id] = r.created;
   ok(`activated ${id}: ingests through the ordinary path (${out.records.length} fetched, ${r.created} created, ${r.rejected} rejected, failures ${out.failures.length})`, out.failures.length === 0 && r.errors.length === 0, JSON.stringify(out.failures));
 }
 const eventsAfter = (await db.collection("events").where("areaId", "==", area.id).where("active", "==", true).count().get()).data().count;
@@ -139,10 +155,17 @@ ok("SJSU Localist: every rule passes", inspections["events.sjsu.edu"].verdict ==
 ok("SJPL BiblioCommons: every rule passes", inspections["sjpl.bibliocommons.com"].verdict === "active", JSON.stringify(inspections["sjpl.bibliocommons.com"]));
 ok("Midpen (openspace.org): no restrictive clause on its terms page", inspections["www.openspace.org"].terms.pass === true && !isPublicInstitution("www.openspace.org"), inspections["www.openspace.org"].terms.evidence);
 ok("careercenter.sjsu.edu: RSS + per-event iCal, every rule passes", inspections["careercenter.sjsu.edu"].adapter === "rss-ics" && inspections["careercenter.sjsu.edu"].verdict === "active", JSON.stringify(inspections["careercenter.sjsu.edu"]));
+// sccgov.org answered 403 to everything in the 2026-09 survey; the 2026-10-21 recording shows its WAF now drops the
+// connection instead (status 0). Either way robots.txt cannot be read, so the host is never activated and the recorded
+// evidence says exactly what happened. The 403 → reject (no retry) path itself is pinned by discovery-unit.mjs.
+const scc = inspections["www.sccgov.org"];
+ok(`Santa Clara County (sccgov.org): robots.txt unreadable (${scc.robots.evidence}) → never active, nothing else is tried, evidence recorded`, scc.robots.pass !== true && scc.verdict !== "active" && /403|unavailable|forbidden/.test(scc.robots.evidence) && scc.adapter === null, JSON.stringify(scc));
 
 // ── 4. Removal on request ───────────────────────────────────────────────────
 console.log("── W4.6: automatic removal ──");
-const smallId = report.activated.find((id) => id !== `${area.id}_rss-ics_careercenter.sjsu.edu`) ?? report.activated[0];
+// A newly activated host that actually stored events (so "its events are hidden" is a real check) and is small (≤ 100).
+const smallId = report.activated.find((id) => id !== `${area.id}_rss-ics_careercenter.sjsu.edu` && (createdBySource[id] ?? 0) >= 1 && (createdBySource[id] ?? 0) <= LARGE_SOURCE_EVENTS)
+  ?? report.activated.find((id) => (createdBySource[id] ?? 0) >= 1) ?? report.activated[0];
 const small = (await db.doc(`sources/${smallId}`).get()).data();
 const r1 = await processRemoval(small.host, "e2e-requester-1", { contact: "owner@example.org", reason: "please remove" }, fetchImpl);
 ok(`a host with ≤ ${LARGE_SOURCE_EVENTS} active events is removed immediately (${small.host})`, r1.removed === true && r1.requiresToken === false, JSON.stringify(r1));
@@ -231,14 +254,36 @@ ok("a deny-listed URL is refused at intake", (await recordSourceSubmission("http
 ok("a removed host is refused at intake", (await recordSourceSubmission("https://never-a-source.example.org/cal", "organizer", "ip:test", area.id)).accepted === false);
 
 // ── Evidence ────────────────────────────────────────────────────────────────
+if (!RECORD) ok("replay never called the real fetch (the global was replaced and would have thrown)", realFetchCalls === 0, `${realFetchCalls} calls, ${replayMisses} fixture misses answered 404`);
+const urls = recordedUrls(dir);
+mkdirSync(join(root, "docs", "evidence"), { recursive: true });
+const evidence = { label, mode: RECORD ? "record" : "replay", recordedAt: manifest.recordedAt, now: manifest.now, requestsRecorded: urls.length, hostsRequested: [...new Set(urls.map((u) => new URL(u.url).hostname))].length,
+  sourcesBefore: sourcesBefore.length, sourcesAfter: sourcesAfter.length, eventsBefore, eventsAfter, discovery: report, recheck, audit, evidenceHosts: inspections, passed, failed };
 if (RECORD) {
-  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
-  const urls = recordedUrls(dir);
-  mkdirSync(join(root, "docs", "evidence"), { recursive: true });
-  const evidence = { label, recordedAt: manifest.recordedAt, now: manifest.now, requestsRecorded: urls.length, hostsRequested: [...new Set(urls.map((u) => new URL(u.url).hostname))].length,
-    sourcesBefore: sourcesBefore.length, sourcesAfter: sourcesAfter.length, eventsBefore, eventsAfter, discovery: report, recheck, audit, evidenceHosts: inspections };
   writeFileSync(join(root, "docs", "evidence", `discovery-${label}.json`), JSON.stringify(evidence, null, 2) + "\n");
   console.log(`  recorded ${urls.length} responses from ${evidence.hostsRequested} hosts → ${dir}`);
+}
+// The human-readable cycle report: before/after sources + events, every rejected candidate with its reason.
+{
+  const esc = (s) => String(s ?? "").replace(/\|/g, "\\|").replace(/\s+/g, " ").trim();
+  const perSourceEvents = (index, s) => activeEventsOf(index, [s]).length;
+  const indexNow = await loadAreaIndex(area, NOW);
+  const lines = [];
+  lines.push(`# Discovery cycle — ${label.replace(/^live-/, "")}`, "", `Mode: ${RECORD ? "live recording" : "replay of recorded fixtures (no network)"}. Fixture label \`${label}\`, recorded ${manifest.recordedAt}, clock ${manifest.now}. ${urls.length} recorded responses from ${evidence.hostsRequested} hosts. Script: \`functions/scripts/discovery-e2e.mjs\` (${passed} passed, ${failed} failed).`, "");
+  lines.push("## Before / after", "", "| Measure | Before | After |", "| --- | ---: | ---: |", `| Active sources | ${sourcesBefore.length} | ${sourcesAfter.length} |`, `| Active events | ${eventsBefore} | ${eventsAfter} |`, "");
+  lines.push(`Origins: ${Object.entries(report.origins).map(([k, v]) => `${k} ${v}`).join(", ")}; queued ${JSON.stringify(report.queued)}; inspected ${report.inspected} (budget ${report.budget.usedToday}/${report.budget.perDay}); OSM ${report.osm ? `${report.osm.count} organisations (${report.osm.cached ? "cached" : "fetched"})` : `unavailable: ${report.osmError}`}.`, "");
+  lines.push("### Sources after the cycle", "", "| Source | Type | Origin | Status | Active events | Terms basis |", "| --- | --- | --- | --- | ---: | --- |");
+  for (const s of sourcesAfter) lines.push(`| ${s.id} | ${s.type} | ${s.origin} | ${s.status}${sourcesBefore.some((b) => b.id === s.id) ? "" : " (NEW)"} | ${perSourceEvents(indexNow, s)} | ${esc(s.decision?.terms?.basis ?? "")} |`);
+  lines.push("", "### Activated with no human action", "", ...(report.activated.length ? report.activated.map((id) => `- \`${id}\``) : ["- none"]), "");
+  lines.push("## Every rejected candidate and why", "", "| Host | Failed rules | Evidence |", "| --- | --- | --- |");
+  for (const r of report.rejected) lines.push(`| ${r.host} | ${r.failed.join(", ")} | ${r.failed.map((f) => `${f}: ${esc(r.evidence[f]).slice(0, 220)}`).join("<br>")} |`);
+  if (report.unknown.length) lines.push("", "Undetermined (re-inspected weekly, never activated): " + report.unknown.map(esc).join("; "));
+  if (report.skipped.length) lines.push("", "Skipped (already a source or removed): " + report.skipped.map(esc).join("; "));
+  lines.push("", "## Audit: active sources failing any rule", "", audit.length ? audit.map((a) => `- ${a.id}: ${a.failing.join(", ")}`).join("\n") : "none (the audit query returned an empty set)", "");
+  lines.push("## Named evidence hosts", "", "| Host | Platform / adapter | Verdict | Failed | Robots | Terms |", "| --- | --- | --- | --- | --- | --- |");
+  for (const [h, i] of Object.entries(inspections)) lines.push(`| ${h} | ${i.platform} / ${i.adapter ?? "none"} | ${i.verdict} | ${i.failed.join(", ") || "—"} | ${esc(i.robots.evidence).slice(0, 120)} | ${esc(i.terms.evidence).slice(0, 220)} |`);
+  lines.push("", `Weekly re-check: ${recheck.checked} checked, paused ${JSON.stringify(recheck.paused)}, errors ${JSON.stringify(recheck.errors)}.`, "");
+  writeFileSync(join(root, "docs", "evidence", `discovery-cycle-${label.replace(/^live-/, "")}.md`), lines.join("\n") + "\n");
 }
 console.log(`\n══ ${passed} passed, ${failed} failed ══`);
 process.exit(failed ? 1 : 0);

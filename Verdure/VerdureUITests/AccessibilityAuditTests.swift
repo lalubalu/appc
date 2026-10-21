@@ -86,6 +86,67 @@ final class AccessibilityAuditTests: XCTestCase {
         }
     }
 
+    // MARK: W5 — reasons line, "Why you're seeing this", hide, series dates
+    //
+    // `-QAFeedReasons YES` seeds a deterministic ranked feed from SampleData
+    // (server-shaped reasons and series dates), so the controls exist without
+    // a deployed callable. Every surface a user can act on gets the audit.
+
+    private func forYouCard(_ app: XCUIApplication, titled title: String) -> XCUIElement {
+        app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label BEGINSWITH %@ AND label CONTAINS %@", title, "Why: "))
+            .firstMatch
+    }
+
+    func testAuditForYouReasonsLine() throws {
+        let app = QA.launch(tab: "events", extraArguments: ["-QAFeedReasons", "YES"])
+        addTeardownBlock { app.terminate() }
+        QA.waitFor(app.staticTexts["Events"], "events anchor")
+        let card = forYouCard(app, titled: "Spring Community Hackathon")
+        QA.waitFor(card, "For You card carrying a 'Why:' reasons line", timeout: 20)
+        // One element, one label: facts, then "Why: <reason> · <reason>", then the series.
+        XCTAssertTrue(card.label.contains("Why: Matches your interest in tech · Close by (0.8 mi)"), card.label)
+        XCTAssertTrue(card.label.contains("Repeats — 2 more dates"), card.label)
+        try QA.audit(app, screen: "events-for-you-reasons")
+    }
+
+    func testAuditEventDetailWhyHideAndSeriesDates() throws {
+        let app = QA.launch(tab: "events", extraArguments: ["-QAFeedReasons", "YES"])
+        addTeardownBlock { app.terminate() }
+        QA.waitFor(app.staticTexts["Events"], "events anchor")
+        let card = forYouCard(app, titled: "Spring Community Hackathon")
+        QA.waitFor(card, "For You card with reasons", timeout: 20)
+        for _ in 0..<4 where !card.isHittable { app.swipeUp() }
+        // Tap the upper part of the card, clear of the in-card series button.
+        card.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).tap()
+
+        let why = app.descendants(matching: .any)["whySeeingThis"]
+        QA.waitFor(why, "'Why you're seeing this' section")
+        XCTAssertTrue(why.label.contains("Matches your interest in tech"), why.label)
+        XCTAssertTrue(why.label.contains("Close by (0.8 mi)"), why.label)
+        XCTAssertTrue(why.label.contains("Repeats — 2 more dates"), why.label)
+        let hide = app.buttons["hideEvent"]
+        for _ in 0..<4 where !hide.isHittable { app.swipeUp() }
+        QA.waitFor(hide, "Hide this event control")
+        XCTAssertTrue(app.buttons["feedbackLess"].exists, "Show less like this control")
+        XCTAssertTrue(app.buttons["feedbackMore"].exists)
+        try QA.audit(app, screen: "event-detail-why")
+
+        // The series affordance opens the dates list.
+        QA.waitFor(app.buttons["seriesMoreDates"], "Repeats — N more dates").tap()
+        QA.waitFor(app.navigationBars["More dates"], "series dates sheet")
+        try QA.audit(app, screen: "series-dates")
+        app.buttons["seriesDatesDone"].tap()
+
+        // Hide removes the card from the feed immediately (offline: local only).
+        for _ in 0..<4 where !hide.isHittable { app.swipeUp() }
+        hide.tap()
+        let stillThere = forYouCard(app, titled: "Spring Community Hackathon")
+        XCTAssertFalse(stillThere.waitForExistence(timeout: 3), "hidden event must leave the For You feed at once")
+        XCTAssertTrue(forYouCard(app, titled: "River Cleanup Day").waitForExistence(timeout: 10),
+                      "the other ranked cards keep their reasons")
+    }
+
     func testAuditOnboardingFirstPage() throws {
         let app = XCUIApplication()
         app.launchArguments += ["-hasCompletedOnboarding", "NO", "-QADisableMotion", "YES", "-QAOfflineData", "YES"]

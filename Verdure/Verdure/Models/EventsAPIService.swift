@@ -26,8 +26,8 @@ final class EventsAPIService {
 
     private var storedEvents: [Event] = []
     var events: [Event] {
-        get { storedEvents.filter { isEligible($0) } }
-        set { storedEvents = Self.uniqueEvents(newValue) }
+        get { storedEvents.filter { isEligible($0) }.excluding(hiddenIDs: hiddenEventIDs) }
+        set { storedEvents = Self.uniqueEvents(newValue).annotated(with: rankedFeed) }
     }
     private var programOwnerID: String?
     private var eligibleProgramIDs: Set<String> = []
@@ -38,9 +38,18 @@ final class EventsAPIService {
     }
     private(set) var rankedEventIDs: [String] = []
     private var feedSessionID: String?
+    /// Every id the server put in this feed session's slate (telemetry accepts
+    /// only those), including ones the user has since hidden.
+    private var sessionEventIDs: Set<String> = []
+    /// W5: the ranked rows by event id — reasons and series dates are merged
+    /// onto the matching /events documents whenever either side changes.
+    private(set) var rankedFeed: [String: RankedFeedEvent] = [:]
+    /// W5: events hidden in this process. The server also excludes them from
+    /// every later feed; this set keeps them out of the current session at once.
+    private(set) var hiddenEventIDs: Set<String> = []
     private var storedEverythingEvents: [Event] = []
     private(set) var everythingEvents: [Event] {
-        get { storedEverythingEvents.filter { isEligible($0) } }
+        get { storedEverythingEvents.filter { isEligible($0) }.excluding(hiddenIDs: hiddenEventIDs) }
         set { storedEverythingEvents = Self.uniqueEvents(newValue) }
     }
     private(set) var everythingHasMore = true
@@ -173,9 +182,15 @@ final class EventsAPIService {
                 "areaId": area, "lat": center.latitude, "lng": center.longitude, "limit": 50,
                 "telemetryEnabled": Analytics.isEnabled,
             ]).data as? [String: Any] ?? [:]
-            let rows = data["events"] as? [[String: Any]] ?? []
+            let slate = RankedFeedEvent.decode(data)
             feedSessionID = data["feedSessionId"] as? String
-            let ids = rows.compactMap { $0["id"] as? String }
+            sessionEventIDs = Set(slate.map(\.id))
+            // The server already excludes hidden events; a hide made during this
+            // session is filtered here too so it never reappears before the refresh lands.
+            let rows = slate.filter { !hiddenEventIDs.contains($0.id) }
+            rankedFeed = Dictionary(rows.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+            storedEvents = storedEvents.annotated(with: rankedFeed)
+            let ids = rows.map(\.id)
             for id in ids.prefix(10) where !events.contains(where: { $0.id == id }) {
                 if let event = await event(withID: id) { events.append(event) }
             }
@@ -183,13 +198,16 @@ final class EventsAPIService {
         } catch {
             // A local event list still works while Functions are unavailable.
             rankedEventIDs = []
+            rankedFeed = [:]
+            storedEvents = storedEvents.annotated(with: rankedFeed)
             feedSessionID = nil
+            sessionEventIDs = []
         }
     }
 
     func recordFeedEvent(for eventID: String, action: String) async {
         guard !QAData.offline, Analytics.isEnabled, Auth.auth().currentUser != nil,
-              let feedSessionID, rankedEventIDs.contains(eventID) else { return }
+              let feedSessionID, sessionEventIDs.contains(eventID) else { return }
         do {
             let payload: [String: any Sendable] = [
                 "sessionId": feedSessionID, "eventId": eventID, "action": action
@@ -211,6 +229,31 @@ final class EventsAPIService {
             if kind != "view" { await fetchPersonalized(around: cachedCenter ?? LaunchArea.builtIn[0].center) }
         } catch {
             print("[EventsAPI] feedback failed: \(error.localizedDescription)")
+        }
+    }
+
+    /// W5 "Hide this event": the local part, synchronous so the card is gone
+    /// before any network round trip. Drops the event from the feed, the ranked
+    /// order and the Everything list, and keeps it out of this session.
+    func markHidden(_ eventID: String) {
+        hiddenEventIDs.insert(eventID)
+        rankedEventIDs.removeAll { $0 == eventID }
+        rankedFeed[eventID] = nil
+    }
+
+    /// W5 "Hide this event": removes the card immediately, then records the
+    /// server-side exclusion (`recordEventFeedback` kind "hide" adds the id to
+    /// the user's `hiddenEventIDs`, so no later feed ranks it again).
+    func hideEvent(_ eventID: String) async {
+        markHidden(eventID)
+        guard !QAData.offline, Auth.auth().currentUser != nil else { return }
+        do {
+            _ = try await Functions.functions().httpsCallable("recordEventFeedback")
+                .call(["eventId": eventID, "kind": "hide"])
+            await recordFeedEvent(for: eventID, action: "dismiss")
+            await fetchPersonalized(around: cachedCenter ?? LaunchArea.builtIn[0].center)
+        } catch {
+            print("[EventsAPI] hide failed: \(error.localizedDescription)")
         }
     }
 
@@ -683,6 +726,15 @@ final class EventsAPIService {
     private func useSampleFallback() {
         guard SampleData.isEnabled else { return }
         events = SampleData.events
+        #if DEBUG
+        // `-QAFeedReasons YES`: a deterministic ranked feed with server-shaped
+        // reasons and series dates, so UI tests can audit the W5 controls.
+        if UserDefaults.standard.bool(forKey: "QAFeedReasons") {
+            rankedFeed = SampleData.feedReasons
+            rankedEventIDs = SampleData.events.map(\.id).filter { rankedFeed[$0] != nil }
+            storedEvents = storedEvents.annotated(with: rankedFeed)
+        }
+        #endif
     }
 
     private func sanitize(_ input: String, max: Int) -> String {

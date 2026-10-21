@@ -987,6 +987,8 @@ struct EventDetailSheet: View {
     @Environment(GameStateManager.self) private var gameState
     @Environment(LocationManager.self) private var locationManager
     @Environment(\.openURL) private var openURL
+    @Environment(\.dismiss) private var dismiss
+    @State private var showSeriesDates = false
     @State private var showPhotoPicker = false
     @State private var selectedPhotoItem: PhotosPickerItem? = nil
     @State private var proofPhotoData: Data? = nil
@@ -1088,6 +1090,8 @@ struct EventDetailSheet: View {
                             }
                             detailGrid
                             practicalDetails
+                            whySection
+                            seriesSection
                             feedbackControls
                             if event.isProgram {
                                 Text("Read the official listing and apply on the organization’s site.")
@@ -1188,24 +1192,94 @@ struct EventDetailSheet: View {
         }
     }
 
+    /// "More" / "Show less" are learning signals (`recordEventFeedback` kinds
+    /// "more" and "less"); "Hide this event" (kind "hide") removes the card now
+    /// and the server never ranks it for this user again.
     private var feedbackControls: some View {
-        HStack(spacing: 10) {
-            ForEach(0..<2, id: \.self) { index in
-                let kind = index == 0 ? "more" : "less"
-                let title = index == 0 ? "More like this" : "Less like this"
-                let icon = index == 0 ? "hand.thumbsup" : "hand.thumbsdown"
-                Button {
-                    feedbackChoice = kind
-                    Task { await eventsService.recordFeedback(for: event.id, kind: kind) }
-                } label: {
-                    Label(title, systemImage: feedbackChoice == kind ? "\(icon).fill" : icon)
-                        .font(VType.body(12, .semibold))
-                        .foregroundStyle(feedbackChoice == kind ? Palette.spruce.base : Palette.inkSoft)
-                        .frame(maxWidth: .infinity).padding(.vertical, 12)
-                        .background(ClayBackground(style: .surface, radius: Radius.sm, elevation: 0.35))
+        VStack(spacing: 10) {
+            HStack(spacing: 10) {
+                ForEach(0..<2, id: \.self) { index in
+                    let kind = index == 0 ? "more" : "less"
+                    let title = index == 0 ? "More like this" : "Show less like this"
+                    let icon = index == 0 ? "hand.thumbsup" : "hand.thumbsdown"
+                    Button {
+                        feedbackChoice = kind
+                        Task { await eventsService.recordFeedback(for: event.id, kind: kind) }
+                    } label: {
+                        Label(title, systemImage: feedbackChoice == kind ? "\(icon).fill" : icon)
+                            .font(VType.body(12, .semibold))
+                            .foregroundStyle(feedbackChoice == kind ? Palette.spruce.base : Palette.inkSoft)
+                            .lineLimit(1).minimumScaleFactor(0.7)
+                            .frame(maxWidth: .infinity).padding(.vertical, 12)
+                            .background(ClayBackground(style: .surface, radius: Radius.sm, elevation: 0.35))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier(index == 0 ? "feedbackMore" : "feedbackLess")
+                    .accessibilityHint(index == 0 ? "Recommends more events like this one." : "Recommends fewer events like this one.")
                 }
-                .buttonStyle(.plain)
             }
+            Button {
+                Haptics.tap()
+                feedbackChoice = "hide"
+                Task { await eventsService.hideEvent(event.id) }
+                dismiss()
+            } label: {
+                Label("Hide this event", systemImage: "eye.slash")
+                    .font(VType.body(12, .semibold))
+                    .foregroundStyle(Palette.terracotta.base)
+                    .lineLimit(1).minimumScaleFactor(0.7)
+                    .frame(maxWidth: .infinity).padding(.vertical, 12)
+                    .background(ClayBackground(style: .surface, radius: Radius.sm, elevation: 0.35))
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("hideEvent")
+            .accessibilityHint("Removes this event from your feed. It will not be shown to you again.")
+        }
+    }
+
+    // MARK: Why you're seeing this (W5)
+
+    /// Every line is a server reason, verbatim; nothing is added on the client.
+    @ViewBuilder
+    private var whySection: some View {
+        if !event.feedReasons.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Why you're seeing this").font(VType.display(18, .semibold)).foregroundStyle(Palette.ink)
+                ForEach(Array(event.feedReasons.enumerated()), id: \.offset) { _, reason in
+                    Label(reason, systemImage: "sparkles")
+                        .font(VType.body(13)).foregroundStyle(Palette.inkSoft)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(Spacing.md)
+            .claySurface(.surface, radius: Radius.md, elevation: 0.35)
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("whySeeingThis")
+        }
+    }
+
+    /// A collapsed series: the card is shown once; this opens the other dates.
+    @ViewBuilder
+    private var seriesSection: some View {
+        if let seriesLabel = event.seriesLabel {
+            Button { Haptics.tap(); showSeriesDates = true } label: {
+                HStack(spacing: 8) {
+                    Label(seriesLabel, systemImage: "repeat")
+                        .font(VType.body(13, .semibold)).foregroundStyle(Palette.ink)
+                        .lineLimit(1).minimumScaleFactor(0.7)
+                    Spacer()
+                    Image(systemName: "chevron.right").font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(Palette.inkFaint)
+                }
+                .padding(Spacing.md)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(ClayBackground(style: .surface, radius: Radius.md, elevation: 0.35))
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("seriesMoreDates")
+            .accessibilityHint("Shows the other dates in this series.")
+            .sheet(isPresented: $showSeriesDates) { SeriesDatesSheet(event: event) }
         }
     }
 
@@ -1445,7 +1519,18 @@ struct EventDetailSheet: View {
 private struct ForYouEventCard: View {
     let event: Event
     let dateFormatter: DateFormatter
+    @State private var showSeriesDates = false
     private var kind: ClayStyle.ClayAccentKind { event.category.clayKind }
+
+    /// The combined VoiceOver label: facts, then the server reasons, then the series.
+    private var cardLabel: String {
+        var label = event.isProgram
+            ? "\(event.title), Program, apply by \(dateFormatter.string(from: event.date)), \(event.locationName)"
+            : "\(event.title), \(event.category.displayName), \(dateFormatter.string(from: event.date)) at \(event.locationName), earns \(event.pointValue) points"
+        if let why = event.whyLine { label += ", Why: \(why)" }
+        if let series = event.seriesLabel { label += ", \(series)" }
+        return label
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -1472,6 +1557,24 @@ private struct ForYouEventCard: View {
                 Label(event.locationName, systemImage: "mappin.circle.fill").lineLimit(1)
             }
             .font(VType.num(11, .semibold)).foregroundStyle(Palette.inkSoft)
+            // W5: the top two server reasons on one line. No fixed height — it
+            // tightens and scales at the largest Dynamic Type sizes instead.
+            if let why = event.whyLine {
+                Text(why)
+                    .font(VType.body(11, .medium)).foregroundStyle(Palette.spruce.base)
+                    .lineLimit(1).minimumScaleFactor(0.75).allowsTightening(true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityLabel("Why: \(why)")
+            }
+            if let series = event.seriesLabel {
+                Button { Haptics.soft(); showSeriesDates = true } label: {
+                    Label(series, systemImage: "repeat")
+                        .font(VType.body(10, .bold)).foregroundStyle(Palette.inkSoft)
+                        .lineLimit(1).minimumScaleFactor(0.75).allowsTightening(true)
+                        .padding(.vertical, 4)
+                }
+                .buttonStyle(.plain)
+            }
             HStack(spacing: 5) {
                 Circle().fill(kind.accent.base).frame(width: 6, height: 6)
                 Text(event.category.displayName).font(VType.body(10, .bold))
@@ -1479,17 +1582,70 @@ private struct ForYouEventCard: View {
             }
         }
         .padding(Spacing.md)
-        .frame(width: 210, height: 190, alignment: .topLeading)
+        // Content-hugging with a 190pt floor (the QA.md card pattern), so the
+        // reasons line never pushes the footer out of a pinned frame.
+        .frame(width: 210, alignment: .topLeading)
+        .frame(minHeight: 190, alignment: .topLeading)
         .claySurface(.surface, radius: Radius.md, elevation: 0.9)
         .contentShape(Rectangle())
         .overlay(alignment: .top) {
             Capsule().fill(kind.accent.faceGradient).frame(height: 5)
                 .padding(.horizontal, 22).offset(y: 2)
         }
+        .sheet(isPresented: $showSeriesDates) { SeriesDatesSheet(event: event) }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(event.isProgram ? "\(event.title), Program, apply by \(dateFormatter.string(from: event.date)), \(event.locationName)" : "\(event.title), \(event.category.displayName), \(dateFormatter.string(from: event.date)) at \(event.locationName), earns \(event.pointValue) points")
+        .accessibilityLabel(cardLabel)
         .accessibilityHint("Opens event details.")
         .accessibilityAddTraits(.isButton)
+        .accessibilityActions {
+            if let series = event.seriesLabel {
+                Button(series) { showSeriesDates = true }
+            }
+        }
+    }
+}
+
+// MARK: - Series dates (W5)
+
+/// The other occurrences the server collapsed into one card. Dates only — the
+/// occurrences share the listing's title, venue and organizer.
+private struct SeriesDatesSheet: View {
+    let event: Event
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                VerdureBackground()
+                ScrollView {
+                    VStack(alignment: .leading, spacing: Spacing.sm) {
+                        Text(event.title).font(VType.display(18, .semibold)).foregroundStyle(Palette.ink)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text("This listing repeats. Your feed shows the next date once; it also happens on:")
+                            .font(VType.body(13)).foregroundStyle(Palette.inkSoft)
+                            .fixedSize(horizontal: false, vertical: true)
+                        ForEach(Array(event.moreDates.enumerated()), id: \.offset) { _, date in
+                            Label(date.formatted(date: .complete, time: .shortened), systemImage: "calendar")
+                                .font(VType.body(14)).foregroundStyle(Palette.ink)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .padding(Spacing.sm)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .claySurface(.surface, radius: Radius.sm)
+                        }
+                    }
+                    .padding(Spacing.md)
+                }
+            }
+            .navigationTitle("More dates")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }.accessibilityIdentifier("seriesDatesDone")
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
     }
 }
 

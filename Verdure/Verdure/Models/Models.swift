@@ -114,8 +114,23 @@ struct Event: Identifiable, Hashable {
     /// Server-annotated: alcohol service, an age limit or an alcohol-brand presenter.
     /// Served only to signed-in adults; carried so detail copy can say why.
     var adultOnly: Bool = false
+    /// W5: the server's "why you're seeing this" reasons from `recommendedEvents`
+    /// (at most three). Empty unless the ranked feed sent them — the client never
+    /// invents a reason.
+    var feedReasons: [String] = []
+    /// W5: later occurrences of a recurring series the server collapsed into this
+    /// card (`moreDates`), soonest first. Empty for a one-off listing.
+    var moreDates: [Date] = []
 
     var isProgram: Bool { category == .program || opportunitySubtype == "program" }
+
+    /// The card's one-line summary of the top two server reasons, or nil.
+    var whyLine: String? { RankedFeedEvent.topReasonsLine(feedReasons) }
+    /// "Repeats — N more dates" when the server collapsed a series into this card.
+    var seriesLabel: String? {
+        guard !moreDates.isEmpty else { return nil }
+        return "Repeats — \(moreDates.count) more date\(moreDates.count == 1 ? "" : "s")"
+    }
     func programIsCurrent(now: Date = Date()) -> Bool {
         guard isProgram else { return true }
         guard let deadline = applicationDeadline, let minimumAge, let maximumAge,
@@ -158,6 +173,104 @@ struct Event: Identifiable, Hashable {
 
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
     static func == (lhs: Event, rhs: Event) -> Bool { lhs.id == rhs.id }
+}
+
+// MARK: - Ranked feed row (W5)
+
+/// One row of the `recommendedEvents` callable:
+/// `{ id, score, parts, reasons: [String] (≤ 3), moreDates: [ISO-8601 String], notify }`.
+/// Decoding is tolerant — a malformed reason or date is dropped, never guessed.
+struct RankedFeedEvent: Hashable {
+    let id: String
+    let score: Double
+    let reasons: [String]
+    let moreDates: [Date]
+    let notify: Bool
+
+    /// The server sends at most three; the client never shows more.
+    static let maxReasons = 3
+
+    init(id: String, score: Double = 0, reasons: [String] = [], moreDates: [Date] = [], notify: Bool = false) {
+        self.id = id
+        self.score = score
+        self.reasons = Self.cleanReasons(reasons)
+        self.moreDates = moreDates.sorted()
+        self.notify = notify
+    }
+
+    /// Decodes one server row. Nil when the row has no usable id.
+    init?(row: [String: Any]) {
+        guard let id = row["id"] as? String, !id.isEmpty, !id.contains("/") else { return nil }
+        self.init(id: id,
+                  score: (row["score"] as? Double) ?? 0,
+                  reasons: Self.cleanReasons(row["reasons"]),
+                  moreDates: Self.parseDates(row["moreDates"]),
+                  notify: (row["notify"] as? Bool) ?? false)
+    }
+
+    /// Decodes the callable's `events` array in server order.
+    static func decode(_ data: [String: Any]) -> [RankedFeedEvent] {
+        let rows = data["events"] as? [[String: Any]] ?? []
+        return rows.compactMap { RankedFeedEvent(row: $0) }
+    }
+
+    /// Keeps only non-empty strings, trimmed and bounded, at most `maxReasons`.
+    static func cleanReasons(_ raw: Any?) -> [String] {
+        guard let list = raw as? [Any] else { return [] }
+        var out: [String] = []
+        for item in list {
+            guard let text = item as? String else { continue }
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty { continue }
+            out.append(String(trimmed.prefix(80)))
+            if out.count == maxReasons { break }
+        }
+        return out
+    }
+
+    /// `moreDates` arrives as ISO-8601 strings (`Date.toISOString()`); a
+    /// `{ startMs }` object is accepted too. Unparseable entries are dropped.
+    static func parseDates(_ raw: Any?) -> [Date] {
+        guard let list = raw as? [Any] else { return [] }
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let plain = ISO8601DateFormatter()
+        plain.formatOptions = [.withInternetDateTime]
+        var out: [Date] = []
+        for item in list {
+            if let text = item as? String {
+                if let date = fractional.date(from: text) ?? plain.date(from: text) { out.append(date) }
+            } else if let dict = item as? [String: Any], let ms = dict["startMs"] as? Double, ms > 0 {
+                out.append(Date(timeIntervalSince1970: ms / 1000))
+            }
+        }
+        return out.sorted()
+    }
+
+    /// The first two reasons joined with " · " for the card's single line.
+    static func topReasonsLine(_ reasons: [String]) -> String? {
+        let top = cleanReasons(reasons).prefix(2)
+        return top.isEmpty ? nil : top.joined(separator: " · ")
+    }
+}
+
+extension Array where Element == Event {
+    /// Attaches the ranked feed's reasons and series dates to the matching
+    /// `/events` documents. An event the feed did not rank carries none.
+    func annotated(with feed: [String: RankedFeedEvent]) -> [Event] {
+        map { event in
+            var copy = event
+            let row = feed[event.id]
+            copy.feedReasons = row?.reasons ?? []
+            copy.moreDates = row?.moreDates ?? []
+            return copy
+        }
+    }
+
+    /// Drops events the user hid ("Hide this event") from any local list.
+    func excluding(hiddenIDs: Set<String>) -> [Event] {
+        hiddenIDs.isEmpty ? self : filter { !hiddenIDs.contains($0.id) }
+    }
 }
 
 enum EventCategory: String, CaseIterable, Identifiable, Codable {

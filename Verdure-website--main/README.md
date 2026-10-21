@@ -66,3 +66,20 @@ curl -s "https://verdure-app.com/google334099a9270ba7da.html?cb=$RANDOM"
 
 The same applies to any *additional* verification token added later (a second
 property, a Bing token, and so on) — same rules, same reasons.
+
+## /remove — publisher opt-out
+
+`src/app/remove` lets a website owner remove their site from Verdure's
+automatic event discovery. It is a thin client for two Cloud Functions HTTP
+endpoints (`functions/src/discovery/removal.ts`):
+
+- `GET  {base}/removalToken?host=…` — the token a large host must publish
+- `POST {base}/requestSourceRemoval` `{ host, contact?, reason? }` — 200 removed,
+  403 token required (both return the outcome), 400 bad host, 429 rate-limited
+
+`{base}` is `NEXT_PUBLIC_VERDURE_FUNCTIONS_URL` (see `.env.local.example`).
+When it is unset the page builds and renders a visible "not enabled" notice
+instead of the form, so a deploy without the backend is safe. Host
+normalisation (`src/lib/removal/host.ts`) mirrors the server and is pinned by
+`npm run test:remove`. Design notes: `docs/WEBSITE-REMOVE-2026-10-20.md` at the
+repository root.

@@ -22,21 +22,21 @@ See [Firebase index types](https://firebase.google.com/docs/firestore/query-data
 
 | Query location | Collection/scope | Filters | Explicit ordering | Matching index |
 | --- | --- | --- | --- | --- |
-| `Verdure/Verdure/Models/EventsAPIService.swift:258` | events / COLLECTION | hidden ==; active ==; broadcast ==; areaId ==; date >= | date ASCENDING | `COLLECTION/events/hidden:ASCENDING,active:ASCENDING,broadcast:ASCENDING,areaId:ASCENDING,date:ASCENDING` |
-| `Verdure/Verdure/Models/EventsAPIService.swift:267` | events / COLLECTION | hidden ==; active ==; broadcast ==; areaId ==; adultOnly ==; date >= | date ASCENDING | `COLLECTION/events/hidden:ASCENDING,active:ASCENDING,broadcast:ASCENDING,areaId:ASCENDING,adultOnly:ASCENDING,date:ASCENDING` |
-| `Verdure/Verdure/Models/EventsAPIService.swift:463` | events / COLLECTION | hidden ==; active ==; broadcast ==; category ==; date > | date ASCENDING | `COLLECTION/events/hidden:ASCENDING,active:ASCENDING,broadcast:ASCENDING,category:ASCENDING,date:ASCENDING` |
-| `Verdure/Verdure/Models/EventsAPIService.swift:471` | events / COLLECTION | hidden ==; active ==; broadcast ==; category ==; adultOnly ==; date > | date ASCENDING | `COLLECTION/events/hidden:ASCENDING,active:ASCENDING,broadcast:ASCENDING,category:ASCENDING,adultOnly:ASCENDING,date:ASCENDING` |
-| `Verdure/Verdure/Models/EventsAPIService.swift:513` | events / COLLECTION | hidden ==; active ==; broadcast ==; date >= | date ASCENDING | `COLLECTION/events/hidden:ASCENDING,active:ASCENDING,broadcast:ASCENDING,date:ASCENDING` |
-| `Verdure/Verdure/Models/EventsAPIService.swift:521` | events / COLLECTION | hidden ==; active ==; broadcast ==; adultOnly ==; date >= | date ASCENDING | `COLLECTION/events/hidden:ASCENDING,active:ASCENDING,broadcast:ASCENDING,adultOnly:ASCENDING,date:ASCENDING` |
-| `Verdure/Verdure/Models/EventsAPIService.swift:547` | events / COLLECTION | hidden ==; active ==; organizerId ==; date >= | Implicit/default | `COLLECTION/events/active:ASCENDING,hidden:ASCENDING,organizerId:ASCENDING,date:ASCENDING` |
-| `Verdure/Verdure/Models/EventsAPIService.swift:554` | events / COLLECTION | hidden ==; active ==; organizerId ==; adultOnly ==; date >= | Implicit/default | `COLLECTION/events/active:ASCENDING,hidden:ASCENDING,organizerId:ASCENDING,adultOnly:ASCENDING,date:ASCENDING` |
+| `Verdure/Verdure/Models/EventsAPIService.swift:301` | events / COLLECTION | hidden ==; active ==; broadcast ==; areaId ==; date >= | date ASCENDING | `COLLECTION/events/hidden:ASCENDING,active:ASCENDING,broadcast:ASCENDING,areaId:ASCENDING,date:ASCENDING` |
+| `Verdure/Verdure/Models/EventsAPIService.swift:310` | events / COLLECTION | hidden ==; active ==; broadcast ==; areaId ==; adultOnly ==; date >= | date ASCENDING | `COLLECTION/events/hidden:ASCENDING,active:ASCENDING,broadcast:ASCENDING,areaId:ASCENDING,adultOnly:ASCENDING,date:ASCENDING` |
+| `Verdure/Verdure/Models/EventsAPIService.swift:506` | events / COLLECTION | hidden ==; active ==; broadcast ==; category ==; date > | date ASCENDING | `COLLECTION/events/hidden:ASCENDING,active:ASCENDING,broadcast:ASCENDING,category:ASCENDING,date:ASCENDING` |
+| `Verdure/Verdure/Models/EventsAPIService.swift:514` | events / COLLECTION | hidden ==; active ==; broadcast ==; category ==; adultOnly ==; date > | date ASCENDING | `COLLECTION/events/hidden:ASCENDING,active:ASCENDING,broadcast:ASCENDING,category:ASCENDING,adultOnly:ASCENDING,date:ASCENDING` |
+| `Verdure/Verdure/Models/EventsAPIService.swift:556` | events / COLLECTION | hidden ==; active ==; broadcast ==; date >= | date ASCENDING | `COLLECTION/events/hidden:ASCENDING,active:ASCENDING,broadcast:ASCENDING,date:ASCENDING` |
+| `Verdure/Verdure/Models/EventsAPIService.swift:564` | events / COLLECTION | hidden ==; active ==; broadcast ==; adultOnly ==; date >= | date ASCENDING | `COLLECTION/events/hidden:ASCENDING,active:ASCENDING,broadcast:ASCENDING,adultOnly:ASCENDING,date:ASCENDING` |
+| `Verdure/Verdure/Models/EventsAPIService.swift:590` | events / COLLECTION | hidden ==; active ==; organizerId ==; date >= | Implicit/default | `COLLECTION/events/active:ASCENDING,hidden:ASCENDING,organizerId:ASCENDING,date:ASCENDING` |
+| `Verdure/Verdure/Models/EventsAPIService.swift:597` | events / COLLECTION | hidden ==; active ==; organizerId ==; adultOnly ==; date >= | Implicit/default | `COLLECTION/events/active:ASCENDING,hidden:ASCENDING,organizerId:ASCENDING,adultOnly:ASCENDING,date:ASCENDING` |
 | `Verdure/Verdure/Models/FirestoreService.swift:182` | posts / COLLECTION | hidden == | createdAt DESCENDING | `COLLECTION/posts/hidden:ASCENDING,createdAt:DESCENDING` |
 | `functions/scripts/baseline.mjs:115` | events / COLLECTION | areaId ==; active == | Implicit/default | `COLLECTION/events/areaId:ASCENDING,active:ASCENDING` |
 | `functions/scripts/coverage-check.mjs:35` | events / COLLECTION | areaId ==; active == | Implicit/default | `COLLECTION/events/areaId:ASCENDING,active:ASCENDING` |
 | `functions/scripts/list-low-confidence.mjs:38` | events / COLLECTION | classificationConfidence < | classificationConfidence ASCENDING; __name__ ASCENDING | `COLLECTION/events/classificationConfidence:ASCENDING,__name__:ASCENDING` |
 | `functions/src/account.ts:216` | moderationQueue / COLLECTION | targetType ==; targetId == | Implicit/default | `COLLECTION/moderationQueue/targetId:ASCENDING,targetType:ASCENDING` |
-| `functions/src/discovery/discover.ts:153` | sourceSubmissions / COLLECTION | areaId ==; processedAt == | Implicit/default | `COLLECTION/sourceSubmissions/areaId:ASCENDING,processedAt:ASCENDING` |
-| `functions/src/discovery/discover.ts:205` | sourceCandidates / COLLECTION | areaId ==; status ==; nextInspectAt <= | nextInspectAt ASCENDING | `COLLECTION/sourceCandidates/areaId:ASCENDING,status:ASCENDING,nextInspectAt:ASCENDING` |
+| `functions/src/discovery/discover.ts:155` | sourceSubmissions / COLLECTION | areaId ==; processedAt == | Implicit/default | `COLLECTION/sourceSubmissions/areaId:ASCENDING,processedAt:ASCENDING` |
+| `functions/src/discovery/discover.ts:219` | sourceCandidates / COLLECTION | areaId ==; status ==; nextInspectAt <= | nextInspectAt ASCENDING | `COLLECTION/sourceCandidates/areaId:ASCENDING,status:ASCENDING,nextInspectAt:ASCENDING` |
 | `functions/src/ingest/health.ts:32` | ingestRuns / COLLECTION | source ==; areaId == | Implicit/default | `COLLECTION/ingestRuns/areaId:ASCENDING,source:ASCENDING` |
 | `functions/src/ingest/health.ts:34` | ingestRuns / COLLECTION | source ==; areaId == | runAt DESCENDING | `COLLECTION/ingestRuns/source:ASCENDING,areaId:ASCENDING,runAt:DESCENDING` |
 | `functions/src/ingest/health.ts:35` | ingestRuns / COLLECTION | source ==; areaId ==; errors == | runAt DESCENDING | `COLLECTION/ingestRuns/source:ASCENDING,areaId:ASCENDING,errors:ASCENDING,runAt:DESCENDING` |
@@ -115,8 +115,8 @@ See [Firebase index types](https://firebase.google.com/docs/firestore/query-data
 | `functions/src/account.ts:194` | fulfillments / COLLECTION | uid == | Implicit/default | `Automatic collection index: uid:ASCENDING` |
 | `functions/src/account.ts:212` | reports / COLLECTION | reporterUid == | Implicit/default | `Automatic collection index: reporterUid:ASCENDING` |
 | `functions/src/common.ts:267` | blocks / COLLECTION_GROUP | uid == | Implicit/default | `fieldOverrides: COLLECTION_GROUP/blocks/uid:ASCENDING` |
-| `functions/src/discovery/discover.ts:147` | organizers / COLLECTION | calendarUrl > | Implicit/default | `Automatic collection index: calendarUrl:ASCENDING` |
-| `functions/src/discovery/discover.ts:216` | sources / COLLECTION | host in | Implicit/default | `Automatic collection index: host:ASCENDING` |
+| `functions/src/discovery/discover.ts:149` | organizers / COLLECTION | calendarUrl > | Implicit/default | `Automatic collection index: calendarUrl:ASCENDING` |
+| `functions/src/discovery/discover.ts:230` | sources / COLLECTION | host in | Implicit/default | `Automatic collection index: host:ASCENDING` |
 | `functions/src/economy.ts:328` | codes / COLLECTION | claimedBy == | Implicit/default | `Automatic collection index: claimedBy:ASCENDING` |
 | `functions/src/economy.ts:419` | fulfillments / COLLECTION | month == | Implicit/default | `Automatic collection index: month:ASCENDING` |
 | `functions/src/feedTelemetry.ts:76` | eventPlanSessions / COLLECTION | createdAt < | Implicit/default | `Automatic collection index: createdAt:ASCENDING` |

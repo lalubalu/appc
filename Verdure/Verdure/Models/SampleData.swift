@@ -96,6 +96,25 @@ enum SampleData {
 
     // MARK: Challenges
 
+    /// W5 fixture for `-QAFeedReasons YES`: server-shaped ranked rows (reasons
+    /// ≤ 3, ISO dates already parsed) keyed by sample event id. The strings
+    /// mirror what `functions/src/ranking-v2.ts` writes; nothing here is shown
+    /// outside the DEBUG QA harness.
+    static let feedReasons: [String: RankedFeedEvent] = {
+        let day: TimeInterval = 86_400
+        let rows = [
+            RankedFeedEvent(id: "spring-hackathon", score: 0.91,
+                            reasons: ["Matches your interest in tech", "Close by (0.8 mi)", "Repeats — 2 more dates"],
+                            moreDates: [Date().addingTimeInterval(9 * day), Date().addingTimeInterval(16 * day)]),
+            RankedFeedEvent(id: "river-cleanup-day", score: 0.84,
+                            reasons: ["A friend is going", "This weekend", "Free"]),
+            RankedFeedEvent(id: "tech-meetup", score: 0.77,
+                            reasons: ["Similar to events you've saved"]),
+            RankedFeedEvent(id: "weekend-farmers-market", score: 0.65),
+        ]
+        return Dictionary(rows.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+    }()
+
     static let challenges: [Challenge] = [
         Challenge(title: "Event Regular", description: "Attend 3 events this month", xpReward: 300, progress: 0.33, icon: "calendar.badge.checkmark", daysRemaining: 12),
         Challenge(title: "Community Hero", description: "Attend 2 cleanup events", xpReward: 250, progress: 0.5, icon: "heart.fill", daysRemaining: 18),

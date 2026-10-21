@@ -135,6 +135,19 @@ In practice this sprint that rule admitted exactly one source (Midpen, below)
 and excluded exactly one (Santa Clara County Parks, also below) — and it
 excluded that one on evidence, not on a blanket prohibition.
 
+Since 2026-10-19 the rule is applied automatically: `functions/src/discovery/`
+inspects candidate hosts, records evidence for six rules (deny-list, robots,
+machine-readable listing, terms, real events, not adult content) and activates
+or rejects them with no human approval. One of its discovery origins (W4.4)
+queries OpenStreetMap through the Overpass API for organisations with a
+`website` tag inside the launch area (`overpassQuery()` in
+`functions/src/discovery/discover.ts`; the result is cached weekly in
+`/discoveryCache`). **Map data © OpenStreetMap contributors, available under
+the Open Database License (ODbL), <https://www.openstreetmap.org/copyright>.**
+Only the website hosts are kept; no OSM geometry is stored in `/sources`.
+The Midpen preserve coordinates below were likewise geocoded against
+OpenStreetMap (Nominatim) and carry the same credit.
+
 ## Results
 
 | Source | System | Status | Result |

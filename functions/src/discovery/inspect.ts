@@ -126,7 +126,8 @@ export async function sampleThroughAdapter(adapter: SourceId, params: Record<str
   switch (adapter) {
     case "localist": return fetchLocalist(area, String(p.host), String(p.name), f);
     case "livewhale": return fetchLiveWhale(area, String(p.host), String(p.name), f, now);
-    case "bibliocommons": return fetchBiblioCommons(area, { name: String(p.name), library: String(p.library), host: p.host, pageSize: deps.maxSample }, f);
+    // The adapter accepts page sizes of 50–150 only; samplingFetch rewrites the URL's limit= to the sample size.
+    case "bibliocommons": return fetchBiblioCommons(area, { name: String(p.name), library: String(p.library), host: p.host, pageSize: Math.min(150, Math.max(50, deps.maxSample)) }, f);
     case "libcal": return fetchLibCal(area, { name: String(p.name), calendarId: String(p.calendarId), rssUrl: String(p.rssUrl) }, f);
     case "legistar": return fetchLegistar(area, String(p.client), String(p.name), f);
     case "ics": return fetchIcsFeed(area, { name: String(p.name), url: String(p.url) }, "ics", f);
@@ -149,7 +150,8 @@ export function summarizeSample(records: NormalizedEvent[], area: LaunchArea, no
   };
 }
 
-const displayName = (host: string, title: string) => (title.split(/[|–—-]/)[0].trim() || host).slice(0, 80);
+/** The site's name from its title: the part before a spaced separator (" | ", " – ", " - "); an in-word hyphen ("Tri-C") is kept. */
+const displayName = (host: string, title: string) => (title.split(/\s+[|–—-]\s+|\s*[|–—]\s*/)[0].trim() || host).slice(0, 80);
 
 /** Inspect one host. Never throws for network reasons: a failed probe is a finding. */
 export async function inspectSource(host: string, deps: InspectDeps): Promise<Inspection> {

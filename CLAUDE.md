@@ -31,9 +31,11 @@ Verdure/                   — Xcode project container (XcodeGen)
       CollectionModels.swift   — PlaceRarity, CollectiblePlace, Reward, RewardTier
       GameStateManager.swift   — @Observable game state (UserDefaults + Firestore sync)
       AuthService.swift / FirestoreService.swift — Firebase Auth + Firestore
-      PlacesAPIService.swift / EventsAPIService.swift — live places/events
+      PlacesAPIService.swift / EventsAPIService.swift — live places/events (adult-aware queries)
+      FunctionsService.swift / EconomyService.swift / SocialService.swift — callable wrappers
+      StoreService.swift       — StoreKit 2 (Verdure+ product ids)
       LocationManager.swift    — CLLocationManager wrapper
-      SampleData.swift         — placeholder data (also used as fallback when APIs are empty)
+      SampleData.swift         — QA fixtures ONLY: injected when `SampleData.isEnabled` (DEBUG + `-QAOfflineData YES`); compiled out of Release
     Components/
       ClayKit.swift            — claymorphism primitives: ClayBackground/claySurface, ClayButton, ClayChip, ClayIconTile, ClayProgressBar, KickerLabel, ClaySectionHeader, Haptics
       ClayMotion.swift         — gyro ParallaxTilt, Shimmer, IdleFloat, AmbientGlow, SoftGrain, VerdureBackground, RiseIn
@@ -41,14 +43,64 @@ Verdure/                   — Xcode project container (XcodeGen)
       SharedComponents.swift   — VerdureButton, CategoryPill, StatCard, AvatarCircle, NeonProgressRing, PlacePlaceholder, etc. (all clay)
       RarityBadge.swift        — RarityBadge/PointsBadge/RarityDot + rarity/category/tier → clay accent mappings
     Views/
-      MainTabView.swift        — 6-tab clay floating tab bar (Events, Explore, Map, Collect, Community, Profile)
+      MainTabView.swift        — 5-tab clay floating tab bar (Discover, Plan, Friends, Rewards, Profile);
+                                 Discover has three modes (Events, Places, Map); Collection lives under Profile
       Onboarding/OnboardingView.swift — clay onboarding w/ 3D medallion hero
-      Explore/ (ExploreView, PlaceDetailView) + DailyGemView.swift
+      Discovery/, Events/, Explore/ (ExploreView, PlaceDetailView), Map/MapExploreView.swift + DailyGemView.swift
       Collection/ (CollectionView, CollectionCelebrationView)
-      Events/EventsView.swift, Map/MapExploreView.swift, Community/CommunityView.swift
+      Social/, Community/CommunityView.swift, Notifications/, Moderation/, Legal/, Paywall/
       Profile/ProfileView.swift, Rewards/ (RewardsStoreView, RewardConfirmationView)
     Assets.xcassets/         — AppIcon (compass-leaf on clay-cream), VerdureMark imageset
+  VerdureTests/ , VerdureUITests/ — unit, journey and accessibility suites (need Xcode)
+
+functions/                 — Cloud Functions (TypeScript, Node 20). ALL point math and ingestion live here
+  src/index.ts             — callables (checkInToEvent, collectPlace, redeemReward …) + every re-export
+  src/secrets.ts           — the shared defineSecret() declarations (others live in the module that uses them)
+  src/ingest/              — event ingestion: areas.ts (launch areas + the sourcing rule), sources-config.ts (seeds),
+                             sources-registry.ts (/sources collection + ABSOLUTE deny-list), sources/<adapter>.ts (13 adapters),
+                             normalize.ts + classify.ts (FROZEN), annotate.ts (adultOnly + topicTags), store.ts (listing
+                             checks, fuzzy dedupe, write-only-on-change), health.ts, ics.ts
+  src/discovery/           — W4 automatic source discovery: http.ts (bounded fetch, record/replay), robots.ts, terms.ts,
+                             inspect.ts (platform fingerprinting), decide.ts (six rules + evidence), discover.ts
+                             (five origins incl. OpenStreetMap/Overpass, /sourceCandidates queue, daily + weekly jobs,
+                             intake), removal.ts (requestSourceRemoval / removalToken endpoints, /removedHosts)
+  src/ranking.ts           — v1 ranker + the config/ranking switch;  src/ranking-v2.ts — v2 (off by default)
+  src/subscriptions.ts, fulfillment.ts, adventure.ts, eventPlanner.ts, notifications.ts, social.ts, organizers.ts,
+  partners.ts, staff-*.ts, parks/, offline/, programs.ts, place-stories.ts, moderation.ts, account.ts
+  scripts/                 — unit suites, emulator E2Es, baseline, migrate-sources, seed-review-account … (see npm commands)
+  seed/ranking-config.json — the config/ranking seed (added this sprint by the ranking workstream)
+  discovery/model-urls.json — the model-supplied URL list, one discovery origin
+  test-fixtures/           — recorded feed samples and the 11,603-record corpus; tests never touch the live internet
+  .env                     — NON-secret config (sandbox defaults); secrets go through functions:secrets:set
+docs/                      — surveys, audits, baselines, sprint reports, READ-BUDGET.md, GO-LIVE-CHECKLIST.md
+reference/verdure-discovery/ — John's Python engine, staged for porting (read-only)
+firestore.rules / firestore.indexes.json / storage.rules — ship with the feature that needs them
 ```
+
+### Backend rules that are not conventions
+
+- **Sourcing rule** (`functions/src/ingest/areas.ts`, `docs/FEED-SURVEY-SAN-JOSE.md`): parse public feeds and open data freely; never scrape a source whose terms prohibit it; a 403 is a recruitment target, not a parsing target. **Deny-list is absolute** (`sources-registry.ts` `DENIED_DOMAINS`): Google Maps/Places, Meetup, Facebook/Instagram, Eventbrite, ACTIVE Network are refused in code regardless of what any `/sources` document says.
+- **Frozen classifier** (`docs/audits/classifier-freeze-2026-10-03.json`): `ingest/classify.ts`, `normalize.ts` and the bibliocommons / localist / livewhale / libcal adapters are byte-pinned to commit `d4b71507`. `npm run check:classifier` fails on any change; `test:units` runs it first. New behaviour goes in `annotate.ts` or a new file.
+- **Indexes and rules land with the feature**: `npm run check:indexes` inventories every query shape in `src/` against `firestore.indexes.json` (`docs/FIRESTORE-INDEXES.md`).
+- **Sources are data**: ingestion reads only `/sources` documents with `status == "active"`; staff read, only server code writes. Server-owned collections: `/sources`, `/sourceCandidates`, `/rejectedListings`, `/removalRequests`, `/removedHosts`, `/discoveryRuns`, `/discoveryCache`, `/sourceSubmissions`, `config/ranking`.
+
+### Backend commands (`cd functions`)
+
+| Command | What |
+|---|---|
+| `npm run build` | `tsc` into `lib/` (every E2E builds first) |
+| `npm run check:classifier` / `npm run check:indexes` | the two gates above |
+| `npm run test:units` | gates + build + 12 unit suites (fulfillment, subscription, ingest, ranking, ranking-v2, notifications, partners, event-planner, parks, offline, programs, place-stories) |
+| `npm run e2e` / `npm run redteam` | full emulator E2E / attack suite (auth, functions, firestore, storage emulators) |
+| `npm run e2e:ingest` / `npm run e2e:sources` | ingest write-path metering / `/sources` registry E2E (firestore emulator only) |
+| `npm run baseline` | corpus replay + measurements, writes `docs/BASELINE-*.json` |
+| `npm run migrate:sources:emulator` | seed `/sources` from config on the emulator; `node scripts/migrate-sources.mjs --live` for production (refuses without the flag) |
+| `node scripts/discovery-e2e.mjs` (under `emulators:exec`) | W4 discovery/removal/self-healing E2E; `--record` for the one live fixture run |
+| `npm run acceptance` | sprint acceptance script (`scripts/sprint-acceptance.mjs`) on the firestore emulator; results in `docs/ACCEPTANCE.md` |
+| `npm run seed:review` | `seed-review-account.mjs <uid>` for App Review |
+| `npm run ingest:smoke`, `coverage`, `coverage:emulator`, `corpus:local`, `public-feed:check`, `backfill:emulator-test`, `seed:partners` | diagnostics and local seeds |
+
+Emulator ports are in `firebase.json` (firestore 8899; 8080 wedges on this machine). Only one process may run the emulators at a time.
 
 ## How to Run the App
 
@@ -101,11 +153,16 @@ The app's visual system mirrors the Verdure website: **claymorphism** with a sag
 - **Dual currency:** XP = progression (levels); Points = spendable (gift cards).
 - **Rarity:** 4 tiers (Common 5 / Uncommon 10 / Rare 25 / Legendary 50 pts). Events are the primary earner (75–250 pts).
 - **Proximity:** real GPS via `LocationManager`; collection requires <500 ft. Event check-in requires proximity + proof-of-attendance photo (verification is placeholder).
-- **Empty-API fallback:** screens fall back to `SampleData` when live APIs return nothing, so the UI is always populated.
+- **No fallback to fabricated content:** live screens show honest empty states. `SampleData` is injected only when `SampleData.isEnabled` is true (DEBUG build + `-QAOfflineData YES`, the UI-test harness); in Release the branch is compiled out, and `GameStateManager` refuses to collect or check in to any sample id under any code path.
+- **Adult-only gating:** every stored event carries `adultOnly` (never missing) and `topicTags`; rules deny minors and signed-out clients any `/events` query without `adultOnly == false`, and the client duplicates that filter (`EventsAPIService.swift`).
 
 ## Backend / External
 
-- **Firebase** project is `connectify-19dd8` (Auth + Firestore). The app bundle id is `com.vaiybhav.verdure`; `GoogleService-Info.plist` is still registered for the old bundle id, so Firebase logs a non-fatal bundle-id mismatch warning. To fully decouple, re-register a `com.vaiybhav.verdure` app in the Firebase console and swap in a new `GoogleService-Info.plist`.
+- **Firebase** project is `connectify-19dd8` (Auth + Firestore + Functions + Storage). Bundle id `com.vaiybhav.verdure` (the plist mismatch was fixed 2026-07-20 by CLI re-registration).
+- **Events come from Firestore only**: scheduled `ingestCivic` / `ingestTicketed` read the active `/sources` for each launch area (San Jose / South Bay), run the frozen classifier, annotate, listing checks, fuzzy dedupe, and write only what changed. No vendor key ships in the iOS bundle.
+- **Discovery** (`src/discovery/`): `discoverSources` daily finds new hosts from five origins (corpus links, OpenStreetMap via Overpass, probing, organizer calendar URLs + the `sourceIntake` endpoint, the model URL list), inspects at most 300/day, decides with six evidenced rules and activates sources with no human approval; `recheckSourcesWeekly` pauses on tightened robots/terms; `requestSourceRemoval` / `removalToken` remove a host on request (published-token guard above 100 active events). Fetches record/replay fixtures so no test reaches the live internet.
+- **Ranking**: v1 (`ranking.ts`) is live; v2 (`ranking-v2.ts`) is behind `config/ranking` and stays off until the blind judge.
+- The paid steps to go live, with costs, owners and verification commands, are in `docs/GO-LIVE-CHECKLIST.md`.
 
 ## ⚠️ DEPLOY STATUS — re-verified against the live project 2026-08-09
 
@@ -141,6 +198,14 @@ npx firebase-tools deploy --only functions --non-interactive   # errors if still
 ```
 
 ## GO-LIVE RUNBOOK — run in this order
+
+The full ordered list with costs, owner roles and a verification command per
+step (Apple Developer, Blaze + budget alert, bucket, all 12 secrets, deploy order
+incl. indexes, `config/ranking` and `/sources` seeds, App Store Connect products,
+APNs, review account, TestFlight, first-week checks) is
+`docs/GO-LIVE-CHECKLIST.md`. The short form below is kept for orientation;
+the checklist wins where they differ (it also lists `TICKETMASTER_KEY` and
+`SERPAPI_KEY`, and the `firestore:indexes` deploy step).
 
 Everything below is written and tested against the emulators; step 1 is the only
 one a human must do in a browser, and nothing after it can run until it's done.
@@ -202,10 +267,21 @@ before, so they executed against whatever was last compiled into `lib/` — an
 edit to a `.ts` file followed by `npm run e2e` tested the PREVIOUS build and
 passed. Treat any green from before 2026-09-13 with that in mind.
 
+Later evidence supersedes this table: `docs/HALFWAY-REPORT-2026-10-18.md`
+section 3 (2026-10-18/19: units 633 across 12 suites, E2E 357/357, red team 63
+blocked, ingest write-path 33, sources 30; iOS suites **not run**, no Mac) and
+`docs/SPRINT-REPORT-2026-10-20.md` for the final sprint numbers. Anything
+reported on a Windows machine without Xcode says "not run" for iOS, never
+"passing".
+
 ## What Needs to Be Done (Backend & Beyond)
 
+- [ ] **Work `docs/GO-LIVE-CHECKLIST.md` top to bottom** — Apple Developer ($99/yr), Blaze + budget alert, bucket, secrets, deploy (rules → storage → indexes → functions), seeds, products, APNs, review account, TestFlight, first-week checks. Each row carries its cost, owner role and verify command. Nothing on it has been started.
 - [ ] **Upgrade Firebase project to Blaze + enable Storage** — the ONLY human-gated step; everything below is written and waiting. Re-verified 2026-08-09: still Spark, still 0 functions, still no bucket.
-- [ ] Deploy functions + storage (see runbook above), then re-verify live state
+- [ ] Deploy rules + storage + **indexes** + functions (see checklist), then re-verify live state and update DEPLOY STATUS from the read-backs
+- [ ] Seed `config/ranking` (`functions/seed/ranking-config.json`) and `/sources` (`node scripts/migrate-sources.mjs --live`) after the first functions deploy
+- [ ] Record the live discovery fixtures once (`node scripts/discovery-e2e.mjs --record` under `emulators:exec`) so the W4 E2E replays offline; run the W6.1 blind judge before `config/ranking.version` moves to `v2`
+- [ ] Build and run the iOS suites on a Mac — every Swift change since 2026-10-18 (adult-aware queries, `Event.adultOnly`, W5 reasons/hide/series) is **not compiled** on the Windows machine this sprint ran on
 - [ ] Create the two Verdure+ subscriptions in App Store Connect (`com.vaiybhav.verdure.plus.monthly` / `.yearly` — local testing uses `Verdure/Verdure.storekit` via the Verdure scheme)
 - [ ] **Real-device QA (2 phones)** — script written at `DEVICE-QA.md`; needs hardware. Runs 2 and 3 also need the backend live.
 - [ ] Fund a Tremendous account + map reward ids → product ids (`TREMENDOUS_CATALOG`); flip `TREMENDOUS_ENV=production` in `functions/.env`
@@ -213,7 +289,7 @@ passed. Treat any green from before 2026-09-13 with that in mind.
 - [ ] Once Functions are live: add the Verdure+ 1.25x multiplier to `PaywallView.features` AND the store description in the same commit (both files carry the instruction)
 - [x] ~~Server-side subscription check~~ — done (`functions/src/subscriptions.ts`)
 - [x] ~~Real gift-card fulfillment~~ — done (`functions/src/fulfillment.ts`, Tremendous)
-- [ ] **Create the App Review demo account** — `appreview@verdure.app`, then `node functions/scripts/seed-review-account.mjs <uid>`. Blocked on Functions being live (points are server-authoritative; a client cannot mint them). Without it a reviewer cannot reach the redemption flow at all.
+- [ ] **Create the App Review demo account** — `appreview@verdure-app.com` (the address the script expects), then `node functions/scripts/seed-review-account.mjs <uid>`. Blocked on Functions being live (points are server-authoritative; a client cannot mint them). Without it a reviewer cannot reach the redemption flow at all.
 - [ ] **Recruit the three South Bay organizers that block us** — City of San José, Santa Clara University and **Santa Clara County Parks** (~28 parks) all return 403 to server-side requests; SCC Parks blocks `robots.txt` too, so its terms cannot even be read. These need a human to ask, not a better parser. See `docs/FEED-SURVEY-SAN-JOSE.md`.
 - [ ] **Watch the Midpen adapter** — it parses HTML because no feed exists, so a site redesign breaks it. It throws loudly by design; make sure someone sees the ingest source error when it does.
 - [ ] Consider a real `Outdoors` event category — guided hikes currently classify as `Sports`, which is the closest fit in the existing taxonomy but not what a user filtering Sports expects. App-wide taxonomy change.
@@ -227,6 +303,8 @@ passed. Treat any green from before 2026-09-13 with that in mind.
 - [x] ~~Product analytics~~ — done (`Analytics.swift`, `/analytics/{yyyy-mm-dd}/events`)
 
 ## Changelog
+
+- **2026-10-20** — **Final sprint: annotation, minor protection, ranking v2 staged, automatic source discovery, go-live checklist.** Full report with every number in `docs/SPRINT-REPORT-2026-10-20.md` (written by the orchestrator); halfway evidence in `docs/HALFWAY-REPORT-2026-10-18.md`. Built and verified on the local Firebase emulator on Windows: **nothing deployed, purchased or flipped, and no Swift compiled** (no Mac), so every iOS change is reported as not run. **W1:** every stored event carries `adultOnly` (never missing; structured age fields first, errs toward true — 36.5 % of the recorded corpus, almost all adult library programs) and John's 19 `topicTags` (`ingest/annotate.ts`); his `validate.py` blocking rules → `/rejectedListings` (30-day expiry), his `dedupe.py` fuzzy pass (Jaccard ≥ 0.7, 30 min, same venue or 0.25 mi), and **write-only-what-changed** (content hash, 24 h refresh): an unchanged ingest run went from 8,675 writes to 18. The six classifier files stay byte-frozen (`npm run check:classifier`). **W2:** rules deny minors and signed-out clients any `/events` read without `adultOnly == false`; client queries, social, parks, planners, notifications and ranking all carry the filter; client creates must send `adultOnly` and may not set server fields. **W3:** `ranking-v2.ts` ported from John's engine (product rules, constraints, feedback affinity with 30-day half-life, first-shown novelty, notify eligibility) behind `config/ranking`, v1 still serving; reads per feed open measured at 371 cold / 7 warm against `docs/READ-BUDGET.md`. **W4:** sources are data — `/sources` with an absolute in-code deny-list (Google, Meetup, Facebook/Instagram, Eventbrite, ACTIVE), `migrate-sources.mjs` seeds it (refuses a live run without `--live`); `discovery/` inspects hosts from five origins (corpus links, OpenStreetMap via Overpass, probing, organizer URLs + intake, model URL list), decides with six evidenced rules, activates with no human approval, re-checks weekly, pauses after three failures or a sudden zero, treats a 304 as a free successful run, and honours removal requests (`requestSourceRemoval` / `removalToken`, published-token guard above 100 active events, `/removedHosts` never rediscovered). Three new adapters (wordpress-tec, jsonld, rss-ics). Documented deviation: public institutions (.edu/.gov/.us, library platforms) pass the terms rule with the matched clause recorded, because the literal rule would reject SJSU, SJPL and the career centre. **W7:** `docs/GO-LIVE-CHECKLIST.md` — every paid step in order with cost, owner role and verify command; this file and `README.md` brought back in line with the code (five tabs, not six; `SampleData` gated behind `isEnabled`, not a fallback; backend modules, collections, scripts and commands listed). Halfway suites: units 633, E2E 357/357, red team 63 blocked, ingest write-path 33, sources 30 — all emulator, none a deploy claim.
 
 - **2026-09-13 (follow-up)** — **Streak freeze made universal; Midpen replaces NPS; scraping rule corrected.** The streak freeze was already free; the TEST now pins that as a tripwire (universal terms, fixed allowance with no tier dimension, and no paywall string may mention it) rather than describing an absence of code. Verdure+ is **four benefits** — unlimited planner, early perk access, cash gift cards, **advanced stats** — and advanced stats is now genuinely gated, because advertising it otherwise repeats the Gold/Platinum mistake; the four headline numbers stay free and only the category breakdown and 30-day rhythm are behind it. The member badge drops off the sold list (still real, just not a reason to pay). **`nps.parkCodes` stays empty but the category is no longer thin:** new `sources/midpen.ts` ingests Midpeninsula Regional Open Space District — **57 live events, 56 with coordinates, 19 preserves all inside the radius**, against Cuyahoga Valley's 39 events at one park. The NPS adapter stays for a future market. Midpen parses HTML because they publish no feed, and **permission was established before the adapter was written** (robots.txt allows `/events`; their terms contain no prohibition on automated access) — it throws rather than returning `[]` when the markup changes, because a silent zero would let the staleness sweeper drain the outdoor category. **Santa Clara County Parks is excluded on evidence:** sccgov.org 403s every request including `robots.txt`, so its rules cannot be read; it is a recruitment target, not a parsing target. The ingest rule is now recorded in `ingest/areas.ts` and the survey doc: **parse public feeds and open data freely; do not scrape a source whose terms prohibit it**, with Google Maps/Places and Meetup as standing exceptions — for Google also because seeding this corpus from Google would invalidate `coverage-check.mjs` along with the product claim.
 

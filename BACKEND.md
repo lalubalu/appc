@@ -3,6 +3,37 @@
 Firebase (Auth + Firestore) is **real and working** in the app. This doc covers what's
 implemented, and the steps only you can do (deploy + account-level setup).
 
+> **Currency note (2026-10-20).** The sections below are the original 2026-07
+> setup notes and several of them are done (steps 2 and 3: the bundle id was
+> re-registered on 2026-07-20 and the rules lockdown + client callables shipped
+> on 2026-07-19). The live deploy state is only ever read from the DEPLOY
+> STATUS table in `CLAUDE.md`, and the ordered paid launch steps are in
+> `docs/GO-LIVE-CHECKLIST.md`. What exists now beyond the table below:
+>
+> - **Callables / HTTP** exported from `functions/src/index.ts`: points
+>   (`checkInToEvent`, `collectPlace`, `redeemReward`), Verdure+
+>   (`linkSubscription`, `appStoreNotifications`, `refreshMySubscription`),
+>   feed (`recommendedEvents`, `recordEventFeedback`, `recordFeedEvent`),
+>   planners (`planAdventure`, `planEvents`), social, organizers, partners,
+>   parks, offline packs, programs, place stories, staff, and the W4 set:
+>   `runDiscoveryNow` (staff), `sourceIntake`, `requestSourceRemoval`,
+>   `removalToken`. Scheduled: `ingestCivic`, `ingestTicketed`,
+>   `discoverSources` (daily), `recheckSourcesWeekly`, `sendEventReminders`,
+>   `sweepFulfilments`, `supplyReportWeekly`, `placeDataWeekly`.
+> - **Server-owned collections** (rules deny client writes): `/events`
+>   (ingested; every row has `adultOnly` + `topicTags`), `/sources`,
+>   `/sourceCandidates`, `/rejectedListings`, `/removalRequests`,
+>   `/removedHosts`, `/discoveryRuns`, `/discoveryCache`,
+>   `/sourceSubmissions`, `/sourceHealth`, `config/ranking`, `/attendance`,
+>   `/fulfillments`, `/treasury`, `/feedSessions`, `/feedImpressions`.
+> - **Secrets** are declared with `defineSecret` (`functions/src/secrets.ts`
+>   and the owning modules); the full list and the `functions:secrets:set`
+>   commands are in the checklist. `functions/.env` holds non-secret sandbox
+>   defaults.
+> - **Gates** that must pass before any deploy: `npm run check:classifier`
+>   (six frozen ingest files) and `npm run check:indexes` (every query shape
+>   has an index in `firestore.indexes.json`).
+
 ## What's implemented (in this repo)
 
 | Piece | Where | Status |

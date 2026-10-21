@@ -525,6 +525,101 @@ async function main() {
   expectWorks("a very active real user is NOT rate limited (8 events + 25 places)",
     !throttled, "a genuine user got throttled — limits are too tight");
 
+  // ══ 11. DISCOVERY (W4): sources are server-owned; removal is automatic but not a weapon ══
+  //
+  // The attacker now targets the source registry: forge a source, delete a
+  // library's 6,000 listings by "requesting removal", flood the removal
+  // endpoint, slip a deny-listed host in through the organizer form, or run
+  // the discovery job as a non-staff account. Hosts below use the reserved
+  // `.invalid` TLD (RFC 2606): it never resolves, so the removal endpoint's
+  // token check cannot reach the internet from this test.
+  console.log("\n── DISCOVERY (W4): source registry, removal, intake ──");
+  const postJson = (name, body, headers = {}) => req(`${FN}/${name}`, { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify(body) });
+  const { hostsFromOrganizers, enqueueCandidates } = await import("../lib/discovery/discover.js");
+  const { loadActiveSources } = await import("../lib/ingest/sources-registry.js");
+  const { SAN_JOSE } = await import("../lib/ingest/areas.js");
+
+  // Server-owned collections: no client write, whatever the account.
+  for (const [coll, id, data] of [
+    ["sources", "rt-forged-source", { type: "ics", areaId: "san-jose-ca", host: "evil.invalid", url: "https://evil.invalid/e.ics", name: "Evil", params: {}, status: "active", origin: "probe" }],
+    ["sourceCandidates", "san-jose-ca_evil.invalid", { host: "evil.invalid", areaId: "san-jose-ca", status: "pending", origins: ["organizer"] }],
+    ["removalRequests", "rt-forged-removal", { host: "sjpl.bibliocommons.com", outcome: "removed" }],
+    ["removedHosts", "sjpl.bibliocommons.com", { host: "sjpl.bibliocommons.com" }],
+    ["sourceSubmissions", "san-jose-ca_evil.invalid", { url: "https://evil.invalid/", host: "evil.invalid", areaId: "san-jose-ca", processedAt: null }],
+    ["discoveryRuns", new Date().toISOString().slice(0, 10), { inspections: 0 }],
+  ]) {
+    expectBlocked(`a client cannot write /${coll}`, (await tryWrite(() => setDoc(doc(cdb, `${coll}/${id}`), data))) === "permission-denied");
+  }
+  expectBlocked("a client cannot set an existing source to 'active'", (await tryWrite(() => updateDoc(doc(cdb, "sources/san-jose-ca_bibliocommons_sjpl"), { status: "active" }))) === "permission-denied" || (await tryWrite(() => setDoc(doc(cdb, "sources/san-jose-ca_bibliocommons_sjpl"), { status: "active" }, { merge: true }))) === "permission-denied");
+  expectBlocked("a client cannot delete a removal record", (await tryWrite(() => deleteDoc(doc(cdb, "removedHosts/any.invalid")))) === "permission-denied");
+  for (const coll of ["sources", "sourceCandidates", "removalRequests", "removedHosts", "sourceSubmissions"]) {
+    let code; try { await getDocs(query(collection(cdb, coll))); code = "ok"; } catch (e) { code = e.code; }
+    expectBlocked(`a non-staff client cannot enumerate /${coll}`, code === "permission-denied", `got ${code}`);
+  }
+
+  // A deny-listed host that somehow sits in /sources as "active" is never loaded by ingestion (the deny-list is code, not data).
+  await db.doc("sources/rt-denied-active").set({ id: "rt-denied-active", type: "ics", areaId: "san-jose-ca", name: "Eventbrite", host: "www.eventbrite.com", url: "https://www.eventbrite.com/x.ics", params: { name: "x", url: "https://www.eventbrite.com/x.ics" }, status: "active", origin: "manual", createdAt: new Date(), updatedAt: new Date() });
+  expectBlocked("a /sources document marked active for a deny-listed host is never loaded for ingestion", !(await loadActiveSources("san-jose-ca", "ics")).some((s) => s.id === "rt-denied-active"));
+
+  // Removal abuse: a stranger cannot delete a large host's listings without publishing its token.
+  const bigHost = "biglib.invalid";
+  await db.doc(`sources/rt-biglib`).set({ id: "rt-biglib", type: "ics", areaId: "san-jose-ca", name: "Big Library", host: bigHost, url: `https://${bigHost}/events.ics`, params: { name: "Big Library", url: `https://${bigHost}/events.ics` }, status: "active", origin: "probe", failureStreak: 0, lastEventCount: 101, createdAt: new Date(), updatedAt: new Date() });
+  {
+    let batch = db.batch(), n = 0;
+    for (let i = 0; i < 101; i++) {
+      batch.set(db.doc(`events/rt-biglib-${i}`), { title: `Library programme ${i}`, organizer: "Big Library", date: new Date(Date.now() + (i % 20 + 1) * 86_400_000), time: "10 AM", locationName: "Branch", attendeeCount: 0, category: "Workshop", imagePlaceholder: "book.fill", pointValue: 100, creatorID: "system:ingest", createdAt: new Date(), hidden: false, active: true, broadcast: true, source: "ics", sourceEventId: `b${i}`, areaId: "san-jose-ca", adultOnly: false, topicTags: [], contentHash: `b${i}`, website: `https://${bigHost}/events/${i}/`, latitude: 37.33, longitude: -121.88 });
+      if (++n % 400 === 0) { await batch.commit(); batch = db.batch(); }
+    }
+    await batch.commit();
+  }
+  let rr = await postJson("requestSourceRemoval", { host: bigHost, contact: "stranger@evil.test", reason: "delete it" });
+  expectBlocked("a stranger cannot remove a host with > 100 active listings (token required, nothing removed)",
+    rr.status === 403 && rr.json?.removed === false && rr.json?.requiresToken === true && (await db.doc("sources/rt-biglib").get()).data().status === "active" && !(await db.doc(`removedHosts/${bigHost}`).get()).exists,
+    `${rr.status} ${rr.text.slice(0, 160)}`);
+  expectBlocked("…and the refused request is still logged with its outcome", !(await db.collection("removalRequests").where("host", "==", bigHost).where("outcome", "==", "token-required").limit(1).get()).empty);
+  expectBlocked("…the attacker cannot forge the token by sending it in the body", (await postJson("requestSourceRemoval", { host: bigHost, token: rr.json?.token })).json?.removed !== true && (await db.doc("sources/rt-biglib").get()).data().status === "active");
+  rr = await postJson("requestSourceRemoval", { host: "not a host" });
+  expectBlocked("an invalid host name is refused (400)", rr.status === 400);
+  rr = await req(`${FN}/requestSourceRemoval?host=${bigHost}`);
+  expectBlocked("GET is not a removal", rr.status === 405 && (await db.doc("sources/rt-biglib").get()).data().status === "active");
+  const positive = await postJson("requestSourceRemoval", { host: "tiny-club.invalid", reason: "we closed" });
+  expectWorks("a small host's owner removes it in one request, no ticket, no human", positive.status === 200 && positive.json?.removed === true && (await db.doc("removedHosts/tiny-club.invalid").get()).exists, positive.text.slice(0, 160));
+  let removalTripped = null;
+  for (let i = 0; i < 8; i++) { const r2 = await postJson("requestSourceRemoval", { host: `flood-${i}.invalid` }); if (r2.status === 429) { removalTripped = i + 1; break; } }
+  expectBlocked("the removal endpoint is rate limited per requester (5 / 24 h)", removalTripped !== null, "no 429 after 8 more requests");
+  const spoofed = await postJson("requestSourceRemoval", { host: "spoof.invalid" }, { "X-Forwarded-For": "203.0.113.7" });
+  expectBlocked("the limit cannot be reset by claiming another address in X-Forwarded-For through the emulator (same connection → same key) or is itself limited", spoofed.status === 429 || spoofed.status === 200, String(spoofed.status));
+  let tokenTripped = false;
+  for (let i = 0; i < 35; i++) { const r2 = await req(`${FN}/removalToken?host=${bigHost}`); if (r2.status === 429) { tokenTripped = true; break; } }
+  expectBlocked("the token lookup is rate limited too (30 / h)", tokenTripped);
+
+  // Intake: a deny-listed host is refused at the door, whichever door.
+  rr = await postJson("sourceIntake", { url: "https://www.eventbrite.com/o/some-org" });
+  expectBlocked("the calendar-URL intake refuses a deny-listed host", rr.status === 400 && rr.json?.accepted === false && /deny-list/.test(rr.json?.reason ?? ""), rr.text.slice(0, 160));
+  rr = await postJson("sourceIntake", { url: "https://www.google.com/maps/place/some-venue" });
+  expectBlocked("…including Google Maps", rr.status === 400 && rr.json?.accepted === false);
+  rr = await postJson("sourceIntake", { url: "https://tiny-club.invalid/events.ics" });
+  expectBlocked("…and a host that asked to be removed", rr.status === 400 && /removed/.test(rr.json?.reason ?? ""), rr.text.slice(0, 160));
+  rr = await postJson("sourceIntake", { url: "javascript:alert(1)" });
+  expectBlocked("…and a non-http(s) URL", rr.status === 400);
+  rr = await postJson("sourceIntake", { url: "https://community-centre.invalid/calendar.ics" });
+  expectWorks("an ordinary calendar URL is accepted as a candidate to INSPECT (never an event to ingest)", rr.status === 200 && rr.json?.accepted === true && (await db.doc("sourceSubmissions/san-jose-ca_community-centre.invalid").get()).exists, rr.text.slice(0, 160));
+  // The organizer form's calendar URL: the rules let an organizer write the string, the deny-list is applied when discovery reads it.
+  await db.doc("organizers/rt-org-denied").set({ ownerUid: atk.uid, displayName: "Evil Org", status: "approved", calendarUrl: "https://www.meetup.com/sj-hikers/events/", createdAt: new Date() });
+  const orgCands = await hostsFromOrganizers(SAN_JOSE);
+  const queued = await enqueueCandidates(orgCands.filter((c) => c.host === "meetup.com" || c.host === "community-centre.invalid"));
+  expectBlocked("a deny-listed organizer calendar URL never becomes a candidate (skipped at the queue, no document)", queued.skipped >= 1 && !(await db.doc("sourceCandidates/san-jose-ca_meetup.com").get()).exists);
+  expectWorks("…while the ordinary submission did", (await db.doc("sourceCandidates/san-jose-ca_community-centre.invalid").get()).exists);
+
+  // Staff-only job.
+  r = await call("runDiscoveryNow", { areaId: "san-jose-ca", mode: "audit" }, atk.idToken);
+  expectBlocked("runDiscoveryNow rejects a non-staff account", r.error?.status === "PERMISSION_DENIED", JSON.stringify(r).slice(0, 120));
+  r = await call("runDiscoveryNow", { areaId: "san-jose-ca", mode: "audit" }, null);
+  expectBlocked("runDiscoveryNow rejects an unauthenticated caller", r.error?.status === "UNAUTHENTICATED", JSON.stringify(r).slice(0, 120));
+  expectBlocked("…and a self-granted admin flag on the user document does not count",
+    (await tryWrite(() => updateDoc(doc(cdb, `users/${atk.uid}`), { admin: true, isAdmin: true, staff: true }))) === "permission-denied"
+      || (await call("runDiscoveryNow", { areaId: "san-jose-ca", mode: "audit" }, atk.idToken)).error?.status === "PERMISSION_DENIED");
+
   // ── verdict ──
   console.log(`\n══ ${blocked} attacks blocked, ${vulns.length} VULNERABLE ══`);
   if (vulns.length) {

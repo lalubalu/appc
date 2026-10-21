@@ -182,6 +182,17 @@ export function hostsFromModelUrls(urls: string[], area: LaunchArea): Candidate[
 
 export const candidateId = (areaId: string, host: string) => `${areaId}_${normalizeHost(host).replace(/[^a-z0-9.-]/g, "-")}`;
 
+/**
+ * Queue priority (W4.4). Candidates are inspected in nextInspectAt order, and a
+ * single OpenStreetMap run lists thousands of organisations against a budget of
+ * 300 inspections a day — so without a priority, a URL an organizer typed into
+ * the form (or the model list named) would wait days behind "a…" and "b…" OSM
+ * hosts. Explicit submissions are due first, then hosts the corpus already
+ * links to, then the OSM sweep. The offsets are milliseconds: nothing is ever
+ * inspected before it is due, only ordered.
+ */
+export const ORIGIN_PRIORITY_MS: Record<SourceOrigin, number> = { organizer: 3, "model-url": 3, "corpus-link": 2, osm: 1, probe: 0, manual: 0, config: 0 };
+
 /** Add candidates; an existing candidate gains the origin, nothing else changes. Denied, invalid and skip-pattern hosts never enter. */
 export async function enqueueCandidates(cands: Candidate[], now = new Date()): Promise<{ added: number; known: number; skipped: number }> {
   let added = 0, known = 0, skipped = 0;
@@ -195,8 +206,9 @@ export async function enqueueCandidates(cands: Candidate[], now = new Date()): P
       if (!origins.includes(c.origin)) await ref.set({ origins: FieldValue.arrayUnion(c.origin), notes: FieldValue.arrayUnion(c.note.slice(0, 200)), inArea: snap.data()?.inArea === true || c.inArea, updatedAt: Timestamp.fromDate(now) }, { merge: true });
       continue;
     }
+    const due = Timestamp.fromMillis(now.getTime() - (ORIGIN_PRIORITY_MS[c.origin] ?? 0));
     await ref.set({ host: c.host, areaId: c.areaId, origins: [c.origin], notes: [c.note.slice(0, 200)], inArea: c.inArea, url: c.url ?? null,
-      status: "pending", discoveredAt: Timestamp.fromDate(now), inspectedAt: null, nextInspectAt: Timestamp.fromDate(now), verdict: null, updatedAt: Timestamp.fromDate(now) });
+      status: "pending", discoveredAt: Timestamp.fromDate(now), inspectedAt: null, nextInspectAt: due, verdict: null, updatedAt: Timestamp.fromDate(now) });
     added++;
   }
   return { added, known, skipped };

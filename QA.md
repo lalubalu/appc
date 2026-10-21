@@ -100,6 +100,7 @@ without scripted taps:
 | `-prefersDarkMode YES` | App-level dark mode (the app overrides the system toggle) |
 | `-dailyGem.splashDay <yyyy-MM-dd>` | Suppress (today) or force (past date) the gem splash |
 | `-interestCategories "Parks,Trails"` | Pre-seed interests |
+| `-QAFeedReasons YES` | With `-QAOfflineData YES`: seed a deterministic ranked feed (`SampleData.feedReasons`) so the W5 reasons line, "Why you're seeing this", Hide and series-dates controls exist without a deployed callable |
 
 ## Accessibility fixes landed during this pass
 
