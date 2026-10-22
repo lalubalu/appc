@@ -319,3 +319,17 @@ struct Card3DButtonStyle: ButtonStyle {
             .onChange(of: configuration.isPressed) { _, p in if p { Haptics.soft() } }
     }
 }
+
+// MARK: - Data credits
+
+/// The attribution the Open Database License requires wherever a place sourced
+/// from OpenStreetMap (id prefixed `osm-`, see `PlacesAPIService`) is on screen.
+struct OpenStreetMapCredit: View {
+    var color: Color = Palette.inkSoft
+
+    var body: some View {
+        Link("© OpenStreetMap contributors", destination: URL(string: "https://www.openstreetmap.org/copyright")!)
+            .font(VType.body(11))
+            .foregroundStyle(color)
+    }
+}

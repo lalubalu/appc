@@ -1,5 +1,5 @@
 // Keep these documents aligned with Verdure/Models/Legal.swift.
-export const LEGAL_UPDATED = "October 4, 2026";
+export const LEGAL_UPDATED = "October 21, 2026";
 export interface LegalSection { id: string; title: string; body: string }
 export const PRIVACY_SECTIONS: LegalSection[] = [
   {
@@ -113,5 +113,10 @@ export const TERMS_SECTIONS: LegalSection[] = [
     "id": "website-requests-and-partnerships",
     "title": "Website requests and partnerships",
     "body": "Support and partnership interest forms send a request to our team for review. Submission does not approve an organizer, activate a merchant offer or create a business agreement. A merchant offer requires a recorded written confirmation before activation. Do not submit information you are not authorized to share."
+  },
+  {
+    "id": "data-and-acknowledgements",
+    "title": "Data and acknowledgements",
+    "body": "Places: © OpenStreetMap contributors, available under the Open Database License (openstreetmap.org/copyright). Weather: data by Open-Meteo.com, licensed under CC BY 4.0 (creativecommons.org/licenses/by/4.0); Verdure shows a short summary of it. Parks: National Park Service and Recreation.gov data, and the official park sources credited on each park guide. Events: public calendars from San José Public Library, Santa Clara County Library District, Palo Alto City Library, Alameda County Library, San Mateo County Libraries, Mountain View Public Library, San José State University, Stanford University, Santa Clara University, Midpeninsula Regional Open Space District, the City of San José, and other public calendars Verdure finds automatically. Fonts: Fredoka and Rubik, SIL Open Font License 1.1. Built with Firebase (Apache License 2.0)."
   }
 ];

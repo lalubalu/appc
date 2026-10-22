@@ -46,7 +46,7 @@ enum Legal {
     /// than on ModerationService: that type is @MainActor, so a nonisolated
     /// static like this one cannot read from it (it did not compile).
     static let contactEmail = "support@verdure-app.com"
-    static let lastUpdated = "October 4, 2026"
+    static let lastUpdated = "October 21, 2026"
 
     /// Subscription facts, stated once so the paywall, the terms and the store
     /// listing cannot disagree. Prices shown to the user come from StoreKit.
@@ -89,6 +89,8 @@ enum Legal {
                 body: "Verdure — support requests: https://verdure-app.com/support."),
         Section(title: "Website requests and partnerships",
                 body: "Support and partnership interest forms send a request to our team for review. Submission does not approve an organizer, activate a merchant offer or create a business agreement. A merchant offer requires a recorded written confirmation before activation. Do not submit information you are not authorized to share."),
+        Section(title: "Data and acknowledgements",
+                body: "Places: © OpenStreetMap contributors, available under the Open Database License (openstreetmap.org/copyright). Weather: data by Open-Meteo.com, licensed under CC BY 4.0 (creativecommons.org/licenses/by/4.0); Verdure shows a short summary of it. Parks: National Park Service and Recreation.gov data, and the official park sources credited on each park guide. Events: public calendars from San José Public Library, Santa Clara County Library District, Palo Alto City Library, Alameda County Library, San Mateo County Libraries, Mountain View Public Library, San José State University, Stanford University, Santa Clara University, Midpeninsula Regional Open Space District, the City of San José, and other public calendars Verdure finds automatically. Fonts: Fredoka and Rubik, SIL Open Font License 1.1. Built with Firebase (Apache License 2.0)."),
     ]
 
     // MARK: - Privacy Policy (mirrors src/lib/legal.ts on the website)

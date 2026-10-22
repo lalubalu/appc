@@ -417,6 +417,9 @@ struct ExploreView: View {
                     }
                     .padding(.vertical, 4)
                 }
+                if filteredPlaces.contains(where: { $0.id.hasPrefix("osm-") }) {
+                    OpenStreetMapCredit()
+                }
             }
         }
     }

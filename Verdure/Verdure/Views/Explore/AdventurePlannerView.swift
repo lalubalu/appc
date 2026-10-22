@@ -203,6 +203,12 @@ struct AdventurePlannerView: View {
             }
             .accessibilityElement(children: .combine)
 
+            if plan.weatherSummary != nil, plan.temperatureF != nil {
+                Link("Weather data by Open-Meteo.com", destination: URL(string: "https://open-meteo.com/")!)
+                    .font(VType.body(11))
+                    .foregroundStyle(Palette.inkSoft)
+            }
+
             if !plan.intro.isEmpty {
                 Text(plan.intro)
                     .font(VType.body(15))

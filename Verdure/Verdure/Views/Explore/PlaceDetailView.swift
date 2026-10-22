@@ -63,6 +63,9 @@ struct PlaceDetailView: View {
                     parkGuideLinks
                     actions
                     eventsSection
+                    if place.id.hasPrefix("osm-") {
+                        OpenStreetMapCredit()
+                    }
                 }
                 .padding(Spacing.md)
                 .padding(.bottom, Spacing.xxl)

@@ -76,6 +76,9 @@ struct ExploreBetaView: View {
                     Text("Explore view (beta)").font(VType.display(25, .semibold)).accessibilityAddTraits(.isHeader)
                     Text("Labels use GPS and compass and may drift a few metres. Use the map for navigation. No camera frames are stored or sent.")
                         .font(VType.body(13)).fixedSize(horizontal: false, vertical: true)
+                    if places.places.contains(where: { $0.id.hasPrefix("osm-") }) {
+                        OpenStreetMapCredit(color: .white.opacity(0.85))
+                    }
                     Spacer()
                     status
                     if camera.state == .ready, location.userLocation == nil || compass.heading == nil {

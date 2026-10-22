@@ -161,6 +161,11 @@ struct MapExploreView: View {
                 .padding(.vertical, 9).padding(.horizontal, 13)
                 .background(ClayBackground(style: .surface, radius: Radius.md, elevation: 0.9))
                 statusPill
+                if placesService.places.contains(where: { $0.id.hasPrefix("osm-") }) {
+                    OpenStreetMapCredit()
+                        .padding(.horizontal, 8).padding(.vertical, 4)
+                        .background(Palette.surface.opacity(0.92), in: Capsule())
+                }
             }
             Spacer()
             VStack(spacing: 12) {
