@@ -159,6 +159,6 @@ remains the release gate and must be green.
 
 - Blaze upgrade → `npx firebase-tools deploy --only functions,storage`
   (backend is emulator-proven; deploy risk is low)
-- App Store Connect subscription products (`com.vaiybhav.verdure.plus.monthly/.yearly`)
+- App Store Connect subscription products (`com.verdure-app.verdure.plus.monthly/.yearly`)
 - Real-device GPS accuracy outdoors, cellular photo upload, airplane-mode replay
   (queue logic is unit-tested; needs field confirmation)

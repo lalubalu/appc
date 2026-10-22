@@ -60,7 +60,7 @@ targets:
         NpsApiKey: $(NPS_API_KEY)
         RecreationGovKey: $(RECREATION_GOV_KEY)
     settings:
-      PRODUCT_BUNDLE_IDENTIFIER: com.vaiybhav.verdure
+      PRODUCT_BUNDLE_IDENTIFIER: com.verdure-app.verdure
       ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
       SWIFT_STRICT_CONCURRENCY: minimal
       DEBUG_INFORMATION_FORMAT: dwarf-with-dsym
@@ -112,7 +112,7 @@ targets:
       - target: Verdure
     settings:
       GENERATE_INFOPLIST_FILE: YES
-      PRODUCT_BUNDLE_IDENTIFIER: com.vaiybhav.verdure.tests
+      PRODUCT_BUNDLE_IDENTIFIER: com.verdure-app.verdure.tests
   VerdureUITests:
     type: bundle.ui-testing
     platform: iOS
@@ -122,7 +122,7 @@ targets:
       - target: Verdure
     settings:
       GENERATE_INFOPLIST_FILE: YES
-      PRODUCT_BUNDLE_IDENTIFIER: com.vaiybhav.verdure.uitests
+      PRODUCT_BUNDLE_IDENTIFIER: com.verdure-app.verdure.uitests
       TEST_TARGET_NAME: Verdure
 schemes:
   Verdure:

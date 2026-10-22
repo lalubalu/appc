@@ -913,7 +913,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.vaiybhav.verdure.tests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.verdure-app.verdure.tests;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Verdure.app/Verdure";
@@ -933,7 +933,7 @@
 					"@executable_path/Frameworks",
 				);
 				OTHER_LDFLAGS = "$(inherited) -ObjC";
-				PRODUCT_BUNDLE_IDENTIFIER = com.vaiybhav.verdure;
+				PRODUCT_BUNDLE_IDENTIFIER = com.verdure-app.verdure;
 				SDKROOT = iphoneos;
 				SWIFT_STRICT_CONCURRENCY = minimal;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -954,7 +954,7 @@
 					"@executable_path/Frameworks",
 				);
 				OTHER_LDFLAGS = "$(inherited) -ObjC";
-				PRODUCT_BUNDLE_IDENTIFIER = com.vaiybhav.verdure;
+				PRODUCT_BUNDLE_IDENTIFIER = com.verdure-app.verdure;
 				SDKROOT = iphoneos;
 				SWIFT_STRICT_CONCURRENCY = minimal;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -1097,7 +1097,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.vaiybhav.verdure.uitests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.verdure-app.verdure.uitests;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_TARGET_NAME = Verdure;
@@ -1114,7 +1114,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.vaiybhav.verdure.uitests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.verdure-app.verdure.uitests;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_TARGET_NAME = Verdure;
@@ -1131,7 +1131,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.vaiybhav.verdure.tests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.verdure-app.verdure.tests;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Verdure.app/Verdure";

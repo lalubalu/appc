@@ -43,7 +43,7 @@
               "locale" : "en_US"
             }
           ],
-          "productID" : "com.vaiybhav.verdure.plus.monthly",
+          "productID" : "com.verdure-app.verdure.plus.monthly",
           "recurringSubscriptionPeriod" : "P1M",
           "referenceName" : "Verdure+ Monthly",
           "subscriptionGroupID" : "21734001",
@@ -71,7 +71,7 @@
               "locale" : "en_US"
             }
           ],
-          "productID" : "com.vaiybhav.verdure.plus.yearly",
+          "productID" : "com.verdure-app.verdure.plus.yearly",
           "recurringSubscriptionPeriod" : "P1Y",
           "referenceName" : "Verdure+ Yearly",
           "subscriptionGroupID" : "21734001",

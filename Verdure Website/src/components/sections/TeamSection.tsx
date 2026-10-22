@@ -32,12 +32,6 @@ let team = [
     initials: "AP",
   },
   {
-    name: "Vaiybhav Coimbatore",
-    role: "Chief Operating Officer",
-    bio: "Operations leader keeping Verdure running smoothly day to day.",
-    initials: "VC",
-  },
-  {
     name: "Vishvak Gurram",
     role: "Head of Product Strategy",
     bio: "Shaping Verdure's product direction, roadmap, and polish.",

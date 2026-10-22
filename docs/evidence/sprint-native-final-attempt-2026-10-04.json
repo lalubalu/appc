@@ -41,7 +41,7 @@
       "testName" : "testApprovedOwnerEditsVerifiedPlace()"
     },
     {
-      "failureText" : "Failed to application com.vaiybhav.verdure is not running",
+      "failureText" : "Failed to application com.verdure-app.verdure is not running",
       "targetName" : "VerdureUITests",
       "testIdentifier" : 147,
       "testIdentifierString" : "JourneyTests/testCuratedProgramActualSignInChipAndOfficialListingDetail()",

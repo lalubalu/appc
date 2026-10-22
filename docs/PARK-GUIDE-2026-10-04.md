@@ -101,7 +101,7 @@ license-expiry requirements. It is a local capture, not production data.
 ```sh
 cd Verdure
 xcrun simctl location D55D802A-6C43-4FD0-8E2F-65952BF28EB7 set 37.335,-121.89
-xcrun simctl privacy D55D802A-6C43-4FD0-8E2F-65952BF28EB7 grant location com.vaiybhav.verdure
+xcrun simctl privacy D55D802A-6C43-4FD0-8E2F-65952BF28EB7 grant location com.verdure-app.verdure
 xcodebuild -quiet -project Verdure.xcodeproj -scheme Verdure \
   -destination 'platform=iOS Simulator,name=iPhone 16 Plus' \
   -only-testing:VerdureTests/CoreLogicTests/testParkGeometryJoinsByBoundaryAndExcludesHoles \

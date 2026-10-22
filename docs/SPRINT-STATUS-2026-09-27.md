@@ -199,7 +199,7 @@ The account, budget, email, and owner request list for Rishit is in
   [moderation handoff](MODERATION-HANDOFF.md). They are different people.
   No live staff access exists while Functions remain undeployed.
 - Rishit will create a free Verdure GitHub organization. The repository still
-  lives at `github.com/vaiybhav/verdure-app`; transfer and admin verification
+  lives at `github.com/lalubalu/appc`; transfer and admin verification
   wait for the organization's slug and Rishit's GitHub identity.
 - The live website uses Vercel, but its owning account/team and plan could not
   be verified: the local CLI is logged out and the dashboard requires sign-in.

@@ -16,7 +16,7 @@ interrupted() {
 trap cleanup EXIT
 trap interrupted INT TERM
 FIRESTORE_EMULATOR_HOST=127.0.0.1:8899 FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 node "$root/functions/scripts/rewards-native-fixture.mjs" || exit $?
-xcrun simctl privacy "$simulator" grant location com.vaiybhav.verdure || exit $?
+xcrun simctl privacy "$simulator" grant location com.verdure-app.verdure || exit $?
 cd "$root/Verdure" || exit $?
 xcodebuild -quiet -project Verdure.xcodeproj -scheme Verdure -destination "platform=iOS Simulator,id=$simulator" \
   -only-testing:VerdureUITests/PartnerSurfaceTests/testLiveStaffWithdrawalDismissesOpenMapOffer \

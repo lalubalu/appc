@@ -6,8 +6,8 @@ import StoreKit
 //
 // Product IDs must match App Store Connect (and Verdure.storekit for local
 // simulator testing — the Verdure scheme points at it):
-//   com.vaiybhav.verdure.plus.monthly   $4.99/month
-//   com.vaiybhav.verdure.plus.yearly    $49.99/year
+//   com.verdure-app.verdure.plus.monthly   $4.99/month
+//   com.verdure-app.verdure.plus.yearly    $49.99/year
 //
 // TRUST MODEL. `isPlus` below is CLIENT state and drives UI only — which tiles
 // show a lock, whether the paywall appears. It is never the basis for granting
@@ -26,8 +26,8 @@ import StoreKit
 @MainActor @Observable
 final class StoreService {
 
-    static let monthlyID = "com.vaiybhav.verdure.plus.monthly"
-    static let yearlyID = "com.vaiybhav.verdure.plus.yearly"
+    static let monthlyID = "com.verdure-app.verdure.plus.monthly"
+    static let yearlyID = "com.verdure-app.verdure.plus.yearly"
     private static let allIDs: Set<String> = [monthlyID, yearlyID]
 
     // MARK: - Published State

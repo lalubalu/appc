@@ -59,9 +59,9 @@ firebase deploy --only firestore:rules,storage,functions
 Until you deploy `firestore.rules`, your database may still be in open **test mode**.
 
 ### 2. Fix the bundle-ID mismatch
-`GoogleService-Info.plist` is registered for `com.vaiybhav.connectify`, but the app is
-`com.vaiybhav.verdure`. Auth/Firestore work anyway, but to be clean:
-Firebase console → Project settings → **Add app** → iOS → bundle id `com.vaiybhav.verdure`
+`GoogleService-Info.plist` is registered for `com.verdure-app.connectify`, but the app is
+`com.verdure-app.verdure`. Auth/Firestore work anyway, but to be clean:
+Firebase console → Project settings → **Add app** → iOS → bundle id `com.verdure-app.verdure`
 → download the new `GoogleService-Info.plist` → replace `Verdure/Verdure/GoogleService-Info.plist`.
 
 ### 3. Go server-authoritative on points (anti-cheat)

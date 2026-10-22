@@ -55,13 +55,13 @@ const APPLE_IAP_PRIVATE_KEY = defineSecret("APPLE_IAP_PRIVATE_KEY");
 const APPLE_IAP_KEY_ID = defineSecret("APPLE_IAP_KEY_ID");
 const APPLE_IAP_ISSUER_ID = defineSecret("APPLE_IAP_ISSUER_ID");
 
-const APPLE_BUNDLE_ID = defineString("APPLE_BUNDLE_ID", { default: "com.vaiybhav.verdure" });
+const APPLE_BUNDLE_ID = defineString("APPLE_BUNDLE_ID", { default: "com.verdure-app.verdure" });
 /** Numeric Apple ID of the app. Required by the verifier in PRODUCTION. */
 const APPLE_APP_APPLE_ID = defineString("APPLE_APP_APPLE_ID", { default: "" });
 
 export const PLUS_PRODUCT_IDS = new Set([
-  "com.vaiybhav.verdure.plus.monthly",
-  "com.vaiybhav.verdure.plus.yearly",
+  "com.verdure-app.verdure.plus.monthly",
+  "com.verdure-app.verdure.plus.yearly",
 ]);
 
 /**

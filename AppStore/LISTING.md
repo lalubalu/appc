@@ -11,7 +11,7 @@ feature ships or is pulled, update this file in the same commit.
 |---|---|
 | App name | `Verdure` |
 | Subtitle (30 char max) | `Step Outside. Connect Within.` (29) |
-| Bundle ID | `com.vaiybhav.verdure` |
+| Bundle ID | `com.verdure-app.verdure` |
 | Primary category | Health & Fitness |
 | Secondary category | Travel |
 | Age rating | 4+ |
@@ -310,7 +310,7 @@ Captured at Apple's required 6.9" size (1320 × 2868) in `screenshots/6.9-inch/`
 - [ ] **Deploy the marketing site** so those two URLs actually resolve, then
       paste the live URLs into App Store Connect
 - [ ] Create the two subscriptions in App Store Connect
-      (`com.vaiybhav.verdure.plus.monthly`, `com.vaiybhav.verdure.plus.yearly`)
+      (`com.verdure-app.verdure.plus.monthly`, `com.verdure-app.verdure.plus.yearly`)
       with localized display names, and attach them to the app
 - [ ] Upgrade Firebase to Blaze and deploy Functions + Storage — **without this
       no check-in ever credits points and no proof photo uploads** (see the
