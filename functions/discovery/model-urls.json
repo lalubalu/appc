@@ -1,0 +1,6 @@
+{
+  "_comment": "W4.4 origin 5 — URL lists from the team's web-search model. Only ever URLs to INSPECT (robots, terms, feed probe, automatic decision); never events to ingest. The 2026-10-14 sample's events had all already happened, carried no dates or places, and four of five were already in Verdure; the one new host it found is below.",
+  "san-jose-ca": [
+    "https://careercenter.sjsu.edu/events/"
+  ]
+}

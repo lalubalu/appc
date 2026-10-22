@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(swift --version)",
+      "Bash(xcode-select -p)",
+      "Bash(xcodebuild -version)",
+      "Bash(brew install:*)",
+      "Bash(xcodegen generate:*)",
+      "Bash(xcodebuild -project Connectify.xcodeproj -scheme Connectify -destination 'platform=iOS Simulator,name=iPhone 16 Pro' build)",
+      "Bash(open:*)",
+      "Bash(gh auth:*)",
+      "Bash(git config:*)",
+      "Bash(gh repo:*)",
+      "Skill(run)",
+      "Bash(git remote *)",
+      "Bash(git push *)"
+    ]
+  },
+  "enabledMcpjsonServers": [
+    "shadcn"
+  ]
+}
