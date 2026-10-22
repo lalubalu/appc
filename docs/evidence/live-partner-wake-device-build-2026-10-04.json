@@ -8,5 +8,5 @@
   "crashSymbolUploadEnabled": false,
   "physicalInstallation": "UNTESTED",
   "physicalCrashDelivery": "UNTESTED",
-  "command": "xcodebuild -quiet -project Verdure.xcodeproj -scheme Verdure -configuration Debug -destination 'generic/platform=iOS' -derivedDataPath /tmp/verdure-physical-build-20261004 -clonedSourcePackagesDirPath ~/Library/Developer/Xcode/DerivedData/Verdure-ckiamburgvzsnwebbwligimtlijt/SourcePackages CODE_SIGNING_ALLOWED=NO VERDURE_UPLOAD_CRASH_SYMBOLS=NO build"
+  "command": "xcodebuild -quiet -project Verdure.xcodeproj -scheme Verdure -configuration Debug -destination 'generic/platform=iOS' -derivedDataPath /tmp/verdure-physical-build-20261004 -clonedSourcePackagesDirPath /Users/<developer>/Library/Developer/Xcode/DerivedData/Verdure-ckiamburgvzsnwebbwligimtlijt/SourcePackages CODE_SIGNING_ALLOWED=NO VERDURE_UPLOAD_CRASH_SYMBOLS=NO build"
 }

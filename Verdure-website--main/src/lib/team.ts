@@ -1,5 +1,5 @@
 /**
- * The six builders — real names, real roles, the approved lines. Shown on
+ * The five builders — real names, real roles, the approved lines. Shown on
  * the story page; nothing here may be invented or extended.
  */
 
@@ -30,11 +30,6 @@ export let TEAM: TeamMember[] = [
     name: "Advaith Prabhu",
     role: "Chief Financial Officer",
     line: "Handles the money side, from what the app costs to what partners chip in.",
-  },
-  {
-    name: "Vaiybhav Coimbatore",
-    role: "Chief Operating Officer",
-    line: "Makes the day-to-day run: local partners, logistics, and the unglamorous parts.",
   },
   {
     name: "Vishvak Gurram",

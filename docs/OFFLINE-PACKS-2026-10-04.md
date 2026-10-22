@@ -154,7 +154,7 @@ Run `node scripts/legal-pages-e2e.mjs` there. It blocks external browser request
 The local site is also required for the native Terms-link check.
 
 ```sh
-xcodebuild -quiet -project '~/Desktop/Connectify App-iOS/Verdure/Verdure.xcodeproj' -scheme Verdure -destination 'platform=iOS Simulator,id=D55D802A-6C43-4FD0-8E2F-65952BF28EB7' -parallel-testing-enabled NO -only-testing:VerdureTests -only-testing:VerdureUITests/JourneyTests/testOfflinePackSignInSizeDownloadRelaunchAndStoredTrailView test
+xcodebuild -quiet -project '/Users/<developer>/Desktop/Connectify App-iOS/Verdure/Verdure.xcodeproj' -scheme Verdure -destination 'platform=iOS Simulator,id=D55D802A-6C43-4FD0-8E2F-65952BF28EB7' -parallel-testing-enabled NO -only-testing:VerdureTests -only-testing:VerdureUITests/JourneyTests/testOfflinePackSignInSizeDownloadRelaunchAndStoredTrailView test
 
 # After native tests and inspection:
 FIRESTORE_EMULATOR_HOST=127.0.0.1:8899 FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 node functions/scripts/offline-native-fixture.mjs --clean
