@@ -16,6 +16,12 @@ struct VerdureApp: App {
 
     init() {
         #if DEBUG
+        // UI tests: start from the app's stored defaults as a reinstall would leave them,
+        // so onboarding can complete for real (a `-hasCompletedOnboarding` launch argument
+        // would pin the value and swallow the write that ends onboarding).
+        if UserDefaults.standard.bool(forKey: "QAFreshInstall"), let bundleID = Bundle.main.bundleIdentifier {
+            UserDefaults.standard.removePersistentDomain(forName: bundleID)
+        }
         unitTestHost = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil ||
             NSClassFromString("XCTestCase") != nil
         #else
