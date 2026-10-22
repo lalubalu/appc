@@ -33,3 +33,6 @@ firebase-export-*/
 /.sprint-firebase.json
 
 .sprint-regression-firebase.json
+
+# Local handoff archive (213 MB, over GitHub file limit)
+take it rishit.zip
