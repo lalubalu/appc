@@ -101,13 +101,13 @@ final class DemoWalkthroughUITests: XCTestCase {
     }
 
     /// Fresh install → onboarding → sign-in on the Auth emulator → main tabs.
-    private func onboardAndSignIn(_ app: XCUIApplication) {
+    private func onboardAndSignIn(_ app: XCUIApplication, email account: String = "demo-judge@example.test",
+                                  password: String = "local-demo-walkthrough", picks: [String] = ["Parks", "Community"]) {
         assertLoaded(app, "Onboarding", anchor: app.staticTexts["Step Outside.\nConnect Within."])
         snap(app, "onboarding")
-        let parks = app.buttons["Parks interest"].firstMatch
-        QA.continueUntil(parks, in: app)
-        parks.tap()
-        app.buttons["Community interest"].firstMatch.tap()
+        let first = app.buttons["\(picks[0]) interest"].firstMatch
+        QA.continueUntil(first, in: app)
+        for pick in picks { app.buttons["\(pick) interest"].firstMatch.tap() }
         snap(app, "onboarding-interests")
         continueTap(app)
 
@@ -117,9 +117,9 @@ final class DemoWalkthroughUITests: XCTestCase {
         let email = app.textFields["Email address"]
         XCTAssertTrue(email.waitForExistence(timeout: 8), "auth screen missing")
         snap(app, "sign-in")
-        type("demo-judge@example.test", into: email)
+        type(account, into: email)
         // Return closes the software keyboard, which otherwise covers the submit button.
-        type("local-demo-walkthrough\n", into: app.secureTextFields["Password"])
+        type(password + "\n", into: app.secureTextFields["Password"])
         let submit = app.buttons["authSubmit"]
         scrollTo(submit, in: app, maxSwipes: 4)
         submit.tap()
@@ -217,6 +217,22 @@ final class DemoWalkthroughUITests: XCTestCase {
         snap(app, "privacy")
     }
 
+    /// For You follows each account's own picks (accounts from
+    /// `scripts/foryou-interests-e2e.mjs --keep`): the ranked cards say which pick they match.
+    func testForYouFollowsEachAccountsPicks() {
+        for (account, picks, name) in [("foryou-student-trails@example.test", ["Parks", "Trails"], "foryou-student-trails"),
+                                       ("foryou-community-sports@example.test", ["Community", "Sports"], "foryou-community")] {
+            let app = launch()
+            onboardAndSignIn(app, email: account, password: "local-foryou-check", picks: picks)
+            let pick = picks.map { "label CONTAINS 'Because you like \($0)'" }.joined(separator: " OR ")
+            let ranked = app.buttons.matching(NSPredicate(format: pick)).firstMatch
+            XCTAssertTrue(ranked.waitForExistence(timeout: 30), "\(name): no For You card names one of \(picks)")
+            QA.reveal(ranked, in: app, maxSwipes: 4)
+            snap(app, name)
+            app.terminate()
+        }
+    }
+
     /// Planner with real nearby places and live weather. Needs the planner's model key on
     /// the local Functions emulator; without it the server answers "isn't configured yet".
     func testAdventurePlannerShowsPlanWithWeatherCredit() throws {
@@ -238,7 +254,8 @@ final class DemoWalkthroughUITests: XCTestCase {
         QA.reveal(run, in: app, maxSwipes: 4)
         run.tap()
         let credit = app.links["Weather data by Open-Meteo.com"]
-        let notConfigured = app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] \"isn't configured\"")).firstMatch
+        // AdventurePlannerService maps the server's failed-precondition to its own copy.
+        let notConfigured = app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] \"isn't configured\" OR label CONTAINS[c] \"isn't switched on\"")).firstMatch
         let done = NSPredicate { _, _ in credit.exists || notConfigured.exists }
         _ = XCTWaiter.wait(for: [expectation(for: done, evaluatedWith: nil)], timeout: 60)
         snap(app, "planner-result")

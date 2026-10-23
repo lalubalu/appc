@@ -132,6 +132,10 @@ struct RootView: View {
                             socialService.clearLocal()
                         }
                     }
+                    .onChange(of: authService.signupProfileSavedAt) { _, saved in
+                        guard saved != nil else { return }
+                        Task { await eventsService.refresh(around: locationManager.userCoordinate) }
+                    }
                     .onChange(of: authService.currentUser?.uid) { _, uid in
                         if authService.isAuthStateResolved { offlinePacks.connect(uid); economyService.connect(uid); LivePartnerAlerts.shared.connect(uid); refreshOfflinePacks() }
                     }

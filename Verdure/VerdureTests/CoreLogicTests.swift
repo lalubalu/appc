@@ -347,6 +347,27 @@ final class CoreLogicTests: XCTestCase {
         XCTAssertEqual(keys.map { UserDefaults.standard.object(forKey: $0) as? NSObject }, before)
     }
 
+    /// The auth listener (and with it the first For You fetch) fires at createUser, before the
+    /// profile exists. The refetch signal must come only once the picks are actually stored.
+    func testSignupSignalsProfileSavedOnlyAfterInterestsAreStored() async throws {
+        guard Firestore.firestore().settings.host == "127.0.0.1:8899", !Firestore.firestore().settings.isSSLEnabled else {
+            throw XCTSkip("Requires the explicitly local Firebase test host.")
+        }
+        let savedUser = UserDefaults.standard.object(forKey: "currentUserJSON")
+        let auth = AuthService()
+        XCTAssertNil(auth.signupProfileSavedAt)
+        let email = "signup-interests-\(UUID().uuidString.prefix(8).lowercased())@example.test"
+        try await auth.signUp(email: email, password: "local-signup-check", displayName: "Fictional Signup",
+                              birthYear: Calendar.current.component(.year, from: Date()) - 20,
+                              studentStatus: true, school: "Fictional School", interests: ["Parks", "Trails"])
+        XCTAssertNotNil(auth.signupProfileSavedAt)
+        let user = try XCTUnwrap(Auth.auth().currentUser)
+        let doc = try await Firestore.firestore().collection("users").document(user.uid).getDocument(source: .server)
+        XCTAssertEqual(Set(doc.data()?["interests"] as? [String] ?? []), ["Parks", "Trails"])
+        try? await user.delete()
+        UserDefaults.standard.set(savedUser, forKey: "currentUserJSON")
+    }
+
     private let gemKeys = ["dailyGem.splashDay", "dailyGem.indexDay", "dailyGem.todayIndex", "dailyGem.seenIndices"]
 
     override func setUp() async throws {
