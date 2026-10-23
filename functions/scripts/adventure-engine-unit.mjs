@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import {
   planOuting, openIntervals, kindOf, distanceKm, travel, DWELL, EngineError,
 } from "../lib/adventure-engine.js";
-import { sequenceEventsFallback, ASSUMED_EVENT_MINUTES } from "../lib/eventPlanner.js";
+import { sequenceEventsFallback, ASSUMED_EVENT_MINUTES, isAllDayListing } from "../lib/eventPlanner.js";
 
 let pass = 0, fail = 0;
 const ok = (name, cond, extra = "") => {
@@ -220,11 +220,24 @@ console.log("\n── event plan without a model ──");
   ok("in time order", ids.join(",") === ["c", "a", "d"].filter((x) => ids.includes(x)).join(","), ids.join(","));
   const chosen = ids.map((id) => rows.find((r) => r.id === id));
   ok("each event reachable after the one before", chosen.every((e, i) => i === 0 || e.startMs >= chosen[i - 1].startMs + ASSUMED_EVENT_MINUTES * 60_000));
-  ok("whys are factual: start time and venue", plan.stops.every((s) => /^Starts \d{1,2}:\d{2} (am|pm) at Venue /.test(s.why)));
-  ok("walk/drive between events is stated", plan.stops.slice(1).every((s) => /(walk|drive) from the last one|same venue/.test(s.why)));
+  const whyOf = (id) => plan.stops.find((s) => s.eventId === id)?.why ?? "";
+  ok("the best-ranked event (not just the earliest) says why it leads, with its host",
+    /^Your best-ranked match for these choices · .*hosted by Org\./.test(whyOf("a")) && !/best-ranked/.test(whyOf("c")), `${whyOf("a")} | ${whyOf("c")}`);
+  ok("every later stop gives the walk/drive from the one before and the gap", plan.stops.slice(1).every((s) =>
+    /(\d+-min (walk|drive) from |Same venue as ).+ · starts \d/.test(s.why)), plan.stops.map((s) => s.why).join(" | "));
+  ok("no why repeats the card's time or venue", plan.stops.every((s) => !/\d{1,2}:\d{2} (am|pm)|Venue /.test(s.why)));
   ok("a friend going is mentioned only when true", !plan.stops.some((s) => /friend/.test(s.why))
     && /a friend is going/.test(sequenceEventsFallback([ev("f", "With Friends", 12, 0, 0, { social: 0.85 })]).stops[0].why));
-  ok("title and intro carry no AI claim", !/\bAI\b/.test(plan.title + plan.intro) && /events in time order/.test(plan.intro));
+  ok("title and intro carry no AI claim", !/\bAI\b/.test(plan.title + plan.intro) && /timed events in order/.test(plan.intro));
+  // A day-long listing (midnight start, 23:59:59 end) is "any time that day", never "12:00 am".
+  const allDay = ev("z", "Spooky Season Scavenger Hunt", 0, 0, 0.001, { allDay: true });
+  const withAllDay = sequenceEventsFallback([allDay, rows[2], rows[0], rows[3]]);
+  ok("a day-long listing never gives the plan a midnight start", !/12:00 am/.test(withAllDay.title + withAllDay.intro),
+    `${withAllDay.title} | ${withAllDay.intro}`);
+  ok("…its why says it runs all day", /runs all day/.test(withAllDay.stops.find((s) => s.eventId === "z")?.why ?? ""));
+  ok("…and the timed events still chain in order", withAllDay.stops.filter((s) => s.eventId !== "z").map((s) => s.eventId).join(",") === "c,a");
+  ok("isAllDayListing: midnight start + 23:59:59 end, or 'All day'", isAllDayListing(at(0), at(23, 59) + 59_000, "12:00 AM")
+    && isAllDayListing(at(10), undefined, "All day") && !isAllDayListing(at(0), at(2), "12:00 AM") && !isAllDayListing(at(15), at(23, 59), "3:00 PM"));
 }
 
 console.log(`\n══ ${pass} passed, ${fail} failed ══`);

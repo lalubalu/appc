@@ -217,7 +217,7 @@ struct EventsView: View {
                     Button { selectedEvent = event } label: {
                         HStack(alignment: .top, spacing: Spacing.md) {
                             VStack(alignment: .leading, spacing: 6) {
-                                Text(event.date.formatted(date: .abbreviated, time: .shortened))
+                                Text(event.whenText)
                                     .font(VType.body(11, .bold)).foregroundStyle(Palette.spruce.base)
                                 Text(event.title).font(VType.display(19, .semibold)).foregroundStyle(Palette.ink)
                                 Text("\(event.locationName) · \(event.sourceLabel)")
@@ -624,7 +624,7 @@ private struct EventPoster: View {
                 .padding(.top, 4)
 
             HStack(spacing: 12) {
-                Label(event.time, systemImage: "clock.fill")
+                Label(event.displayTime, systemImage: "clock.fill")
                 Label(event.locationName, systemImage: "mappin")
             }
             .font(VType.body(12, .semibold)).foregroundStyle(on.opacity(0.85)).lineLimit(1).padding(.top, 10)
@@ -1349,7 +1349,7 @@ struct EventDetailSheet: View {
     private var detailGrid: some View {
         VStack(spacing: Spacing.sm) {
             detailRow("calendar", event.isProgram ? "Deadline" : "Date", dateFormatter.string(from: event.date))
-            detailRow("clock.fill", "Time", event.time)
+            detailRow("clock.fill", "Time", event.displayTime)
             detailRow("mappin.circle.fill", "Location", event.locationName)
             if !event.isProgram {
             if let max = event.maxAttendees { detailRow("person.2.fill", "Capacity", "\(event.attendeeCount) / \(max)") }
@@ -2200,7 +2200,7 @@ private struct EventCalendarView: View {
             ClayIconTile(systemImage: event.imagePlaceholder, kind: event.category.clayKind, size: 44, radius: Radius.chip)
             VStack(alignment: .leading, spacing: 2) {
                 Text(event.title).font(VType.display(15, .semibold)).foregroundStyle(Palette.ink).lineLimit(1)
-                Text("\(event.time) · \(event.locationName)")
+                Text("\(event.displayTime) · \(event.locationName)")
                     .font(VType.body(12, .medium)).foregroundStyle(Palette.inkSoft).lineLimit(1)
             }
             Spacer(minLength: Spacing.sm)

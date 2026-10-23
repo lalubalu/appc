@@ -307,7 +307,7 @@ struct PlaceDetailView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(event.title).font(VType.display(14, .semibold)).foregroundStyle(Palette.ink)
                                 .lineLimit(1)
-                            Text("\(event.date.formatted(date: .abbreviated, time: .omitted)) · \(event.time)")
+                            Text("\(event.date.formatted(date: .abbreviated, time: .omitted)) · \(event.displayTime)")
                                 .font(VType.body(12)).foregroundStyle(Palette.inkSoft).lineLimit(1)
                         }
                         Spacer()

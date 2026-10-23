@@ -368,6 +368,30 @@ final class CoreLogicTests: XCTestCase {
         UserDefaults.standard.set(savedUser, forKey: "currentUserJSON")
     }
 
+    /// BiblioCommons lists day-long events as a midnight start ("12:00 AM") ending 23:59:59.
+    /// 422 of the 8,126 San José listings looked like that and showed "at 12:00 AM".
+    func testDayLongListingsShowAllDayNotMidnight() {
+        let midnight = Calendar.current.startOfDay(for: Calendar.current.date(byAdding: .day, value: 1, to: .now)!)
+        func event(time: String, start: Date, end: Date?) -> Event {
+            var e = Event(id: "all-day-\(time)", title: "Spooky Season Scavenger Hunt", organizer: "San José Public Library",
+                          date: start, time: time, locationName: "Biblioteca Latinoamericana", attendeeCount: 0,
+                          maxAttendees: nil, category: .social, imagePlaceholder: "sparkles", pointValue: 0)
+            e.endDate = end
+            return e
+        }
+        let dayLong = event(time: "12:00 AM", start: midnight, end: midnight.addingTimeInterval(86_399))
+        XCTAssertTrue(dayLong.isAllDay)
+        XCTAssertEqual(dayLong.displayTime, "All day")
+        XCTAssertTrue(dayLong.whenText.hasSuffix(" · All day"), dayLong.whenText)
+        XCTAssertFalse(dayLong.whenText.contains("12:00"), dayLong.whenText)
+        XCTAssertTrue(event(time: "All day", start: midnight, end: nil).isAllDay)
+        let timed = event(time: "3:00 PM", start: midnight.addingTimeInterval(15 * 3600), end: midnight.addingTimeInterval(17 * 3600))
+        XCTAssertFalse(timed.isAllDay)
+        XCTAssertEqual(timed.displayTime, "3:00 PM")
+        // A real event that genuinely starts at midnight and runs two hours keeps its time.
+        XCTAssertFalse(event(time: "12:00 AM", start: midnight, end: midnight.addingTimeInterval(7200)).isAllDay)
+    }
+
     private let gemKeys = ["dailyGem.splashDay", "dailyGem.indexDay", "dailyGem.todayIndex", "dailyGem.seenIndices"]
 
     override func setUp() async throws {

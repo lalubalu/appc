@@ -225,18 +225,16 @@ final class DemoWalkthroughUITests: XCTestCase {
         }
     }
 
-    /// Planner with real nearby places and live weather. Needs the planner's model key on
-    /// the local Functions emulator; without it the server answers "isn't configured yet".
+    /// The Adventure Planner with no model key: the server's deterministic planner builds a
+    /// plan from the real nearby places (live OpenStreetMap or the bundled dated snapshot)
+    /// and live Open-Meteo weather. No skip: an empty planner is a failure.
     func testAdventurePlannerShowsPlanWithWeatherCredit() throws {
         let app = launch()
         onboardAndSignIn(app)
         app.buttons["Places"].firstMatch.tap()
         let open = app.buttons["Plan my adventure"].firstMatch
         QA.reveal(open, in: app, maxSwipes: 6)
-        if !open.waitForExistence(timeout: loadTimeout) {
-            // ExploreView offers the planner only with two or more places that have coordinates.
-            throw XCTSkip("Planner entry hidden: fewer than two nearby places (OpenStreetMap/Overpass unreachable).")
-        }
+        XCTAssertTrue(open.waitForExistence(timeout: loadTimeout), "planner entry missing: nearby places did not load")
         open.tap()
         // The sheet's CTA shares the tile's label; take the one on top (the sheet).
         XCTAssertTrue(app.staticTexts["How long have you got?"].waitForExistence(timeout: loadTimeout), "planner sheet missing")
@@ -245,17 +243,39 @@ final class DemoWalkthroughUITests: XCTestCase {
         snap(app, "planner")
         QA.reveal(run, in: app, maxSwipes: 4)
         run.tap()
-        let credit = app.links["Weather data by Open-Meteo.com"]
-        // AdventurePlannerService maps the server's failed-precondition to its own copy.
-        let notConfigured = app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] \"isn't configured\" OR label CONTAINS[c] \"isn't switched on\"")).firstMatch
-        let done = NSPredicate { _, _ in credit.exists || notConfigured.exists }
-        _ = XCTWaiter.wait(for: [expectation(for: done, evaluatedWith: nil)], timeout: 60)
-        snap(app, "planner-result")
-        if notConfigured.exists {
-            throw XCTSkip("Local Functions emulator has no ANTHROPIC_API_KEY (functions/.secret.local); the planner cannot run here.")
-        }
+        // Inside this sheet SwiftUI exposes the Link as a button; match the credit by its label.
+        let credit = app.descendants(matching: .any)["Weather data by Open-Meteo.com"].firstMatch
         assertLoaded(app, "Planner plan", anchor: credit)
+        let stops = app.staticTexts.matching(NSPredicate(format: "label MATCHES %@", "^[0-9]+ min$"))
+        XCTAssertGreaterThanOrEqual(stops.count, 2, "a plan has at least two stops")
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'from where you started'")).firstMatch.exists,
+                      "the intro gives the start, finish and distance home")
+        XCTAssertEqual(app.staticTexts.matching(NSPredicate(format: "label MATCHES %@", ".*\\bAI\\b.*")).count, 0, "plans never claim AI")
+        snap(app, "planner-plan")
         scrollTo(credit, in: app, maxSwipes: 3)
-        snap(app, "credit-weather-planner")
+        snap(app, "credit-weather")
+        // The rest of the plan, every stop with its time and reason.
+        app.swipeUp()
+        QA.settle(credit)
+        snap(app, "planner-stops")
+    }
+
+    /// The Plan tab's event planner with no model key: real events in a reachable order.
+    func testEventPlannerSequencesRealEvents() {
+        let app = launch()
+        onboardAndSignIn(app)
+        tab(app, "Plan")
+        let find = app.buttons["Find real events"]
+        QA.reveal(find, in: app, maxSwipes: 6)
+        XCTAssertTrue(find.waitForExistence(timeout: loadTimeout), "Find real events missing")
+        find.tap()
+        let first = app.staticTexts["STOP 01"]
+        QA.reveal(first, in: app, maxSwipes: 6)
+        assertLoaded(app, "Event plan", anchor: first)
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Your best-ranked match'")).firstMatch.waitForExistence(timeout: 5),
+                      "the best-ranked event says why it leads")
+        let second = app.staticTexts["STOP 02"]
+        QA.reveal(second, in: app, maxSwipes: 4)
+        snap(app, "planner-events")
     }
 }
