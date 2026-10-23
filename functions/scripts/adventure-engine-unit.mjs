@@ -240,5 +240,24 @@ console.log("\n── event plan without a model ──");
     && isAllDayListing(at(10), undefined, "All day") && !isAllDayListing(at(0), at(2), "12:00 AM") && !isAllDayListing(at(15), at(23, 59), "3:00 PM"));
 }
 
+console.log("\n── model key ──");
+{
+  const { modelKey } = await import("../lib/model-key.js");
+  const saved = process.env.ANTHROPIC_API_KEY;
+  const writes = [];
+  const original = { log: console.log, warn: console.warn, error: console.error, out: process.stdout.write, err: process.stderr.write };
+  console.log = console.warn = console.error = (...a) => writes.push(a.join(" "));
+  process.stdout.write = process.stderr.write = (chunk) => { writes.push(String(chunk)); return true; };
+  delete process.env.ANTHROPIC_API_KEY;
+  const empty = modelKey();
+  process.env.ANTHROPIC_API_KEY = "  configured-value  ";
+  const set = modelKey();
+  Object.assign(console, { log: original.log, warn: original.warn, error: original.error });
+  process.stdout.write = original.out; process.stderr.write = original.err;
+  if (saved === undefined) delete process.env.ANTHROPIC_API_KEY; else process.env.ANTHROPIC_API_KEY = saved;
+  ok("no key: empty, and nothing is logged", empty === "" && writes.length === 0, JSON.stringify(writes));
+  ok("a configured key is read (trimmed)", set === "configured-value");
+}
+
 console.log(`\n══ ${pass} passed, ${fail} failed ══`);
 process.exit(fail ? 1 : 0);

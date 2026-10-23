@@ -1,6 +1,7 @@
 /** Event planner: a model sequences verified event IDs from Verdure's own
  * ranker. Every model ID is checked against candidate documents before return.
  * Refinements stay in Firestore and do not spend another model call. */
+import { modelKey } from "./model-key.js";
 import { randomBytes } from "node:crypto";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret, defineString } from "firebase-functions/params";
@@ -329,7 +330,7 @@ export const planEvents = onCall({ secrets: [ANTHROPIC_API_KEY] }, async (req) =
   });
   let plan = fallbackPlan(candidates);
   let modelUsed = false;
-  const key = ANTHROPIC_API_KEY.value();
+  const key = modelKey();
   if (key && candidates.length >= 2) {
     try { plan = await sequenceWithModel(candidates, key); modelUsed = true; }
     catch (error) { console.warn("[planEvents] deterministic fallback:", error); }

@@ -22,6 +22,7 @@
  *   firebase functions:secrets:set ANTHROPIC_API_KEY
  */
 
+import { modelKey } from "./model-key.js";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret, defineString } from "firebase-functions/params";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
@@ -378,7 +379,7 @@ export const planAdventure = onCall(
 
     // The model path is used only when a key is configured; without one, or if the call
     // fails, the deterministic engine plans from the same candidates (adventure-engine.ts).
-    const apiKey = ANTHROPIC_API_KEY.value();
+    const apiKey = modelKey();
     let plan: { title: string; intro: string; stops: Array<{
       placeId: string; name: string; category: string | null; latitude: number | null; longitude: number | null;
       order: number; minutes: number; why: string; }> } | null = null;
