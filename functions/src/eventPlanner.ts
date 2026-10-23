@@ -171,10 +171,74 @@ async function sequenceWithModel(candidates: EventPlanCandidate[], key: string):
   return { title: safeText(raw.title, 80) || "Your plan", intro: safeText(raw.intro, 300), stops };
 }
 
-const fallbackPlan = (rows: EventPlanCandidate[]) => ({
-  title: "A plan nearby", intro: "Real events that fit your choices.",
-  stops: rows.slice(0, 3).map((e) => ({ eventId: e.id, why: `${e.category} at ${e.locationName}.` })),
-});
+/** Event length when the listing gives none: long enough to attend, short enough to chain. */
+export const ASSUMED_EVENT_MINUTES = 90;
+
+function clockLA(ms: number): string {
+  return new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", hour: "numeric", minute: "2-digit" })
+    .format(ms).replace(" AM", " am").replace(" PM", " pm");
+}
+
+function legMinutes(a: EventPlanCandidate, b: EventPlanCandidate): { minutes: number; text: string } | null {
+  if (a.latitude === undefined || a.longitude === undefined || b.latitude === undefined || b.longitude === undefined) return null;
+  const km = haversineMiles(a.latitude, a.longitude, b.latitude, b.longitude) * 1.609344;
+  if (km < 0.05) return { minutes: 0, text: "same venue" };
+  if (km < 1.2) { const m = Math.max(1, Math.round((km * 1.3) / 5 * 60)); return { minutes: m, text: `${m}-min walk` }; }
+  const m = Math.round((km * 1.3) / 35 * 60) + 2;
+  return { minutes: m, text: `${m}-min drive` };
+}
+
+/**
+ * The plan without a model: Verdure's own ranking picks the first event, then later
+ * events on the same day that can actually be reached after it (assumed length plus
+ * travel), up to three, in time order. Every phrase comes from a listing field.
+ */
+export function sequenceEventsFallback(rows: EventPlanCandidate[]): {
+  title: string; intro: string; stops: Array<{ eventId: string; why: string }>;
+} {
+  if (!rows.length) return { title: "A plan nearby", intro: "", stops: [] };
+  const first = rows[0];
+  const day = localISODate(first.startMs);
+  const chosen: EventPlanCandidate[] = [first];
+  // Earlier events on the same day may come before the first pick; the chain is built in time order.
+  const sameDay = rows.slice(1).filter((e) => localISODate(e.startMs) === day);
+  for (const e of sameDay) {
+    if (chosen.length >= 3) break;
+    const timeline = [...chosen, e].sort((a, b) => a.startMs - b.startMs);
+    const fits = timeline.every((x, i) => {
+      if (i === 0) return true;
+      const prev = timeline[i - 1];
+      const leg = legMinutes(prev, x);
+      return x.startMs >= prev.startMs + (ASSUMED_EVENT_MINUTES + (leg?.minutes ?? 20)) * 60_000;
+    });
+    if (fits && !chosen.some((c) => c.title === e.title)) chosen.push(e);
+  }
+  chosen.sort((a, b) => a.startMs - b.startMs);
+  const weekday = new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", weekday: "long" }).format(first.startMs);
+  const stops = chosen.map((e, i) => {
+    const facts = [`Starts ${clockLA(e.startMs)}`, e.locationName ? `at ${e.locationName}` : ""].filter(Boolean).join(" ");
+    const parts = [facts];
+    if (i > 0) {
+      const leg = legMinutes(chosen[i - 1], e);
+      if (leg) parts.push(leg.minutes === 0 ? "same venue as the last one" : `${leg.text} from the last one`);
+    }
+    parts.push(e.isFree ? "free" : e.priceMin !== undefined ? `from $${e.priceMin}` : "price on the listing");
+    if (e.social >= 0.69) parts.push("a friend is going");
+    if (e.organizer && i === 0) parts.push(`hosted by ${e.organizer}`);
+    return { eventId: e.id, why: `${parts.join(" · ")}.` };
+  });
+  const last = chosen[chosen.length - 1];
+  const free = chosen.every((e) => e.isFree);
+  const title = chosen.length === 1 ? `${weekday}: ${first.title}`.slice(0, 80)
+    : `${weekday}: ${chosen.length} events from ${clockLA(chosen[0].startMs)}`;
+  const intro = chosen.length === 1
+    ? `Only one matching event fits that day, at ${clockLA(first.startMs)}.`
+    : `${chosen.length} events in time order, ${clockLA(chosen[0].startMs)} to about ${clockLA(last.startMs + ASSUMED_EVENT_MINUTES * 60_000)}, ` +
+      `each reachable after the one before.${free ? " All free." : ""}`;
+  return { title, intro, stops };
+}
+
+const fallbackPlan = (rows: EventPlanCandidate[]) => sequenceEventsFallback(rows);
 
 export const planEvents = onCall({ secrets: [ANTHROPIC_API_KEY] }, async (req) => {
   const uid = requireUid(req.auth);
