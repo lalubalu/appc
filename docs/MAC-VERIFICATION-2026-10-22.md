@@ -85,7 +85,10 @@ The public Overpass server (`overpass-api.de`, the app's only OpenStreetMap sour
 capacity during this session: the app's query timed out or returned "502 … All query workers
 are busy and the request queue is full" on every attempt. With no `osm-` places loaded, the
 credits are correctly hidden, and the planner refuses with fewer than two nearby places, so
-neither could be shown. Repeat on recording day once Overpass answers.
+neither could be shown. A watcher retried every few minutes from 23:30 to 04:02 PDT and never
+got an answer; at 04:05 the two public mirrors (`overpass.kumi.systems`,
+`overpass.private.coffee`) timed out too, while GitHub and Open-Meteo answered normally.
+Repeat on recording day once Overpass answers.
 
 Overpass now answers 406 to generic user agents (`curl/…`, `Mozilla/5.0`) and 200 to an
 identifying one, so `PlacesAPIService.queryOverpass` now sends `Verdure/1.0 (+https://verdure-app.com)`
