@@ -26,7 +26,7 @@ None of the four W5 risk spots in `docs/W5-APP-EXPERIENCE-2026-10-20.md` needed 
 | Suite | Result |
 |---|---|
 | `VerdureTests` | **143 passed, 1 skipped, 0 failed** (144) |
-| `VerdureUITests` | **47 of 48 passed** (one open failure, below) |
+| `VerdureUITests` | **48 of 48 passed** (after the park-directory fix below) |
 
 Connected tests need seeded emulators; with them down every "actual SDK" test fails on
 "Could not connect". Seeding used for this run (from the repo root, emulators up):
@@ -55,11 +55,13 @@ Fixed while running:
   packs" set `minHeight: 44` outside the button, so the hit area stayed text-sized; the frame
   now sits inside the label with a content shape.
 
-Open: `JourneyTests.testParkTrailMapShowsOfficialNoticeWithoutRouteGuidance` — searching
-"Los Gatos Creek" in the park directory never shows `county-boundaries_20`. The callable
-returns it (7 pages, 614 parks within 10 mi, the County park at 5.7 mi) and the app's loader
-receives and decodes it, but the rendered `LazyVStack` ends at the 3.3 mi city trails. No park
-code changed since the last green run (`706e1ee`); not resolved here.
+Fixed after the first pass: `JourneyTests.testParkTrailMapShowsOfficialNoticeWithoutRouteGuidance`.
+On one iPhone 16 Pro simulator, searching "Los Gatos Creek" in the park directory loaded all 12
+matches, but the `LazyVStack` underestimated its height (mixed row heights) and the last result,
+the County park, could never be scrolled into view; a real user could hit the same. Rebuilding
+the stack per query (`.id(search)`) did not help; laying out a short result list (≤ 100 rows,
+which covers any search) eagerly did, and the full directory stays lazy. The test now passes on
+that simulator twice in a row and on a fresh iPhone 16 Pro.
 
 ## Backend (emulator)
 
@@ -85,10 +87,9 @@ are busy and the request queue is full" on every attempt. With no `osm-` places 
 credits are correctly hidden, and the planner refuses with fewer than two nearby places, so
 neither could be shown. Repeat on recording day once Overpass answers.
 
-Side finding: Overpass now answers 406 to generic user agents (`curl/…`, `Mozilla/5.0`) and
-200 to an identifying one. The app's default `Verdure/… CFNetwork/… Darwin/…` agent is
-accepted today; setting an explicit identifying `User-Agent` in `PlacesAPIService.queryOverpass`
-would keep it that way.
+Overpass now answers 406 to generic user agents (`curl/…`, `Mozilla/5.0`) and 200 to an
+identifying one, so `PlacesAPIService.queryOverpass` now sends `Verdure/1.0 (+https://verdure-app.com)`
+rather than relying on the default CFNetwork agent.
 
 ## Firebase iOS app re-registration
 

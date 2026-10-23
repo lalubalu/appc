@@ -128,6 +128,8 @@ final class PlacesAPIService {
         request.httpMethod = "POST"
         request.httpBody = "data=\(query)".data(using: .utf8)
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        // Overpass answers 406 to generic agents (seen 2026-10-22); identify the app.
+        request.setValue("Verdure/1.0 (+https://verdure-app.com)", forHTTPHeaderField: "User-Agent")
         request.timeoutInterval = 20
 
         let (data, response) = try await URLSession.shared.data(for: request)

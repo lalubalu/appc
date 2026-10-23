@@ -25,11 +25,18 @@ struct ParkDirectoryView: View {
                 if service.refreshDelayed {
                     Text("Showing the last complete park update. The latest refresh is delayed.").font(VType.body(13)).foregroundStyle(Palette.inkSoft)
                 }
-                ForEach(service.filtered(state: filters.state, query: search)) { park in
-                    NavigationLink { ParkGuideView(parkID: park.id) } label: { ParkGuideRow(park: park) }
-                        .buttonStyle(.plain).accessibilityIdentifier("park-guide:\(park.id)")
+                let results = service.filtered(state: filters.state, query: search)
+                // A short list (any search) lays out eagerly: lazily, the mixed row
+                // heights left the stack's height estimate short and the last result
+                // could not be scrolled into view (iPhone 16 Pro, 2026-10-22).
+                if results.count <= 100 {
+                    VStack(alignment: .leading, spacing: Spacing.md) {
+                        ForEach(results) { park in parkLink(park) }
+                    }
+                } else {
+                    ForEach(results) { park in parkLink(park) }
                 }
-                if !service.isLoading && service.lastError == nil && service.filtered(state: filters.state, query: search).isEmpty {
+                if !service.isLoading && service.lastError == nil && results.isEmpty {
                     Text("No park guides match these choices. Try a wider radius or fewer filters.").font(VType.body(15))
                 }
             }.padding(Spacing.md).padding(.bottom, 110)
@@ -41,6 +48,11 @@ struct ParkDirectoryView: View {
             await service.load(around: location.userCoordinate, radiusMiles: filters.state.radiusMiles)
         }
         .refreshable { await service.load(around: location.userCoordinate, radiusMiles: filters.state.radiusMiles, force: true) }
+    }
+
+    private func parkLink(_ park: ParkSummary) -> some View {
+        NavigationLink { ParkGuideView(parkID: park.id) } label: { ParkGuideRow(park: park) }
+            .buttonStyle(.plain).accessibilityIdentifier("park-guide:\(park.id)")
     }
 }
 
