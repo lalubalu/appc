@@ -35,6 +35,7 @@ import { Timestamp, FieldValue } from "firebase-admin/firestore";
 import { db, requireUid, enforceRateLimit, safeText, blockedSetFor, utcMonthKey, plusActiveFrom } from "./common.js";
 import type { InterestProfile } from "./profiles.js";
 import { friendIds } from "./friendships.js";
+import { TOPIC_TO_INTEREST } from "./ingest/annotate.js";
 import { createFeedSession } from "./feedTelemetry.js";
 import { rankEventsV2, reasonsForV1, constraintsFromFilters, applyFeedback, coerceRankingConfig, EXCLUDING_ACTIONS, ACTION_WEIGHTS,
   type V2Constraints, type AffinityState, type RankingVersion, type RankingConfig, type ClientFilterInput } from "./ranking-v2.js";
@@ -79,7 +80,11 @@ export const INTEREST_TO_CATEGORY: Record<string, string[]> = {
 /** Deterministic semantic aliases for common interest language. Kept small
  * enough to audit against real listings before considering embeddings. */
 export const INTEREST_SYNONYMS: Record<string, string[]> = {
-  outdoors: ["trail", "nature walk", "birding", "wildflower", "hike", "hiking", "park", "garden"],
+  // Nouns in a place context only: bare "park" matched "please park strollers" and "park at the
+  // 4th Street garage"; bare "garden" matched home-gardening talks indoors.
+  outdoors: ["trail", "nature walk", "birding", "bird walk", "wildflower", "hike", "hiking", "the park", "in the park",
+    "parks", "park ranger", "park cleanup", "state park", "county park", "regional park", "open space", "preserve",
+    "creek", "community garden", "botanical garden", "garden tour", "garden walk", "garden workday"],
   hiking: ["trail", "nature walk", "birding", "wildflower", "ramble", "guided walk", "hike"],
   fitness: ["run", "running", "yoga", "bike", "cycling", "dance fitness", "walk"],
   volunteering: ["volunteer", "service day", "stewardship", "restore", "restoration", "cleanup", "tree planting"],
@@ -97,10 +102,20 @@ export const INTEREST_SYNONYMS: Record<string, string[]> = {
  * ("Rose Garden branch", "Educational Park branch") is a venue, not a topic: left in,
  * an English class there matched "park"/"garden" and was labelled "Because you like Parks".
  */
-export function interestText(ev: Pick<RankableEvent, "title" | "description" | "tags">): string {
-  const words = [ev.title, ev.description, ...(ev.tags ?? [])].filter(Boolean).join(" ").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+const LIBRARY_SOURCES = new Set(["bibliocommons", "libcal"]);
+const plain = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+export function interestText(ev: Pick<RankableEvent, "title" | "description" | "tags"> &
+  Partial<Pick<RankableEvent, "source" | "locationName">>): string {
+  let text = ` ${plain([ev.title, ev.description, ...(ev.tags ?? [])].filter(Boolean).join(" "))} `;
+  // A library listing's branch is its venue, not its topic: "OneinMath at Educational Park",
+  // "Mitchell Park Library", "Rose Garden" were matching Parks/Gardens.
+  if (ev.source && LIBRARY_SOURCES.has(ev.source) && ev.locationName) {
+    const branch = plain(ev.locationName.split("·")[0]).replace(/\b(branch|library|biblioteca)\b/g, " ").replace(/\s+/g, " ").trim();
+    if (branch) text = text.split(` ${branch} `).join(" ");
+  }
   // SJPL listings are bilingual, so the Spanish form ("biblioteca Rose Garden") goes too.
-  return ` ${words} `.replace(/ (?:[a-z]+ (?:park|garden) branch|biblioteca [a-z]+ (?:park|garden))(?= )/g, " ");
+  return text.replace(/ (?:[a-z]+ (?:park|garden) branch|biblioteca [a-z]+ (?:park|garden))(?= )/g, " ");
 }
 
 /**
@@ -464,6 +479,55 @@ export function rankableFromDoc(d: FirebaseFirestore.DocumentSnapshot): Rankable
   };
 }
 
+/** How far ahead, and how far away, the interest pool looks (the onboarding default radius). */
+export const INTEREST_WINDOW_DAYS = 14;
+export const DEFAULT_RETRIEVAL_RADIUS_MILES = 15;
+const INTEREST_POOL_LIMIT = 120;
+
+/** The topic tags annotate.ts assigns, for a set of ranking interests (inverse of TOPIC_TO_INTEREST;
+ * "hiking" rides on the outdoors tag). Firestore's array-contains-any takes at most 10. */
+export function topicsForInterests(interests: readonly string[]): string[] {
+  const topics = new Set<string>();
+  for (const interest of interests) {
+    const want = interest === "hiking" ? "outdoors" : interest;
+    for (const [tag, list] of Object.entries(TOPIC_TO_INTEREST)) if (list.includes(want)) topics.add(tag);
+  }
+  return Array.from(topics).sort().slice(0, 10);
+}
+
+/** Interest pool events within the user's radius (events with no coordinates can't be shown to be). */
+export function withinRadius(events: RankableEvent[], ctx: Pick<RankingContext, "lat" | "lng" | "radiusMiles">): RankableEvent[] {
+  if (ctx.lat === undefined || ctx.lng === undefined) return events;
+  const radius = ctx.radiusMiles ?? DEFAULT_RETRIEVAL_RADIUS_MILES;
+  return events.filter((ev) => ev.latitude !== undefined && ev.longitude !== undefined &&
+    haversineMiles(ctx.lat!, ctx.lng!, ev.latitude, ev.longitude) <= radius);
+}
+
+/**
+ * Upcoming events (next 14 days) tagged with the user's interests. The area snapshot is
+ * interest-blind — the soonest 180, the best 70 and 15 per category — so with 8,000+
+ * listings a hiker's hikes rarely reached ranking at all. One bounded query per topic set,
+ * cached five minutes and shared by everyone with the same picks.
+ */
+async function interestCandidates(areaId: string, interests: readonly string[], nowMs: number): Promise<RankableEvent[]> {
+  const topics = topicsForInterests(interests);
+  if (!topics.length) return [];
+  const cacheRef = db.collection("feedCaches").doc(`${areaId}__interest__${topics.join("+")}`);
+  const saved = (await cacheRef.get()).data();
+  if (Number(saved?.cachedAtMs) > nowMs - CACHE_MS && Array.isArray(saved?.events)) return saved.events as RankableEvent[];
+  const snap = await db.collection("events").where("areaId", "==", areaId).where("active", "==", true)
+    .where("topicTags", "array-contains-any", topics)
+    .where("date", ">=", Timestamp.fromMillis(nowMs - 3_600_000))
+    .where("date", "<=", Timestamp.fromMillis(nowMs + INTEREST_WINDOW_DAYS * 86_400_000))
+    .orderBy("date").limit(INTEREST_POOL_LIMIT).get();
+  const events = snap.docs.map(rankableFromDoc).filter((ev): ev is RankableEvent => ev !== null && ev.startMs >= nowMs);
+  await cacheRef.set({ cachedAtMs: nowMs, events });
+  await db.collection("treasury").doc(utcMonthKey()).set({
+    readTelemetry: { candidateDocuments: FieldValue.increment(snap.size) },
+  }, { merge: true });
+  return events;
+}
+
 /** Minor protection (W2): an adult-only listing never reaches a viewer who is not a recorded adult. */
 export function minorSafe<T extends { adultOnly?: boolean }>(events: T[], viewerIsAdult: boolean | undefined): T[] {
   return viewerIsAdult ? events : events.filter((ev) => ev.adultOnly !== true);
@@ -681,6 +745,10 @@ export async function recommendFor(
   ]);
   const version: RankingVersion = options.version ?? config.version;
   const candidates = new Map(shared.filter((ev) => ev.startMs >= nowMs).map((ev) => [ev.id, ev]));
+  // The user's interests reach ranking even when the shared snapshot holds none of them.
+  for (const ev of withinRadius(await interestCandidates(areaId, ctx.interests, nowMs), ctx)) {
+    if (ev.startMs >= nowMs) candidates.set(ev.id, ev);
+  }
   // Social candidates bypass the area and category sweeps; a friend going is
   // useful even when the event is far away or outside stated interests.
   const socialIds = Object.keys(ctx.friendsGoing).slice(0, 60);

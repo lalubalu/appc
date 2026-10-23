@@ -9,7 +9,7 @@
 import {
   WEIGHTS, WEIGHT_SUM, rankEvents, scoreEvent, interestScore, distanceScore,
   socialScore, timingScore, noveltyScore, feedbackScore, haversineMiles, INTEREST_TO_CATEGORY,
-  normalizeInterests,
+  normalizeInterests, topicsForInterests, withinRadius, DEFAULT_RETRIEVAL_RADIUS_MILES,
 } from "../lib/ranking.js";
 import { reasonsForV1 } from "../lib/ranking-v2.js";
 
@@ -332,6 +332,32 @@ console.log("\n── the app's own interest labels (onboarding saves PlaceCateg
   ok("…and its reasons never claim the user's pick", !ellWhy.some((r) => r.startsWith("Because you like")), JSON.stringify(ellWhy));
   ok("a real garden or park listing still matches",
      interestScore(ev("g", { title: "Community Garden Workday in the park", category: "Volunteer" }), picks) >= 0.9);
+}
+
+console.log("\n── interest retrieval and false matches ──");
+{
+  ok("interests map to the topic tags the annotator assigns", JSON.stringify(topicsForInterests(["outdoors", "hiking"])) === JSON.stringify(["outdoors"])
+     && topicsForInterests(["community"]).join(",") === "civic,community,social" && topicsForInterests([]).length === 0);
+  const sj = { lat: 37.3352, lng: -121.8811 };
+  const at = (id, dLat) => ({ id, latitude: sj.lat + dLat, longitude: sj.lng, startMs: 0 });
+  const near = at("near", 0.1), far = at("far", 0.3), none = { id: "none", startMs: 0 };   // ~7 mi, ~21 mi
+  ok(`the interest pool keeps events within the user's radius (default ${DEFAULT_RETRIEVAL_RADIUS_MILES} mi)`,
+     withinRadius([near, far, none], sj).map((e) => e.id).join(",") === "near"
+     && withinRadius([near, far], { ...sj, radiusMiles: 25 }).length === 2);
+  const picks = { ...baseCtx, ...(() => { const n = normalizeInterests(["Parks", "Trails"]); return { interests: n.interests, interestLabels: n.labels }; })() };
+  // Real San José listings (2026-10-23) that matched "park"/"garden" without being outdoors.
+  const library = (title, description, locationName) => ev(title, { title, description, locationName, source: "bibliocommons", category: "Workshop" });
+  ok("a library branch named for a park is not a Parks match (venue, not topic)",
+     interestScore(library("OneinMath: Math Program for K-3rd at Educational Park", "Math games for kids.", "Educational Park · Community Room"), picks) === 0
+     && interestScore(library("Teen Lounge", "Meet at Mitchell Park Library.", "Mitchell Park Library · Teen Room"), picks) === 0);
+  ok("'park' as a verb is not a Parks match",
+     interestScore(library("Pipe Cleaner Flowers", "It is recommended to park at the 4th Street garage.", "King Library · TeenHQ"), picks) === 0
+     && interestScore(library("Baby Storytime", "Please park strollers in the rear.", "Saratoga Library · Community room"), picks) === 0);
+  ok("a home-gardening talk indoors is not a Parks match",
+     interestScore(library("Master Gardeners: Wild at Home", "Turn your garden into a thriving habitat.", "Willow Glen · Community Room"), picks) === 0);
+  ok("real outdoor listings still match", interestScore(ev("m1", { title: "Explorer Hike: Lichen Eyes", category: "Sports", source: "midpen" }), picks) >= 0.9
+     && interestScore(ev("m2", { title: "Evening at the park", description: "Meet in the park by the creek.", category: "Social" }), picks) >= 0.9
+     && interestScore(ev("m3", { title: "Community Garden Workday", category: "Volunteer" }), picks) >= 0.9);
 }
 
 console.log(`\n══ ${pass} passed, ${fail} failed ══`);
