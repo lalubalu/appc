@@ -107,12 +107,16 @@ struct OfflinePackBuilderView: View {
                         if service.isWorking { ProgressView(value: service.progress) }
                         if finished {
                             Label("Pack downloaded", systemImage: "checkmark.circle.fill").font(VType.body(17, .semibold)).foregroundStyle(Palette.spruce.base)
-                            NavigationLink("Open your packs") { OfflinePacksView() }.frame(minHeight: 44)
+                            NavigationLink { OfflinePacksView() } label: {
+                                Text("Open your packs").frame(minHeight: 44).contentShape(Rectangle())
+                            }
                         } else {
                             ClayButton("Download pack", systemImage: "arrow.down.circle.fill", kind: .spruce, fullWidth: true) {
                                 Task { do { try await service.download(preview); finished = true } catch { self.error = error.localizedDescription } }
                             }.disabled(service.isWorking || !NetworkStatus.shared.isOnline).accessibilityIdentifier("downloadOfflinePack")
-                            Button("Change selection") { Task { await service.cancel(preview.packId); self.preview = nil } }.frame(minHeight: 44).disabled(service.isWorking)
+                            Button { Task { await service.cancel(preview.packId); self.preview = nil } } label: {
+                                Text("Change selection").frame(minHeight: 44).contentShape(Rectangle())
+                            }.disabled(service.isWorking)
                         }
                     }.padding(Spacing.md).claySurface(.surface, radius: Radius.md)
                 } else {
@@ -144,7 +148,9 @@ struct OfflinePackBuilderView: View {
                 }
                 if !NetworkStatus.shared.isOnline { Text("Downloading is available when you're back online.").font(VType.body(14)) }
                 if let error { Text(error).font(VType.body(14)).foregroundStyle(Palette.inkSoft) }
-                Button("Verdure+ details") { showPaywall = true }.frame(minHeight: 44).tint(Palette.spruce.base)
+                Button { showPaywall = true } label: {
+                    Text("Verdure+ details").frame(minHeight: 44).contentShape(Rectangle())
+                }.tint(Palette.spruce.base)
             }.padding(Spacing.md).padding(.bottom, 110)
         }.background(VerdureBackground()).navigationTitle("Download a pack").navigationBarTitleDisplayMode(.inline)
         .task {

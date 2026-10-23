@@ -22,8 +22,10 @@ final class CoreLogicTests: XCTestCase {
 
     func testVolunteerSupplyReadsCompletePublicCorpusBeyondFirstDiscoveryPage() async throws {
         try? Auth.auth().signOut()
+        // Signed out, the W2 rules deny any /events list that does not itself
+        // constrain adultOnly == false; the app's own queries do the same.
         let query = Firestore.firestore().collection("events")
-            .whereField("hidden", isEqualTo: false).whereField("active", isEqualTo: true)
+            .whereField("hidden", isEqualTo: false).whereField("adultOnly", isEqualTo: false).whereField("active", isEqualTo: true)
             .whereField("broadcast", isEqualTo: true).whereField("category", isEqualTo: "Volunteer")
             .whereField("date", isGreaterThan: Timestamp(date: Date())).order(by: "date")
         var expected: Set<String> = [], cursor: DocumentSnapshot?

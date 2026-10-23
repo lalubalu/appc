@@ -281,7 +281,7 @@ reported on a Windows machine without Xcode says "not run" for iOS, never
 - [ ] Deploy rules + storage + **indexes** + functions (see checklist), then re-verify live state and update DEPLOY STATUS from the read-backs
 - [ ] Seed `config/ranking` (`functions/seed/ranking-config.json`) and `/sources` (`node scripts/migrate-sources.mjs --live`) after the first functions deploy
 - [ ] Record the live discovery fixtures once (`node scripts/discovery-e2e.mjs --record` under `emulators:exec`) so the W4 E2E replays offline; run the W6.1 blind judge before `config/ranking.version` moves to `v2`
-- [ ] Build and run the iOS suites on a Mac — every Swift change since 2026-10-18 (adult-aware queries, `Event.adultOnly`, W5 reasons/hide/series) is **not compiled** on the Windows machine this sprint ran on
+- [x] ~~Build and run the iOS suites on a Mac~~ — done 2026-10-22 (`docs/MAC-VERIFICATION-2026-10-22.md`): unit 143 + 1 skipped, UI 47/48; the park-directory journey test is still open
 - [ ] Create the two Verdure+ subscriptions in App Store Connect (`com.verdure-app.verdure.plus.monthly` / `.yearly` — local testing uses `Verdure/Verdure.storekit` via the Verdure scheme)
 - [ ] **Real-device QA (2 phones)** — script written at `DEVICE-QA.md`; needs hardware. Runs 2 and 3 also need the backend live.
 - [ ] Fund a Tremendous account + map reward ids → product ids (`TREMENDOUS_CATALOG`); flip `TREMENDOUS_ENV=production` in `functions/.env`

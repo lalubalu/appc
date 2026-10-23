@@ -89,9 +89,9 @@ struct MainTabView: View {
             default: initial = .discover
             }
         }
-        showCollectionOnLaunch = UserDefaults.standard.string(forKey: "QATab")?.lowercased() == "collect" ||
-            UserDefaults.standard.string(forKey: "QATab")?.lowercased() == "collection"
-        communityOnLaunch = UserDefaults.standard.string(forKey: "QATab")?.lowercased() == "community"
+        let qaTab = UserDefaults.standard.string(forKey: "QATab")?.lowercased()
+        _showCollectionOnLaunch = State(initialValue: qaTab == "collect" || qaTab == "collection")
+        _communityOnLaunch = State(initialValue: qaTab == "community")
         #endif
         _selected = State(initialValue: initial)
         _discoverMode = State(initialValue: initialMode)

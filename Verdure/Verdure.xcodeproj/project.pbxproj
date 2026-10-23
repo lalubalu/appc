@@ -19,6 +19,7 @@
 		15F1D2FBA27BA06AF8AC5B74 /* StoreService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 786310F264DB5643723C30F3 /* StoreService.swift */; };
 		1880A39FB396F2170D37D781 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 90080ED01EE002D32C04C263 /* FirebaseFirestore */; };
 		1B4E60C4F67AAD34CF30F7E3 /* ReportSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF36072B8344A4A056F64ACA /* ReportSheet.swift */; };
+		1C40AF0161C4321FBFDABC0B /* RankedFeedReasonsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D55D4BC23DEA2CC5CD420A7 /* RankedFeedReasonsTests.swift */; };
 		1F7927DF3BE8349CA2AFE194 /* ExploreCamera.swift in Sources */ = {isa = PBXBuildFile; fileRef = 019CE3AE26EE78BF7F9A6B7E /* ExploreCamera.swift */; };
 		22120ECA07B1B77879A90DD8 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 719DCF94E40C512549A1CADC /* OnboardingView.swift */; };
 		237324EFC606CFFE6E57ABAC /* VerdureTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7009DBDF066E6A4E973BD540 /* VerdureTheme.swift */; };
@@ -167,6 +168,7 @@
 		18435643F4C1731E6A07A618 /* AccountType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountType.swift; sourceTree = "<group>"; };
 		18D37ABD5658791FD46C6AA8 /* RarityBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RarityBadge.swift; sourceTree = "<group>"; };
 		1C5DEE879934EC46DB64A8A8 /* PlacesAPIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacesAPIService.swift; sourceTree = "<group>"; };
+		1D55D4BC23DEA2CC5CD420A7 /* RankedFeedReasonsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RankedFeedReasonsTests.swift; sourceTree = "<group>"; };
 		1E690517E9D387A2E5A6DFDE /* VerdureTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = VerdureTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1F0A2817279DC71C68D1D3AC /* PartnerDiscoveryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PartnerDiscoveryService.swift; sourceTree = "<group>"; };
 		20CB77B69D321A7C73C16B98 /* AuthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthView.swift; sourceTree = "<group>"; };
@@ -410,6 +412,7 @@
 				35355FC02B4A9218E6515000 /* PersonalStatsTests.swift */,
 				A8A15DD2D818029BDBCCF938 /* PlaceStoryTests.swift */,
 				5CF8C22C5DBB568BC62903BA /* QAIsolationTests.swift */,
+				1D55D4BC23DEA2CC5CD420A7 /* RankedFeedReasonsTests.swift */,
 				9CB37DD05B2559698C6E6BAB /* RewardCatalogParityTests.swift */,
 				C37808C10A968425FD24434F /* RewardsLiveCatalogTests.swift */,
 				040EE3EF01F3E4F0A91994C4 /* StreakInsuranceTests.swift */,
@@ -795,6 +798,7 @@
 				E71AB0167C0E7945F6D16378 /* PersonalStatsTests.swift in Sources */,
 				BD90E26EA76314D3030C2FFC /* PlaceStoryTests.swift in Sources */,
 				D0C2BC360F5CC7A37D3AC1B5 /* QAIsolationTests.swift in Sources */,
+				1C40AF0161C4321FBFDABC0B /* RankedFeedReasonsTests.swift in Sources */,
 				2B3ADA409FC954403B28A947 /* RewardCatalogParityTests.swift in Sources */,
 				D6BEA70D871C4ED72C0594B0 /* RewardsLiveCatalogTests.swift in Sources */,
 				D37ED433A939E89079AA0E1F /* StreakInsuranceTests.swift in Sources */,
@@ -913,7 +917,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.verdure-app.verdure.tests;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.verdure-app.verdure.tests";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Verdure.app/Verdure";
@@ -933,7 +937,7 @@
 					"@executable_path/Frameworks",
 				);
 				OTHER_LDFLAGS = "$(inherited) -ObjC";
-				PRODUCT_BUNDLE_IDENTIFIER = com.verdure-app.verdure;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.verdure-app.verdure";
 				SDKROOT = iphoneos;
 				SWIFT_STRICT_CONCURRENCY = minimal;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -954,7 +958,7 @@
 					"@executable_path/Frameworks",
 				);
 				OTHER_LDFLAGS = "$(inherited) -ObjC";
-				PRODUCT_BUNDLE_IDENTIFIER = com.verdure-app.verdure;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.verdure-app.verdure";
 				SDKROOT = iphoneos;
 				SWIFT_STRICT_CONCURRENCY = minimal;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -1097,7 +1101,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.verdure-app.verdure.uitests;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.verdure-app.verdure.uitests";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_TARGET_NAME = Verdure;
@@ -1114,7 +1118,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.verdure-app.verdure.uitests;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.verdure-app.verdure.uitests";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_TARGET_NAME = Verdure;
@@ -1131,7 +1135,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.verdure-app.verdure.tests;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.verdure-app.verdure.tests";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Verdure.app/Verdure";
