@@ -14,7 +14,7 @@ import XCTest
         let submit = app.buttons["authSubmit"]
         QA.reveal(submit, in: app, maxSwipes: 4)
         QA.waitFor(submit, "Sign-in submit").tap()
-        QA.waitFor(app.buttons["openOfflinePacks"], "Signed-in profile", timeout: 30)
+        QA.waitForSignedIn(app)
         let notifications = app.buttons["Notifications"]
         QA.reveal(notifications, in: app, maxSwipes: 25)
         QA.waitFor(notifications, "Notifications settings").tap()

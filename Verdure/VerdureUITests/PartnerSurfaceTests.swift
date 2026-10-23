@@ -27,7 +27,7 @@ import XCTest
         let submit = app.buttons["authSubmit"]
         QA.reveal(submit, in: app, maxSwipes: 4)
         QA.waitFor(submit, "sign-in submit").tap()
-        QA.waitFor(app.buttons["openOfflinePacks"], "signed-in profile", timeout: 30)
+        QA.waitForSignedIn(app)
         return app
     }
 

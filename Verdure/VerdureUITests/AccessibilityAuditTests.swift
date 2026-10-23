@@ -56,6 +56,7 @@ final class AccessibilityAuditTests: XCTestCase {
         // The tile sits below the fold when few sample places are in range (simulator
         // location); bring it above the floating tab bar so the tap reaches it.
         for _ in 0..<6 where !(entry.isHittable && entry.frame.maxY < app.frame.height - 140) { app.swipeUp() }
+        QA.settle(entry)
         entry.tap()
         QA.waitFor(app.staticTexts["How long have you got?"], "planner sheet")
         try QA.audit(app, screen: "adventure-planner")

@@ -19,7 +19,7 @@ final class JourneyTests: XCTestCase {
         let submit = app.buttons["authSubmit"]
         QA.reveal(submit, in: app, maxSwipes: 4)
         QA.waitFor(submit, "sign-in submission").tap()
-        QA.waitFor(app.buttons["openOfflinePacks"], "signed-in profile", timeout: 30)
+        QA.waitForSignedIn(app)
         app.terminate()
         app = QA.launch(tab: "events", extraArguments: ["-QAOfflineData", "NO", "-QAUseFirestoreEmulator", "YES"])
         let filterButton = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Filters")).firstMatch
@@ -67,6 +67,7 @@ final class JourneyTests: XCTestCase {
             if centerY > 240 && centerY < app.frame.height - 160 { break }
             if centerY >= app.frame.height - 160 { app.swipeUp() } else { app.swipeDown() }
         }
+        QA.settle(card)   // a tap while the swipe still coasts only stops the scroll
         card.tap()
         let opened = XCTAttachment(screenshot: app.screenshot()); opened.name = "Program after card tap"; opened.lifetime = .keepAlways; add(opened)
         let official = app.buttons["programOfficialListing"]
@@ -92,7 +93,7 @@ final class JourneyTests: XCTestCase {
         let submit = app.buttons["authSubmit"]
         QA.reveal(submit, in: app, maxSwipes: 4)
         QA.waitFor(submit, "actual sign-in submission").tap()
-        QA.waitFor(app.buttons["openOfflinePacks"], "signed-in profile", timeout: 30)
+        QA.waitForSignedIn(app)
         app.terminate()
         app = QA.launch(tab: "profile", extraArguments: ["-QAOfflineData", "NO", "-QAUseFirestoreEmulator", "YES"])
         let packs = app.buttons["openOfflinePacks"]
@@ -381,6 +382,7 @@ final class JourneyTests: XCTestCase {
         let tile = QA.waitFor(app.buttons.matching(NSPredicate(
             format: "label BEGINSWITH 'Today\\'s Gem'")).firstMatch, "gem tile")
         for _ in 0..<8 where tile.frame.midY > app.frame.height - 160 { app.swipeUp() }
+        QA.settle(tile)
         tile.tap()
         let gem = QA.waitFor(app.staticTexts["Daily Gem"], "gem splash title")
         _ = gem

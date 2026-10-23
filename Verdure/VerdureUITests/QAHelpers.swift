@@ -118,10 +118,22 @@ enum QA {
 
     /// Scroll until `element` is hittable AND clear of the floating tab bar. XCUITest
     /// reports a row under the bar as hittable, and the tap then lands on a tab.
+    /// An element already on screen is dragged just far enough (held, so no momentum); a full
+    /// swipe would fling a row that sits just under the bar up beneath the pinned search field.
     static func reveal(_ element: XCUIElement, in app: XCUIApplication, maxSwipes: Int = 20) {
         var swiped = false
-        for _ in 0..<maxSwipes where !(element.exists && element.isHittable && element.frame.maxY < app.frame.height - 140) {
-            app.swipeUp(); swiped = true
+        let height = app.frame.height
+        for _ in 0..<maxSwipes where !(element.exists && element.isHittable && element.frame.maxY < height - 140) {
+            let frame = element.exists ? element.frame : .zero
+            if frame.minY > 0, frame.minY < height {
+                let lift = min(frame.maxY - (height - 180), height * 0.5)
+                let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.8))
+                start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: -max(lift, 60))),
+                            withVelocity: .slow, thenHoldForDuration: 0.3)
+            } else {
+                app.swipeUp()
+            }
+            swiped = true
         }
         if swiped { settle(element) }
     }
@@ -149,6 +161,18 @@ enum QA {
             if cta.waitForExistence(timeout: 5) { cta.tap() }
         }
         XCTAssertTrue(target.waitForExistence(timeout: 8), "onboarding never reached \(target)", file: file, line: line)
+    }
+
+    /// Signed in = the auth sheet is gone and Profile no longer offers "Sign in". The
+    /// "openOfflinePacks" row is on the signed-out Profile too, so waiting on it returned at
+    /// once and a test that terminated next killed the sign-in still in flight.
+    static func waitForSignedIn(_ app: XCUIApplication, timeout: TimeInterval = 30,
+                                file: StaticString = #filePath, line: UInt = #line) {
+        let signedIn = NSPredicate { _, _ in
+            !app.buttons["authSubmit"].exists && !app.buttons["profileSignIn"].exists && app.buttons["openOfflinePacks"].exists
+        }
+        let result = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: signedIn, object: nil)], timeout: timeout)
+        XCTAssertEqual(result, .completed, "sign-in did not complete", file: file, line: line)
     }
 
     /// Wait helper with a clear failure message.

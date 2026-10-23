@@ -38,7 +38,7 @@ import XCTest
         let submit = app.buttons["authSubmit"]
         QA.reveal(submit, in: app, maxSwipes: 4)
         QA.waitFor(submit, "Submit").tap()
-        QA.waitFor(app.buttons["openOfflinePacks"], "Signed-in profile", timeout: 30)
+        QA.waitForSignedIn(app)
         let organizer = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Organizer profile Fictional Native Story Organizer")).firstMatch
         QA.reveal(organizer, in: app, maxSwipes: 25)
         QA.waitFor(organizer, "Approved organizer profile").tap()
