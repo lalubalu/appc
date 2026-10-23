@@ -125,7 +125,9 @@ console.log("── terms.ts ──");
     ["cdm-org-terms.html", "Children's Discovery Museum: restrictive clause (commercial)", (c) => c !== null && /commercial/i.test(c.action)],
     ["developer-active-com-terms.html", "ACTIVE API terms: restrictive clause", (c) => c !== null],
     ["events-sjsu-edu-terms.html", "SJSU Localist: the platform boilerplate matches (recorded, not applied: .edu)", (c) => c !== null],
-    ["sjpl-bibliocommons-com-terms.html", "SJPL BiblioCommons: the platform boilerplate matches (recorded, not applied: library platform)", (c) => c !== null],
+    // The recorded page carries no restrictive clause; the live decide stored exactly that
+    // ("no restrictive clause on …/info/terms", docs/evidence/discovery-cycle-2026-10-21.md).
+    ["sjpl-bibliocommons-com-terms.html", "SJPL BiblioCommons: no restrictive clause on the recorded /info/terms (matches the live evidence)", (c) => c === null],
     ["openspace-org-terms.html", "Midpen (openspace.org): no restrictive clause", (c) => c === null],
   ];
   for (const [file, name, check] of named) {
