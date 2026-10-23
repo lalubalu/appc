@@ -34,6 +34,20 @@ final class GameStateManagerTests: XCTestCase {
 
     private func freshManager() -> GameStateManager { GameStateManager() }
 
+    /// A real fresh install (no QA fixture flag) must start with nothing earned. The demo
+    /// seed used to run unconditionally: 280 points, two sample check-ins and a sample
+    /// collection that sign-in then synced into the user's Firestore document.
+    func testFreshInstallStartsEmptyOutsideTheFixtureHarness() {
+        UserDefaults.standard.removeObject(forKey: "gameStateSeeded_v2")
+        UserDefaults.standard.removeObject(forKey: "QAOfflineData")
+        XCTAssertFalse(SampleData.isEnabled)
+        let gs = freshManager()
+        XCTAssertEqual(gs.pointsBalance, 0)
+        XCTAssertEqual(gs.lifetimePoints, 0)
+        XCTAssertTrue(gs.collectedPlaceIDs.isEmpty)
+        XCTAssertTrue(gs.checkedInEventIDs.isEmpty)
+    }
+
     // Fixtures use their OWN ids: SampleData ids are refused at the earn boundary
     // (fabricated content can never earn), so a test that used them would prove
     // nothing.

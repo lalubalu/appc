@@ -474,7 +474,8 @@ struct EventsView: View {
                 emptyDeck
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 16) {
+                    // Lazy: the deck shows one poster at a time but can hold hundreds of events.
+                    LazyHStack(spacing: 16) {
                         ForEach(displayEvents) { event in
                             EventPoster(event: event, isCheckedIn: gameState.isCheckedIn(event.id))
                                 .containerRelativeFrame(.horizontal, count: 1, span: 1, spacing: 16)

@@ -413,6 +413,7 @@ struct ExploreView: View {
                                 NearbyCard(place: place, collected: isCollected(place))
                             }
                             .buttonStyle(Card3DButtonStyle())
+                            .accessibilityIdentifier(place.id.hasPrefix("osm-") ? "nearbyPlaceCard-osm" : "nearbyPlaceCard-other")
                         }
                     }
                     .padding(.vertical, 4)
