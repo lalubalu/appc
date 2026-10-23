@@ -61,7 +61,9 @@ export const WEIGHT_SUM = Object.values(WEIGHTS).reduce((a, b) => a + b, 0);
 
 /** The app's interest labels map onto ingest categories. */
 export const INTEREST_TO_CATEGORY: Record<string, string[]> = {
-  outdoors: ["Cleanup", "Sports", "Market", "Festival"],
+  // Hikes and stewardship ingest as Sports/Cleanup. Market/Festival made concerts and book
+  // sales "match Parks" once the app's labels reached this map (nothing sent "outdoors" before).
+  outdoors: ["Cleanup", "Sports"],
   fitness: ["Sports", "Cleanup"],
   volunteering: ["Volunteer", "Cleanup"],
   arts: ["Workshop", "Festival", "Market"],
@@ -88,6 +90,32 @@ export const INTEREST_SYNONYMS: Record<string, string[]> = {
   community: ["community", "neighborhood", "meetup", "social", "volunteer"],
   family: ["family", "kids", "children", "storytime", "all ages"],
 };
+
+/**
+ * The app saves onboarding picks as its place-category labels ("Parks", "Trails", …),
+ * not the interest words above. Without this map only "Community" matched anything,
+ * so stated interests barely moved the feed. Unknown labels pass through lowercased.
+ */
+export const APP_INTEREST_LABELS: Record<string, string[]> = {
+  parks: ["outdoors"], trails: ["outdoors", "hiking"], gardens: ["outdoors"], scenic: ["outdoors"],
+  waterfront: ["outdoors"], playgrounds: ["family"], sports: ["fitness"], community: ["community"],
+};
+
+/** App labels → ranking interests, plus which picked label produced each one (for reasons). */
+export function normalizeInterests(raw: readonly string[]): { interests: string[]; labels: Record<string, string[]> } {
+  const interests: string[] = [];
+  const labels: Record<string, string[]> = {};
+  for (const label of raw) {
+    const key = String(label).trim().toLowerCase();
+    if (!key) continue;
+    const mapped = APP_INTEREST_LABELS[key];
+    for (const interest of mapped ?? [key]) {
+      if (!interests.includes(interest)) interests.push(interest);
+      if (mapped) (labels[interest] ??= []).includes(label) || labels[interest].push(String(label).trim());
+    }
+  }
+  return { interests, labels };
+}
 
 export interface RankableEvent {
   id: string;
@@ -120,7 +148,10 @@ export interface RankableEvent {
 }
 
 export interface RankingContext {
+  /** Normalized ranking interests (see normalizeInterests). */
   interests: string[];
+  /** Ranking interest → the app labels the user picked that produced it ("hiking" → ["Trails"]). */
+  interestLabels?: Record<string, string[]>;
   studentStatus?: boolean;
   school?: string;
   householdYoungestAge?: number;
@@ -211,9 +242,12 @@ export function interestScore(ev: RankableEvent, ctx: RankingContext): number {
     behavioural = Math.min(1, (ctx.attendedCategories[cat] ?? 0) / Math.max(1, attendedTotal / 2));
   }
 
+  // A stated interest the event matches must outrank the student opportunity floor, so
+  // once interests are stated the floor only lifts opportunities that match one of them.
+  const student = hasStated && stated === 0 ? 0 : studentFloor;
   if (!hasStated) return Math.max(behavioural, studentFloor, familyFloor, accessibilityFloor);
-  if (attendedTotal === 0) return Math.max(stated, studentFloor, familyFloor, accessibilityFloor);
-  return Math.max(0.4 * stated + 0.6 * behavioural, studentFloor, familyFloor, accessibilityFloor);
+  if (attendedTotal === 0) return Math.max(stated, student, familyFloor, accessibilityFloor);
+  return Math.max(0.4 * stated + 0.6 * behavioural, student, familyFloor, accessibilityFloor);
 }
 
 /**
@@ -476,7 +510,8 @@ export async function loadContext(uid: string, lat?: number, lng?: number, nowMs
   const plus = plusActiveFrom(u, nowMs);
   const active = plus && typeof u.interestProfiles === "object" && u.interestProfiles !== null
     ? u.interestProfiles[safeText(u.activeProfileId, 64)] as InterestProfile | undefined : undefined;
-  const interests = active && Array.isArray(active.interests) ? active.interests : defaultInterests;
+  const picked = active && Array.isArray(active.interests) ? active.interests : defaultInterests;
+  const { interests, labels: interestLabels } = normalizeInterests(picked);
 
   // Behaviour: categories of events already attended.
   const attendedCategories: Record<string, number> = {};
@@ -523,7 +558,7 @@ export async function loadContext(uid: string, lat?: number, lng?: number, nowMs
   const childAges: number[] = Array.isArray(u.householdChildAges)
     ? u.householdChildAges.filter((v: unknown): v is number => typeof v === "number" &&
       Number.isInteger(v) && v >= 0 && v <= 17) : [];
-  return { interests, studentStatus: u.studentStatus === true, school: safeText(u.school, 100),
+  return { interests, interestLabels, studentStatus: u.studentStatus === true, school: safeText(u.school, 100),
     householdYoungestAge: childAges.length > 0
       ? Math.min(...childAges)
       : Number.isInteger(u.householdYoungestAge) && u.householdYoungestAge >= 0 &&

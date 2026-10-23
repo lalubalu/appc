@@ -222,7 +222,7 @@ await step("rank: v1 and v2 for a synthetic adult and a synthetic 15-year-old (r
 // v2: the check from ranking-v2-unit.mjs (each reason text ↔ a component above its threshold; parts carry the components).
 const v2ReasonBacked = (r) => r.reasons.every((text) => {
   const c = r.parts;
-  if (text.startsWith("Matches your interest")) return c.interest === 1;
+  if (text.startsWith("Matches your interest") || text.startsWith("Because you like")) return c.interest === 1;
   if (text.startsWith("Close by") || text.startsWith("Near your selected area")) return c.distance > 0.5;
   if (text.startsWith("Online")) return c.distance === 0.7;
   if (text === "Happening today" || text === "This weekend") return c.soonness > 0;

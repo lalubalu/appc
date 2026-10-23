@@ -9,7 +9,9 @@
 import {
   WEIGHTS, WEIGHT_SUM, rankEvents, scoreEvent, interestScore, distanceScore,
   socialScore, timingScore, noveltyScore, feedbackScore, haversineMiles, INTEREST_TO_CATEGORY,
+  normalizeInterests,
 } from "../lib/ranking.js";
+import { reasonsForV1 } from "../lib/ranking-v2.js";
 
 let pass = 0, fail = 0;
 const ok = (name, cond, extra = "") => {
@@ -251,6 +253,69 @@ console.log("\n── scoring shape ──");
      s.score >= 0 && s.score <= 1 && Object.values(s.parts).every((p) => p >= 0 && p <= 1), JSON.stringify(s));
   ok("parts are returned so a placement can be explained on-device",
      ["interest", "distance", "social", "timing", "novelty"].every((k) => k in s.parts));
+}
+
+console.log("\n── the app's own interest labels (onboarding saves PlaceCategory raw values) ──");
+{
+  // The app writes "Parks", "Trails", … to users/{uid}.interests. Before normalization only
+  // "Community" matched anything, so a hiker's For You filled with career and dev listings.
+  const n = normalizeInterests(["Parks", "Trails", "Playgrounds", "Sports", "Community", "outdoors", "Mystery"]);
+  ok("app labels map onto ranking interests; unknown labels pass through",
+     ["outdoors", "hiking", "family", "fitness", "community", "mystery"].every((i) => n.interests.includes(i)), JSON.stringify(n));
+  ok("each mapped interest remembers the label the user picked",
+     n.labels.hiking?.[0] === "Trails" && n.labels.outdoors?.includes("Parks") && n.labels.fitness?.[0] === "Sports");
+
+  // A mixed slate at comparable distance (~2.5 mi): outdoor programs (Midpen-style hikes are
+  // classified Sports), community meetups, and deliberately well-structured opportunity listings
+  // (higher quality, free, sooner). Distance stays the heaviest weight by design, so the slate
+  // holds it level to isolate what the user picked.
+  const outdoor = [
+    ["hike-1", "Guided Hike: Rancho San Antonio Ridge", "Sports"], ["hike-2", "Sunset Hike at Sierra Azul", "Sports"],
+    ["walk-1", "Nature Walk for Beginners", "Social"], ["park-1", "Park Cleanup at Guadalupe River Park", "Cleanup"],
+    ["trail-1", "Trail Restoration Day", "Volunteer"], ["bird-1", "Birding Ramble at Alviso Marsh", "Meetup"],
+    ["garden-1", "Community Garden Workday in the park", "Volunteer"], ["hike-3", "Wildflower Hike, Coyote Valley", "Sports"],
+    ["hike-4", "Family Trail Hike at Almaden Quicksilver", "Sports"], ["walk-2", "Docent-led Nature Walk at Alum Rock Park", "Festival"],
+    ["hike-5", "Full Moon Hike at Fremont Older", "Sports"], ["park-2", "Park Ranger Talk at Vasona Lake", "Meetup"],
+  ].map(([id, title, category], i) => ev(id, { title, category, organizer: `Midpen ${i % 4}`, startMs: days(2 + (i % 5)),
+      latitude: SJ.lat + 0.03, longitude: SJ.lng - 0.02, qualityScore: 0.6, topicTags: ["outdoors"] }));
+  const community = Array.from({ length: 10 }, (_, i) => ev(`comm-${i}`, { title: `Neighborhood Association Meetup ${i}`,
+      category: "Meetup", organizer: `Neighbors ${i % 3}`, startMs: days(2 + (i % 5)), latitude: SJ.lat - 0.03, longitude: SJ.lng + 0.02, qualityScore: 0.6, topicTags: ["community"] }));
+  const careerish = [
+    ["career-1", "Career Fair: Tech Employers", "Workshop"], ["career-2", "Resume Workshop for Engineers", "Workshop"],
+    ["hack-1", "Student Hackathon 2026", "Hackathon"], ["dev-1", "iOS Developers Meetup", "Meetup"],
+    ["career-3", "Interview Skills Workshop", "Workshop"], ["career-4", "Networking Night: Startups", "Workshop"],
+    ["hack-2", "AI Build Weekend", "Hackathon"], ["dev-2", "Intro to Python Workshop", "Workshop"],
+    ["career-5", "Internship Info Session", "Workshop"], ["vol-1", "Tutoring Volunteers Needed", "Volunteer"],
+  ].map(([id, title, category], i) => ev(id, { title, category, organizer: "San José State University", startMs: days(1 + (i % 4)),
+      latitude: SJ.lat - 0.03, longitude: SJ.lng - 0.02, qualityScore: 0.95, isFree: true, tags: ["Opportunity"], topicTags: ["tech"] }));
+  const slate = [...outdoor, ...community, ...careerish];
+  const outdoorIds = new Set(outdoor.map((e) => e.id));
+  const careerIds = new Set(careerish.filter((e) => e.category !== "Volunteer").map((e) => e.id));
+  const ctxFor = (labels, extra = {}) => { const n = normalizeInterests(labels);
+    return { ...baseCtx, interests: n.interests, interestLabels: n.labels, ...extra }; };
+  const top = (ctx) => rankEvents(slate, ctx).slice(0, 10).map((s) => s.id);
+
+  const trails = top(ctxFor(["Trails", "Parks"]));
+  const comm = top(ctxFor(["Community"]));
+  const outdoorIn = (ids) => ids.filter((id) => outdoorIds.has(id)).length;
+  ok("['Trails','Parks'] fills the top 10 with outdoor/hike events", outdoorIn(trails) >= 8, trails.join(","));
+  ok("…well above ['Community']", outdoorIn(trails) - outdoorIn(comm) >= 4, `${outdoorIn(trails)} vs ${outdoorIn(comm)}: ${comm.join(",")}`);
+  ok("the two top-10s differ", JSON.stringify(trails) !== JSON.stringify(comm));
+
+  const student = top(ctxFor(["Parks", "Trails"], { studentStatus: true, school: "San José State University" }));
+  ok("a student who picked Parks + Trails gets a mostly outdoor top 10", outdoorIn(student) >= 7, student.join(","));
+  ok("…with at most 2 workshop/hackathon/career events", student.filter((id) => careerIds.has(id)).length <= 2, student.join(","));
+  ok("a direct interest match outranks the student opportunity floor",
+     interestScore(outdoor[0], ctxFor(["Parks", "Trails"], { studentStatus: true })) >
+     interestScore(careerish[0], ctxFor(["Parks", "Trails"], { studentStatus: true })));
+  ok("a student with no stated interests keeps the opportunity floor",
+     interestScore(careerish[0], { ...baseCtx, studentStatus: true }) >= 0.75);
+
+  const hike = outdoor[0];
+  const scored = scoreEvent(hike, ctxFor(["Parks", "Trails"]));
+  const why = reasonsForV1(hike, ctxFor(["Parks", "Trails"]), scored.parts);
+  ok("the reasons line names what the user picked", why.includes("Because you like Trails"), JSON.stringify(why));
+  ok("…never an internal word", !why.some((r) => /the outdoors|hiking/.test(r)), JSON.stringify(why));
 }
 
 console.log(`\n══ ${pass} passed, ${fail} failed ══`);

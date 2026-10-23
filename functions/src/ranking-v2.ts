@@ -293,6 +293,14 @@ export const PRETTY: Record<string, string> = {
   fitness: "fitness", hiking: "hiking",
 };
 
+/** The reason line for an interest match: names the label the user picked when we know it. */
+export function interestReason(matched: readonly string[], ctx: Pick<RankingContext, "interestLabels">): string {
+  const labels = ctx.interestLabels ?? {};
+  // Prefer the most specific pick ("hiking" ← Trails only) over a shared one ("outdoors" ← Parks, Trails).
+  const best = matched.filter((m) => labels[m]?.length).sort((a, b) => labels[a].length - labels[b].length)[0];
+  return best ? `Because you like ${labels[best][0]}` : `Matches your interest in ${PRETTY[matched[0]] ?? matched[0]}`;
+}
+
 /** Does this event match one of the user's interests (topicTags via TOPIC_TO_INTEREST, plus v1's category map and synonyms)? */
 export function matchedInterests(ev: RankableEvent, interests: readonly string[]): string[] {
   if (!interests.length) return [];
@@ -324,7 +332,7 @@ export function scoreEventV2(ev: RankableEvent, ctx: RankingContext, distance: n
   if (!ctx.interests.length) comps.interest = 0.5;
   else {
     comps.interest = matched.length ? 1.0 : 0.0;
-    if (matched.length) reasons.push(`Matches your interest in ${PRETTY[matched[0]] ?? matched[0]}`);
+    if (matched.length) reasons.push(interestReason(matched, ctx));
   }
 
   // Distance
@@ -500,7 +508,7 @@ export function rankEventsV2(events: RankableEvent[], ctx: RankingContext, opts:
 /** v1 produces up to three reasons from its own `parts`; each one is backed by a component value above a documented threshold. */
 export const V1_REASON_RULES: Array<{ part: string; min: number; text: (ev: RankableEvent, ctx: RankingContext, value: number) => string | null }> = [
   { part: "social", min: 0.69, text: (ev, ctx) => { const n = ctx.friendsGoing[ev.id] ?? 0; return n === 1 ? "A friend is going" : n > 1 ? `${n} friends are going` : null; } },
-  { part: "interest", min: 0.9, text: (ev, ctx) => { const m = matchedInterests(ev, ctx.interests); return m.length ? `Matches your interest in ${PRETTY[m[0]] ?? m[0]}` : "Matches what you've attended"; } },
+  { part: "interest", min: 0.9, text: (ev, ctx) => { const m = matchedInterests(ev, ctx.interests); return m.length ? interestReason(m, ctx) : "Matches what you've attended"; } },
   { part: "distance", min: 0.75, text: (ev, ctx) => ctx.lat !== undefined && ctx.lng !== undefined && ev.latitude !== undefined && ev.longitude !== undefined
     ? `Close by (${haversineMiles(ctx.lat, ctx.lng, ev.latitude, ev.longitude).toFixed(1)} mi)` : null },
   { part: "timing", min: 0.8, text: (ev, ctx) => (ev.startMs - ctx.nowMs) < 86_400_000 ? "Happening today or tomorrow" : "Coming up this week" },
