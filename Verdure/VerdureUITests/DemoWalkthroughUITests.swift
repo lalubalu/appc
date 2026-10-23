@@ -135,14 +135,10 @@ final class DemoWalkthroughUITests: XCTestCase {
         XCTAssertTrue(ranked.waitForExistence(timeout: loadTimeout), "no card carries a reasons line")
         snap(app, "events-feed-reasons")
 
-        // Event detail: why, show less, hide, series.
-        // The feed re-renders as the ranked slate lands; a tap mid-update can be dropped.
-        // One retry, recorded in the log, so a genuinely dead card still fails below.
+        // Event detail: why, show less, hide, series. The row is rebuilt as the ranked slate
+        // and friends-going counts land; tap once it has stopped changing.
+        XCTAssertTrue(QA.waitUntilStable(ranked), "the ranked card never settled")
         ranked.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).tap()
-        if !app.buttons["hideEvent"].firstMatch.waitForExistence(timeout: 6) {
-            XCTContext.runActivity(named: "RETRY: event card tap did not open detail") { _ in }
-            ranked.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).tap()
-        }
         let why = app.descendants(matching: .any).matching(identifier: "whySeeingThis").firstMatch
         assertLoaded(app, "Event detail", anchor: app.buttons["hideEvent"].firstMatch)
         snap(app, "event-detail")

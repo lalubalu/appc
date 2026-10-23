@@ -55,14 +55,13 @@ final class OnboardingRegressionUITests: XCTestCase {
     /// lit dot are both unchanged after 10 s), tap once more; a tap that registered is never repeated.
     private func tapContinue(_ app: XCUIApplication) {
         let cta = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Continue'")).firstMatch
-        XCTAssertTrue(cta.waitForExistence(timeout: 5), "Continue missing")
+        // The pager animates between pages; tap once the button has settled, and require the move.
+        XCTAssertTrue(QA.waitUntilStable(cta), "Continue never settled")
         let before = litDot(app)
         cta.tap()
         let moved = NSPredicate { _, _ in self.litDot(app) != before }
-        if XCTWaiter.wait(for: [expectation(for: moved, evaluatedWith: nil)], timeout: 10) != .completed,
-           litDot(app) == before {
-            cta.tap()
-        }
+        XCTAssertEqual(XCTWaiter.wait(for: [expectation(for: moved, evaluatedWith: nil)], timeout: 10), .completed,
+                       "Continue did not advance from page \(before)")
     }
 
     func testEveryOnboardingPageShowsContentAndOneLitDot() {

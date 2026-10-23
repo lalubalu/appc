@@ -65,32 +65,11 @@ enum QA {
     /// screenshot matrix reviewed in QA.md instead.
     static func audit(_ app: XCUIApplication, screen: String,
                       file: StaticString = #filePath, line: UInt = #line) throws {
-        // The audit service occasionally fails to attach to the app process with
-        // `com.apple.accessibilityAudit` code -902 ("Invalid target app <pid>").
-        // That's infrastructure, not a finding — on CI it hit the first few tests
-        // in the class and cleared up once the service warmed up. The structural
-        // engine can also time out (-56) without producing a result. Retry only
-        // those infrastructure errors; real findings fail immediately. Exhausted
-        // retries still throw, and each attempt is recorded in the result bundle.
-        var lastError: Error?
-        for attempt in 1...3 {
-            do {
-                // The audit service will only inspect the frontmost app; on a
-                // headless CI simulator the app isn't reliably activated.
-                app.activate()
-                _ = app.wait(for: .runningForeground, timeout: 5)
-                try runAudit(app, screen: screen, file: file, line: line)
-                return
-            } catch let error as NSError where
-                (error.domain == "com.apple.accessibilityAudit" && error.code == -902) ||
-                (error.domain == "com.apple.xcode.xctest.accessibilityAudit" && error.code == -56) {
-                lastError = error
-                XCTContext.runActivity(named: "AUDIT-RETRY [\(screen)] attempt \(attempt): \(error.localizedDescription)") { _ in }
-                Thread.sleep(forTimeInterval: 2)
-            }
-        }
-        throw lastError ?? NSError(domain: "QA", code: -1,
-                                   userInfo: [NSLocalizedDescriptionKey: "audit failed to run for \(screen)"])
+        // The audit service only inspects the frontmost app; make sure it is, then audit
+        // once. Any error — a finding or the audit service failing — fails the test.
+        app.activate()
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10), "app not frontmost for the audit", file: file, line: line)
+        try runAudit(app, screen: screen, file: file, line: line)
     }
 
     private static func runAudit(_ app: XCUIApplication, screen: String,
@@ -157,21 +136,44 @@ enum QA {
         var last = element.exists ? element.frame : .zero
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
-            Thread.sleep(forTimeInterval: 0.4)
+            RunLoop.current.run(until: Date().addingTimeInterval(0.4))
             let now = element.exists ? element.frame : .zero
             if now == last { return }
             last = now
         }
     }
 
-    /// Onboarding: tap Continue until `target` appears. The first synthesized tap after a
-    /// cold launch is sometimes dropped while the app finishes launching; the pager can
-    /// no longer advance past sign-in, so an extra tap cannot overshoot.
-    static func continueUntil(_ target: XCUIElement, in app: XCUIApplication, maxTaps: Int = 8,
+    /// Waits until `element` exists and its label and frame have not changed for `quiet`
+    /// seconds: data that lands after the first render (a ranked slate, friends-going counts)
+    /// rebuilds the row, and a tap during that rebuild is lost.
+    @discardableResult
+    static func waitUntilStable(_ element: XCUIElement, quiet: TimeInterval = 1.0, timeout: TimeInterval = 20) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        guard element.waitForExistence(timeout: timeout) else { return false }
+        var last = (element.label, element.frame), since = Date()
+        while Date() < deadline {
+            let now = element.exists ? (element.label, element.frame) : ("", CGRect.zero)
+            if now != last { last = now; since = Date() }
+            else if Date().timeIntervalSince(since) >= quiet { return true }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        }
+        return false
+    }
+
+    /// Onboarding: Continue through the pages until `target` appears. Each tap waits for the
+    /// button to settle (the pager animates between pages) and must advance the page — the
+    /// dots' identifier changes — or reveal the target; a tap that does neither fails.
+    static func continueUntil(_ target: XCUIElement, in app: XCUIApplication, maxPages: Int = 8,
                               file: StaticString = #filePath, line: UInt = #line) {
         let cta = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Continue'")).firstMatch
-        for _ in 0..<maxTaps where !target.waitForExistence(timeout: 2) {
-            if cta.waitForExistence(timeout: 5) { cta.tap() }
+        let dots = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'onboardingDots-'")).firstMatch
+        for _ in 0..<maxPages where !target.exists {
+            XCTAssertTrue(waitUntilStable(cta), "Continue never settled", file: file, line: line)
+            let page = dots.exists ? dots.identifier : ""
+            cta.tap()
+            let advanced = NSPredicate { _, _ in target.exists || (dots.exists ? dots.identifier : "") != page }
+            XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: advanced, object: nil)], timeout: 8), .completed,
+                           "Continue did not advance onboarding from \(page)", file: file, line: line)
         }
         XCTAssertTrue(target.waitForExistence(timeout: 8), "onboarding never reached \(target)", file: file, line: line)
     }
@@ -188,14 +190,14 @@ enum QA {
         XCTAssertEqual(result, .completed, "sign-in did not complete", file: file, line: line)
     }
 
-    /// Taps until the field owns the keyboard, then types. A first tap that lands while a
-    /// sheet or the keyboard is still settling leaves no focus, and typeText then throws.
-    static func type(_ text: String, into field: XCUIElement) {
-        for _ in 0..<4 {
-            field.tap()
-            if (field.value(forKey: "hasKeyboardFocus") as? Bool) == true { break }
-            Thread.sleep(forTimeInterval: 0.5)
-        }
+    /// Types into a field once it has settled (a sheet or keyboard may still be moving it) and
+    /// owns the keyboard after a single tap; a tap that doesn't focus the field fails.
+    static func type(_ text: String, into field: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertTrue(waitUntilStable(field), "\(field) never settled", file: file, line: line)
+        field.tap()
+        let focused = NSPredicate { _, _ in (field.value(forKey: "hasKeyboardFocus") as? Bool) == true }
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: focused, object: nil)], timeout: 5), .completed,
+                       "\(field) did not take keyboard focus", file: file, line: line)
         field.typeText(text)
     }
 

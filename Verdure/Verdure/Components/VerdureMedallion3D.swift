@@ -27,13 +27,19 @@ struct VerdureMedallion3D: UIViewRepresentable {
 
         if autoSpin { context.coordinator.startIdleSpin() }
 
-        if interactive {
-            let pan = UIPanGestureRecognizer(target: context.coordinator,
-                                             action: #selector(Coordinator.handlePan(_:)))
-            view.addGestureRecognizer(pan)
-        }
+        Self.configureTouches(view, interactive: interactive, coordinator: context.coordinator)
         context.coordinator.scnView = view
         return view
+    }
+
+    /// A decorative (non-interactive) medallion takes no touches, so a tap on it reaches the
+    /// SwiftUI gesture behind it — the Daily Gem's reveal tap was sometimes absorbed by the SCNView.
+    static func configureTouches(_ view: SCNView, interactive: Bool, coordinator: Coordinator) {
+        view.isUserInteractionEnabled = interactive
+        if interactive {
+            let pan = UIPanGestureRecognizer(target: coordinator, action: #selector(Coordinator.handlePan(_:)))
+            view.addGestureRecognizer(pan)
+        }
     }
 
     func updateUIView(_ uiView: SCNView, context: Context) {}

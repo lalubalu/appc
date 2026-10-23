@@ -1,6 +1,7 @@
 import XCTest
 import CryptoKit
 import CoreLocation
+import SceneKit
 @preconcurrency import FirebaseAuth
 @preconcurrency import FirebaseFirestore
 @testable import Verdure
@@ -390,6 +391,21 @@ final class CoreLogicTests: XCTestCase {
         XCTAssertEqual(timed.displayTime, "3:00 PM")
         // A real event that genuinely starts at midnight and runs two hours keeps its time.
         XCTAssertFalse(event(time: "12:00 AM", start: midnight, end: midnight.addingTimeInterval(7200)).isAllDay)
+    }
+
+    /// The Daily Gem's reveal tap lands on a decorative SceneKit medallion; an SCNView takes
+    /// touches by default, so the tap was sometimes absorbed before the SwiftUI gesture saw it.
+    func testDecorativeMedallionTakesNoTouches() {
+        let coordinator = VerdureMedallion3D.Coordinator()
+        let builtIn = SCNView().gestureRecognizers?.count ?? 0   // SCNView ships its own recognizers
+        let decorative = SCNView()
+        VerdureMedallion3D.configureTouches(decorative, interactive: false, coordinator: coordinator)
+        XCTAssertFalse(decorative.isUserInteractionEnabled, "a decorative medallion must not take the tap")
+        XCTAssertEqual(decorative.gestureRecognizers?.count ?? 0, builtIn)
+        let interactive = SCNView()
+        VerdureMedallion3D.configureTouches(interactive, interactive: true, coordinator: coordinator)
+        XCTAssertTrue(interactive.isUserInteractionEnabled)
+        XCTAssertEqual(interactive.gestureRecognizers?.count ?? 0, builtIn + 1, "the interactive one adds its pan")
     }
 
     private let gemKeys = ["dailyGem.splashDay", "dailyGem.indexDay", "dailyGem.todayIndex", "dailyGem.seenIndices"]

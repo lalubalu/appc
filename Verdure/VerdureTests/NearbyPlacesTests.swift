@@ -117,7 +117,8 @@ final class NearbyPlacesTests: XCTestCase {
         // A relaunch within the hour restores the places and their data date.
         let relaunch = service(ScriptedOverpass([]), snapshot: snapshot([park(10, "St. James Park")], date: snapshotDate))
         XCTAssertEqual(relaunch.places.map(\.id), ["osm-20"])
-        XCTAssertEqual(relaunch.osmDataDate, places.osmDataDate, "the credit keeps the live data's date after a relaunch")
+        XCTAssertEqual(relaunch.osmDataDate?.timeIntervalSince1970 ?? 0, places.osmDataDate?.timeIntervalSince1970 ?? -9, accuracy: 0.001,
+                       "the credit keeps the live data's date after a relaunch")
 
         // Later, with every mirror down, the area cache (not the snapshot) supplies the places.
         defaults = UserDefaults(suiteName: "NearbyPlacesTests-\(UUID().uuidString)")

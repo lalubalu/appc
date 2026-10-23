@@ -25,7 +25,10 @@ import XCTest
         // The labelled SwiftUI wrapper includes the text; tap its actual
         // native switch, rather than depending on label hit-test propagation.
         let nativeSwitch = toggle.switches.firstMatch
-        if nativeSwitch.exists { nativeSwitch.tap() } else { toggle.tap() }
+        let target = nativeSwitch.exists ? nativeSwitch : toggle
+        // The sheet scrolls and its preferences load after it appears; tap once it has settled.
+        XCTAssertTrue(QA.waitUntilStable(target), "deals switch never settled")
+        target.tap()
         QA.waitFor(app.buttons["confirmLivePartnerConsent"], "Separate promotional consent")
         XCTAssertFalse(app.alerts.firstMatch.exists, "The toggle alone must not request Always location")
         let consent = XCTAttachment(screenshot: app.screenshot()); consent.name = "live-partner-promotional-consent"; consent.lifetime = .keepAlways; add(consent)

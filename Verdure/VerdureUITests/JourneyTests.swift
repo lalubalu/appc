@@ -23,7 +23,11 @@ final class JourneyTests: XCTestCase {
         app.terminate()
         app = QA.launch(tab: "events", extraArguments: ["-QAOfflineData", "NO", "-QAUseFirestoreEmulator", "YES"])
         let filterButton = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Filters")).firstMatch
-        QA.waitFor(filterButton, "event filters", timeout: 30).tap()
+        // The feed re-renders as events, Programs and the ranked slate land; a tap mid-rebuild
+        // was lost and the filter sheet never opened. Tap once the button has settled.
+        QA.waitFor(filterButton, "event filters", timeout: 30)
+        XCTAssertTrue(QA.waitUntilStable(filterButton, quiet: 1.5, timeout: 30), "filter button never settled")
+        filterButton.tap()
         QA.waitFor(app.buttons["50 mi"], "explicit browsing radius").tap()
         app.buttons["Done"].tap()
         let program = app.buttons["event-category:Program"]
@@ -297,10 +301,8 @@ final class JourneyTests: XCTestCase {
         QA.reveal(row, in: app, maxSwipes: 6)   // two blind swipes could coast row 0 back out of the lazy list
         QA.waitFor(row, "first timeline event row")
         let detailAnchor = app.buttons["Get Directions"]
+        XCTAssertTrue(QA.waitUntilStable(row), "timeline row never settled")
         row.tap()
-        if !detailAnchor.waitForExistence(timeout: 6) {
-            row.tap()   // retry once if the tap raced the scroll settle
-        }
         QA.waitFor(detailAnchor, "event detail sheet")
         // Every un-attended event demands proof of attendance before check-in.
         let upload = app.buttons["Upload Proof of Attendance"]
@@ -387,12 +389,6 @@ final class JourneyTests: XCTestCase {
         let gem = QA.waitFor(app.staticTexts["Daily Gem"], "gem splash title")
         _ = gem
         app.buttons["Daily Gem"].firstMatch.tap()   // reveal (the gem exposes .isButton)
-        // The synthesized tap on the animating SceneKit gem is occasionally dropped. One
-        // retry, recorded in the log, so a gem that never reveals still fails below.
-        if !app.staticTexts["Tap anywhere to continue"].waitForExistence(timeout: 5) {
-            XCTContext.runActivity(named: "RETRY: gem tap did not reveal") { _ in }
-            app.buttons["Daily Gem"].firstMatch.tap()
-        }
         QA.waitFor(app.staticTexts["Tap anywhere to continue"], "revealed fact")
         app.staticTexts["Tap anywhere to continue"].tap() // dismiss
         QA.waitFor(app.staticTexts["Explore"].firstMatch, "back on explore")
@@ -429,7 +425,7 @@ final class JourneyTests: XCTestCase {
         app.launch()
 
         QA.waitFor(app.staticTexts["Step Outside.\nConnect Within."], "page 1")
-        QA.continueUntil(app.staticTexts["Earn Rewards\nFor Exploring"], in: app, maxTaps: 2)
+        QA.continueUntil(app.staticTexts["Earn Rewards\nFor Exploring"], in: app, maxPages: 2)
         app.buttons["Continue"].tap()
         QA.waitFor(app.staticTexts["Build Real\nConnections"], "page 3")
         app.buttons["Continue"].tap()
