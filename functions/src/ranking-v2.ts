@@ -25,7 +25,7 @@
  */
 
 import type { RankableEvent, RankingContext, ScoredEvent } from "./ranking.js";
-import { INTEREST_TO_CATEGORY, INTEREST_SYNONYMS, haversineMiles, socialScore } from "./ranking.js";
+import { INTEREST_TO_CATEGORY, INTEREST_SYNONYMS, haversineMiles, interestText, socialScore } from "./ranking.js";
 import { interestsForTopics } from "./ingest/annotate.js";
 
 // ── Weights and constants ────────────────────────────────────────────────────
@@ -308,7 +308,7 @@ export function matchedInterests(ev: RankableEvent, interests: readonly string[]
   const fromTopics = interestsForTopics(ev.topicTags ?? []).filter((i) => wanted.has(i));
   const cat = ev.category ?? "";
   const fromCategory = [...wanted].filter((i) => (INTEREST_TO_CATEGORY[i] ?? []).includes(cat));
-  const text = ` ${[ev.title, ev.description, ...(ev.tags ?? [])].filter(Boolean).join(" ").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()} `;
+  const text = interestText(ev);
   const fromSynonyms = [...wanted].filter((i) => (INTEREST_SYNONYMS[i] ?? []).some((term) => text.includes(` ${term} `)));
   return [...new Set([...fromTopics, ...fromCategory, ...fromSynonyms])];
 }

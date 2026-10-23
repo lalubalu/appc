@@ -61,9 +61,10 @@ export const WEIGHT_SUM = Object.values(WEIGHTS).reduce((a, b) => a + b, 0);
 
 /** The app's interest labels map onto ingest categories. */
 export const INTEREST_TO_CATEGORY: Record<string, string[]> = {
-  // Hikes and stewardship ingest as Sports/Cleanup. Market/Festival made concerts and book
-  // sales "match Parks" once the app's labels reached this map (nothing sent "outdoors" before).
-  outdoors: ["Cleanup", "Sports"],
+  // Market/Festival made concerts and book sales "match Parks" once the app's labels reached
+  // this map (nothing sent "outdoors" before), and Sports made indoor yoga match it. Hikes ingest
+  // as Sports, so they match through INTEREST_SYNONYMS (hike, trail, …) instead.
+  outdoors: ["Cleanup"],
   fitness: ["Sports", "Cleanup"],
   volunteering: ["Volunteer", "Cleanup"],
   arts: ["Workshop", "Festival", "Market"],
@@ -90,6 +91,17 @@ export const INTEREST_SYNONYMS: Record<string, string[]> = {
   community: ["community", "neighborhood", "meetup", "social", "volunteer"],
   family: ["family", "kids", "children", "storytime", "all ages"],
 };
+
+/**
+ * The words interest matching reads. A library branch named for its neighbourhood
+ * ("Rose Garden branch", "Educational Park branch") is a venue, not a topic: left in,
+ * an English class there matched "park"/"garden" and was labelled "Because you like Parks".
+ */
+export function interestText(ev: Pick<RankableEvent, "title" | "description" | "tags">): string {
+  const words = [ev.title, ev.description, ...(ev.tags ?? [])].filter(Boolean).join(" ").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  // SJPL listings are bilingual, so the Spanish form ("biblioteca Rose Garden") goes too.
+  return ` ${words} `.replace(/ (?:[a-z]+ (?:park|garden) branch|biblioteca [a-z]+ (?:park|garden))(?= )/g, " ");
+}
 
 /**
  * The app saves onboarding picks as its place-category labels ("Parks", "Trails", …),
@@ -231,7 +243,7 @@ export function interestScore(ev: RankableEvent, ctx: RankingContext): number {
   if (hasStated) {
     const wanted = new Set([...ctx.interests.flatMap((i) => INTEREST_TO_CATEGORY[i.toLowerCase()] ?? []),
       ...(ctx.preferredCategories ?? [])]);
-    const text = ` ${[ev.title, ev.description, ...(ev.tags ?? [])].filter(Boolean).join(" ").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()} `;
+    const text = interestText(ev);
     const semantic = ctx.interests.some((interest) =>
       (INTEREST_SYNONYMS[interest.toLowerCase()] ?? []).some((term) => text.includes(` ${term} `)));
     stated = wanted.has(cat) ? 1 : semantic ? 0.9 : 0;

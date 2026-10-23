@@ -316,6 +316,22 @@ console.log("\n── the app's own interest labels (onboarding saves PlaceCateg
   const why = reasonsForV1(hike, ctxFor(["Parks", "Trails"]), scored.parts);
   ok("the reasons line names what the user picked", why.includes("Because you like Trails"), JSON.stringify(why));
   ok("…never an internal word", !why.some((r) => /the outdoors|hiking/.test(r)), JSON.stringify(why));
+
+  // Real San José listings that were labelled "Because you like Parks" (emulator corpus, 2026-10-23).
+  const picks = ctxFor(["Parks", "Trails"]);
+  const yoga = ev("yoga", { title: "Community Yoga and Heartfulness Meditation", category: "Sports",
+    description: "Experience the soothing calm of yoga and meditation.", locationName: "Cambrian · Community Room" });
+  const ell = ev("ell", { title: "English Language Learner (ELL) for Beginners", category: "Workshop",
+    description: "English learners are invited to beginner friendly lessons at the Rose Garden Branch Library. " +
+      "Invitamos a participar en nuestras clases en la biblioteca Rose Garden." });
+  const parkBranch = ev("branch", { title: "Tabletop Gamers", category: "Social", description: "Meet at the Educational Park Branch." });
+  ok("indoor yoga (Sports) is not a Parks/Trails match", interestScore(yoga, picks) === 0, String(interestScore(yoga, picks)));
+  ok("a library branch named 'Rose Garden' / 'Educational Park' is not a Parks match",
+     interestScore(ell, picks) === 0 && interestScore(parkBranch, picks) === 0);
+  const ellWhy = reasonsForV1(ell, picks, scoreEvent(ell, picks).parts);
+  ok("…and its reasons never claim the user's pick", !ellWhy.some((r) => r.startsWith("Because you like")), JSON.stringify(ellWhy));
+  ok("a real garden or park listing still matches",
+     interestScore(ev("g", { title: "Community Garden Workday in the park", category: "Volunteer" }), picks) >= 0.9);
 }
 
 console.log(`\n══ ${pass} passed, ${fail} failed ══`);
