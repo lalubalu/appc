@@ -17,7 +17,7 @@ import { titleKey, venueKey, classify, zonedToUtc, cleanText, cleanUrl, eventDoc
 import { mapTicketmaster } from "../lib/ingest/sources/ticketmaster.js";
 import { mapIcsEvent } from "../lib/ingest/sources/icsfeed.js";
 import { parseBiblioPayload, mapBiblioItem, trustedCoordinateIds, fetchBiblioCommons } from "../lib/ingest/sources/bibliocommons.js";
-import { parseMidpenListing, mapMidpenItem, parseMidpenDate, MIDPEN_PRESERVES } from "../lib/ingest/sources/midpen.js";
+import { parseMidpenListing, mapMidpenItem, parseMidpenDate, MIDPEN_PRESERVES, fetchMidpen, MIDPEN_PAGE_CAP } from "../lib/ingest/sources/midpen.js";
 import { parseLibCalRss, mapLibCalItem } from "../lib/ingest/sources/libcal.js";
 import { mapLocalist } from "../lib/ingest/sources/localist.js";
 import { fetchLiveWhale, mapLiveWhale } from "../lib/ingest/sources/livewhale.js";
@@ -383,6 +383,24 @@ ok("midpen: unrecognisable markup yields zero rows (so fetchMidpen can throw)",
    parseMidpenListing("<html><body><p>we redesigned</p></body></html>").length === 0);
 ok("midpen: a table with no event links is not mistaken for events",
    parseMidpenListing("<table><tr><td>a</td><td>b</td><td>c</td><td>d</td><td>e</td></tr></table>").length === 0);
+
+// Every published page is read: a fixed 4-page walk dropped about half of the
+// district's 116 listings (8 pages on 2026-10-23).
+{
+  const requested = [];
+  const pages = 6;
+  const stub = async (url) => {
+    const page = Number(new URL(url).searchParams.get("page"));
+    requested.push(page);
+    return new Response(page < pages ? mpHtml : "<html><body><table></table></body></html>", { status: 200 });
+  };
+  const all = await fetchMidpen(SAN_JOSE, MIDPEN_FEED, stub);
+  ok("midpen: walks every page until an empty one (not a fixed four)",
+     all.length === pages * mpItems.length && requested.join(",") === "0,1,2,3,4,5,6", `${all.length} rows, pages ${requested.join(",")}`);
+  const endless = [];
+  await fetchMidpen(SAN_JOSE, MIDPEN_FEED, async (url) => { endless.push(url); return new Response(mpHtml, { status: 200 }); });
+  ok("midpen: a site that ignores ?page= stops at the safety cap", endless.length === MIDPEN_PAGE_CAP);
+}
 
 console.log("\n── dedupe + scoping ──");
 const ts = (d) => ({ toMillis: () => new Date(d).getTime() });
