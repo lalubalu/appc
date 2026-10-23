@@ -1,4 +1,5 @@
 import XCTest
+import CoreLocation
 
 @MainActor final class PartnerSurfaceTests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
@@ -15,8 +16,11 @@ import XCTest
         return result
     }
 
+    /// The fixture partners sit here (the old CLI-set simulator location).
+    private let partnerOrigin = CLLocation(latitude: 33.2, longitude: -114.1)
+
     private func signInToFixture() -> XCUIApplication {
-        let app = QA.launch(tab: "profile", extraArguments: ["-QAOfflineData", "NO", "-QAUseFirestoreEmulator", "YES", "-QAResetAuth", "YES"])
+        let app = QA.launch(tab: "profile", extraArguments: ["-QAOfflineData", "NO", "-QAUseFirestoreEmulator", "YES", "-QAResetAuth", "YES"], location: partnerOrigin)
         let signIn = app.buttons["profileSignIn"]
         QA.reveal(signIn, in: app, maxSwipes: 20)
         QA.waitFor(signIn, "guest sign-in").tap()
@@ -52,7 +56,7 @@ import XCTest
             "codes": ["LOCAL-MAP-UI-\(UUID().uuidString)"], "reason": "Local map UI fixture"])
         var app = signInToFixture()
         app.terminate()
-        app = QA.launch(tab: "map", extraArguments: ["-QAOfflineData", "NO", "-QAUseFirestoreEmulator", "YES"])
+        app = QA.launch(tab: "map", extraArguments: ["-QAOfflineData", "NO", "-QAUseFirestoreEmulator", "YES"], location: partnerOrigin)
         let pin = app.buttons["partner-pin:\(perkID)"]
         QA.waitFor(pin, "real callable-backed partner pin", timeout: 40)
         XCTAssertTrue(app.frame.contains(pin.frame), "The actual map annotation must be on screen.")
@@ -121,7 +125,7 @@ import XCTest
             "codes": ["LOCAL-UI-\(UUID().uuidString)"], "reason": "Local UI fixture"])
         var app = signInToFixture()
         app.terminate()
-        app = QA.launch(tab: "rewards", extraArguments: ["-QAOfflineData", "NO", "-QAUseFirestoreEmulator", "YES"])
+        app = QA.launch(tab: "rewards", extraArguments: ["-QAOfflineData", "NO", "-QAUseFirestoreEmulator", "YES"], location: partnerOrigin)
         let redeem = app.buttons["redeem-perk:\(perkID)"]
         QA.waitFor(redeem, "actual stocked reward", timeout: 30)
         for _ in 0..<8 where redeem.frame.midY >= app.frame.height - 160 { app.swipeUp() }

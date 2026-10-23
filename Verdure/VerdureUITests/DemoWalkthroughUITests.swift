@@ -15,6 +15,7 @@ final class DemoWalkthroughUITests: XCTestCase {
     // MARK: Helpers
 
     private func launch() -> XCUIApplication {
+        XCUIDevice.shared.location = XCUILocation(location: QA.sanJose)
         let app = XCUIApplication()
         app.launchArguments += [
             "-QAFreshInstall", "YES",

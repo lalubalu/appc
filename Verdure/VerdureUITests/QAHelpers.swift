@@ -1,4 +1,5 @@
 import XCTest
+import CoreLocation
 
 // MARK: - Shared UI-test launch plumbing
 //
@@ -14,9 +15,21 @@ enum QA {
         return f.string(from: Date())
     }
 
+    /// SampleData.defaultCenter: the offline fixtures (places, events, plans) sit around it.
+    static let sampleCenter = CLLocation(latitude: 44.98, longitude: -93.265)
+    /// The launch area the local emulators are seeded for.
+    static let sanJose = CLLocation(latitude: 37.3352, longitude: -121.8811)
+
     /// Launch the app straight into a tab with onboarding done, the Daily Gem
     /// splash already shown today, and interests pre-picked.
-    static func launch(tab: String = "events", extraArguments: [String] = []) -> XCUIApplication {
+    ///
+    /// The simulated location is set per launch. Once location is allowed, offline sample
+    /// events are filtered by distance from GPS, so a simulator left in San José showed
+    /// "No events match" for the Minneapolis fixtures, depending on earlier runs.
+    static func launch(tab: String = "events", extraArguments: [String] = [],
+                       location: CLLocation? = nil) -> XCUIApplication {
+        let offline = !zip(extraArguments, extraArguments.dropFirst()).contains { $0 == "-QAOfflineData" && $1 == "NO" }
+        XCUIDevice.shared.location = XCUILocation(location: location ?? (offline ? sampleCenter : sanJose))
         let app = XCUIApplication()
         app.launchArguments += [
             "-hasCompletedOnboarding", "YES",
