@@ -471,7 +471,8 @@ export async function recordSourceSubmission(urlRaw: unknown, origin: "organizer
   try { url = new URL(String(urlRaw ?? "").trim()); if (!/^https?:$/.test(url.protocol)) throw new Error(); } catch { return { accepted: false, host: "", reason: "Enter a calendar URL starting with https://." }; }
   const host = normalizeHost(url.hostname);
   if (!validHost(host)) return { accepted: false, host, reason: "That host name is not valid." };
-  if (isDeniedHost(host)) return { accepted: false, host, reason: `${host} cannot be used as a source (deny-list).` };
+  // The full URL too: path-scoped entries ("google.com/maps") cannot match a bare host.
+  if (isDeniedHost(host) || isDeniedHost(url.href)) return { accepted: false, host, reason: `${host} cannot be used as a source (deny-list).` };
   if (await isRemovedHost(host)) return { accepted: false, host, reason: `${host} asked to be removed and will not be re-added.` };
   await db.collection("sourceSubmissions").doc(candidateId(areaId, host)).set({ url: url.href.slice(0, 1000), host, areaId, origin, requester, submittedAt: Timestamp.now(), processedAt: null }, { merge: true });
   return { accepted: true, host };

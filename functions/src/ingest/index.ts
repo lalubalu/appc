@@ -152,7 +152,7 @@ export async function fetchSourcesIsolated(source: SourceId, area: LaunchArea, k
     } catch (e) {
       if (e instanceof NotModified) {
         out.succeeded++; out.notModified++;
-        await recordSourceRun(s.id, { ok: true, eventCount: s.lastEventCount ?? undefined });
+        await recordSourceRun(s.id, { ok: true });   // unchanged feed: keep the stored lastEventCount
         continue;
       }
       if (e instanceof SkipSource) { out.succeeded++; continue; }   // a quota skip is not a feed failure

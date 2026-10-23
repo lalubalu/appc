@@ -199,7 +199,8 @@ export async function recordSourceRun(id: string, outcome: { ok: boolean; eventC
   const ref = db.collection("sources").doc(id);
   await ref.set({
     lastRunAt: Timestamp.now(),
-    ...(outcome.ok ? { failureStreak: 0, lastEventCount: outcome.eventCount ?? null, lastError: FieldValue.delete() }
+    // No count (a 304 Not Modified run) keeps the stored one: it is the baseline for the drop-to-zero pause.
+    ...(outcome.ok ? { failureStreak: 0, ...(outcome.eventCount !== undefined ? { lastEventCount: outcome.eventCount } : {}), lastError: FieldValue.delete() }
       : { failureStreak: FieldValue.increment(1), lastError: (outcome.error ?? "failed").slice(0, 500), lastErrorAt: Timestamp.now() }),
     ...(outcome.etag !== undefined ? { etag: outcome.etag } : {}),
     ...(outcome.lastModified !== undefined ? { lastModified: outcome.lastModified } : {}),
