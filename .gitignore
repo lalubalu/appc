@@ -19,6 +19,7 @@ build/
 # Secrets — API keys injected via xcconfig. Never committed: copy
 # Verdure/Secrets.xcconfig.template to Verdure/Secrets.xcconfig and fill it in.
 Verdure/Secrets.xcconfig
+Verdure/Verdure/GoogleService-Info.plist
 functions/.env
 functions/.secret.local
 .secret.local
