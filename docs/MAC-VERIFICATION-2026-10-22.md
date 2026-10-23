@@ -89,3 +89,12 @@ Side finding: Overpass now answers 406 to generic user agents (`curl/…`, `Mozi
 200 to an identifying one. The app's default `Verdure/… CFNetwork/… Darwin/…` agent is
 accepted today; setting an explicit identifying `User-Agent` in `PlacesAPIService.queryOverpass`
 would keep it that way.
+
+## Firebase iOS app re-registration
+
+`com.verdure-app.verdure` registered in `connectify-19dd8` as iOS app
+`1:350584206981:ios:d008b84adbc0f34bd29bec` (`firebase apps:create`), and
+`GoogleService-Info.plist` replaced with the downloaded config; `Secrets.xcconfig`
+`FIREBASE_GOOGLE_APP_ID` points at the same app. The app builds and launches with no
+Firebase bundle-id mismatch warning. The two old registrations (the former ownership prefix,
+`.verdure` and `.connectify`) still exist in the project; deleting them is the owner's call.
