@@ -24,7 +24,8 @@ import XCTest
         func until(_ stage: String, _ predicate: () -> Bool) async throws {
             let end = Date().addingTimeInterval(12)
             while !predicate() && Date() < end { try await Task.sleep(for: .milliseconds(40)) }
-            XCTAssertTrue(predicate(), "Native Rewards failed to observe \(stage) without manual refresh.")
+            XCTAssertTrue(predicate(), "Native Rewards failed to observe \(stage) without manual refresh. " +
+                "perks=\(service.catalog.perks.map(\.id)) codes=\(service.myCodes.count) hasLoaded=\(service.hasLoaded) auth=\(Auth.auth().currentUser?.uid ?? "nil")")
         }
         var partner: [String: Any] = ["partnerId": partnerID, "name": "Fictional Native Rewards Business",
             "category": "retail", "address": "42 Fictional Native Rewards Road", "contactName": "Fictional owner",

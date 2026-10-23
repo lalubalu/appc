@@ -8,9 +8,9 @@ import XCTest
         QA.reveal(signIn, in: app, maxSwipes: 20)
         QA.waitFor(signIn, "Sign in").tap()
         let email = QA.waitFor(app.textFields["Email address"], "Email")
-        email.tap(); email.typeText("qa-stories-native-owner@example.test")
+        QA.type("qa-stories-native-owner@example.test", into: email)
         let password = app.secureTextFields["Password"]
-        password.tap(); password.typeText("local-story-native-only")
+        QA.type("local-story-native-only\n", into: password)   // Return closes the keyboard that covers submit
         let submit = app.buttons["authSubmit"]
         QA.reveal(submit, in: app, maxSwipes: 4)
         QA.waitFor(submit, "Sign-in submit").tap()

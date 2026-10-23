@@ -175,6 +175,17 @@ enum QA {
         XCTAssertEqual(result, .completed, "sign-in did not complete", file: file, line: line)
     }
 
+    /// Taps until the field owns the keyboard, then types. A first tap that lands while a
+    /// sheet or the keyboard is still settling leaves no focus, and typeText then throws.
+    static func type(_ text: String, into field: XCUIElement) {
+        for _ in 0..<4 {
+            field.tap()
+            if (field.value(forKey: "hasKeyboardFocus") as? Bool) == true { break }
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+        field.typeText(text)
+    }
+
     /// Wait helper with a clear failure message.
     @discardableResult
     static func waitFor(_ element: XCUIElement, _ what: String, timeout: TimeInterval = 12,

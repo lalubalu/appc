@@ -84,16 +84,7 @@ final class DemoWalkthroughUITests: XCTestCase {
         if swiped { QA.settle(element) }
     }
 
-    /// Taps until the field owns the keyboard (the first tap can land while the auth
-    /// card is still settling), then types.
-    private func type(_ text: String, into field: XCUIElement) {
-        for _ in 0..<4 {
-            field.tap()
-            if (field.value(forKey: "hasKeyboardFocus") as? Bool) == true { break }
-            Thread.sleep(forTimeInterval: 0.5)
-        }
-        field.typeText(text)
-    }
+    private func type(_ text: String, into field: XCUIElement) { QA.type(text, into: field) }
 
     private func continueTap(_ app: XCUIApplication) {
         let cta = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Continue'")).firstMatch

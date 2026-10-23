@@ -38,7 +38,9 @@ final class AccessibilityAuditTests: XCTestCase {
 
     func testAuditPaywall() throws {
         let app = QA.launch(tab: "profile")
-        QA.waitFor(app.staticTexts["Verdure+"].firstMatch, "Verdure+ settings row").tap()
+        let plus = QA.waitFor(app.staticTexts["Verdure+"].firstMatch, "Verdure+ settings row")
+        QA.reveal(plus, in: app, maxSwipes: 4)   // the row sits under the floating tab bar
+        plus.tap()
         QA.waitFor(app.buttons["Start Verdure Plus"], "paywall CTA")
         try QA.audit(app, screen: "paywall")
     }

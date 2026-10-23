@@ -13,9 +13,9 @@ final class JourneyTests: XCTestCase {
         QA.reveal(signIn, in: app)
         QA.waitFor(signIn, "guest sign-in entry").tap()
         let email = QA.waitFor(app.textFields["Email address"], "email field")
-        email.tap(); email.typeText("program-native-adult@example.test")
+        QA.type("program-native-adult@example.test", into: email)
         let password = app.secureTextFields["Password"]
-        password.tap(); password.typeText("local-program-native-only")
+        QA.type("local-program-native-only\n", into: password)   // Return closes the keyboard that covers submit
         let submit = app.buttons["authSubmit"]
         QA.reveal(submit, in: app, maxSwipes: 4)
         QA.waitFor(submit, "sign-in submission").tap()
@@ -87,9 +87,9 @@ final class JourneyTests: XCTestCase {
         QA.reveal(signIn, in: app)
         QA.waitFor(signIn, "guest sign-in entry").tap()
         let email = QA.waitFor(app.textFields["Email address"], "email field")
-        email.tap(); email.typeText("offline-native-plus@example.test")
+        QA.type("offline-native-plus@example.test", into: email)
         let password = app.secureTextFields["Password"]
-        password.tap(); password.typeText("local-offline-native-only")
+        QA.type("local-offline-native-only\n", into: password)   // Return closes the keyboard that covers submit
         let submit = app.buttons["authSubmit"]
         QA.reveal(submit, in: app, maxSwipes: 4)
         QA.waitFor(submit, "actual sign-in submission").tap()
@@ -101,7 +101,7 @@ final class JourneyTests: XCTestCase {
         QA.waitFor(packs, "storage entry").tap()
         QA.waitFor(app.buttons["chooseOfflinePack"], "choose pack").tap()
         let search = QA.waitFor(app.textFields["offlineParkSearch"], "park selection search")
-        search.tap(); search.typeText("Los Gatos Creek")
+        QA.type("Los Gatos Creek", into: search)
         // Dismiss the keyboard without navigating away from the selection.
         app.staticTexts["Ready before you leave"].tap()
         let county = app.buttons["offline-choice:county-boundaries_20"]
@@ -153,7 +153,7 @@ final class JourneyTests: XCTestCase {
         QA.reveal(directory, in: app, maxSwipes: 4)
         QA.waitFor(directory, "park directory").tap()
         let search = QA.waitFor(app.searchFields.firstMatch, "park search")
-        search.tap(); search.typeText("Los Gatos Creek")
+        QA.type("Los Gatos Creek", into: search)
         app.keyboards.buttons["Search"].tap()
         // City trail reaches sort before the County park. Lazy rows are only
         // exposed to accessibility after scrolling them into the viewport.
@@ -179,7 +179,7 @@ final class JourneyTests: XCTestCase {
         QA.reveal(directory, in: app, maxSwipes: 4)
         QA.waitFor(directory, "park directory").tap()
         let search = QA.waitFor(app.searchFields.firstMatch, "park search")
-        search.tap(); search.typeText("River Glen Elementary Playground")
+        QA.type("River Glen Elementary Playground", into: search)
         app.keyboards.buttons["Search"].tap()
         let row = QA.waitFor(app.buttons["park-guide:city-parks_33"], "real closed City park", timeout: 60)
         row.tap()
@@ -293,9 +293,9 @@ final class JourneyTests: XCTestCase {
         // The poster deck's paged scroll-transition churns element identity under
         // XCUITest (exists at wait-time, gone at tap-time) — use the stable
         // timeline rows below instead; they open the same detail sheet.
-        app.swipeUp(); app.swipeUp()
-        let row = QA.waitFor(app.descendants(matching: .any)
-            .matching(identifier: "event-row-0").firstMatch, "first timeline event row")
+        let row = app.descendants(matching: .any).matching(identifier: "event-row-0").firstMatch
+        QA.reveal(row, in: app, maxSwipes: 6)   // two blind swipes could coast row 0 back out of the lazy list
+        QA.waitFor(row, "first timeline event row")
         let detailAnchor = app.buttons["Get Directions"]
         row.tap()
         if !detailAnchor.waitForExistence(timeout: 6) {
@@ -387,6 +387,12 @@ final class JourneyTests: XCTestCase {
         let gem = QA.waitFor(app.staticTexts["Daily Gem"], "gem splash title")
         _ = gem
         app.buttons["Daily Gem"].firstMatch.tap()   // reveal (the gem exposes .isButton)
+        // The synthesized tap on the animating SceneKit gem is occasionally dropped. One
+        // retry, recorded in the log, so a gem that never reveals still fails below.
+        if !app.staticTexts["Tap anywhere to continue"].waitForExistence(timeout: 5) {
+            XCTContext.runActivity(named: "RETRY: gem tap did not reveal") { _ in }
+            app.buttons["Daily Gem"].firstMatch.tap()
+        }
         QA.waitFor(app.staticTexts["Tap anywhere to continue"], "revealed fact")
         app.staticTexts["Tap anywhere to continue"].tap() // dismiss
         QA.waitFor(app.staticTexts["Explore"].firstMatch, "back on explore")

@@ -21,9 +21,9 @@ import XCTest
         QA.reveal(signIn, in: app, maxSwipes: 20)
         QA.waitFor(signIn, "guest sign-in").tap()
         let email = QA.waitFor(app.textFields["Email address"], "email")
-        email.tap(); email.typeText("qa-rewards-native-staff@example.test")
+        QA.type("qa-rewards-native-staff@example.test", into: email)
         let password = app.secureTextFields["Password"]
-        password.tap(); password.typeText("local-rewards-native-only")
+        QA.type("local-rewards-native-only\n", into: password)   // Return closes the keyboard that covers submit
         let submit = app.buttons["authSubmit"]
         QA.reveal(submit, in: app, maxSwipes: 4)
         QA.waitFor(submit, "sign-in submit").tap()
