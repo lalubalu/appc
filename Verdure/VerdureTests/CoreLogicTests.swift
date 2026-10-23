@@ -22,9 +22,12 @@ final class CoreLogicTests: XCTestCase {
 
     func testVolunteerSupplyReadsCompletePublicCorpusBeyondFirstDiscoveryPage() async throws {
         try? Auth.auth().signOut()
+        // Signed out = not a verified adult: rules (W2) only allow the adultOnly == false
+        // shape, which is also exactly what EventsAPIService queries for this viewer.
         let query = Firestore.firestore().collection("events")
             .whereField("hidden", isEqualTo: false).whereField("active", isEqualTo: true)
             .whereField("broadcast", isEqualTo: true).whereField("category", isEqualTo: "Volunteer")
+            .whereField("adultOnly", isEqualTo: false)
             .whereField("date", isGreaterThan: Timestamp(date: Date())).order(by: "date")
         var expected: Set<String> = [], cursor: DocumentSnapshot?
         while true {
