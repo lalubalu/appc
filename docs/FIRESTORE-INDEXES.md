@@ -61,10 +61,10 @@ See [Firebase index types](https://firebase.google.com/docs/firestore/query-data
 | `functions/src/programs.ts:86` | events / COLLECTION | source == | applicationDeadline ASCENDING | `COLLECTION/events/source:ASCENDING,applicationDeadline:ASCENDING` |
 | `functions/src/programs.ts:100` | events / COLLECTION | category ==; active ==; applicationDeadline > | applicationDeadline ASCENDING | `COLLECTION/events/category:ASCENDING,active:ASCENDING,applicationDeadline:ASCENDING` |
 | `functions/src/programs.ts:118` | events / COLLECTION | category ==; active ==; applicationDeadline <= | applicationDeadline ASCENDING | `COLLECTION/events/category:ASCENDING,active:ASCENDING,applicationDeadline:ASCENDING` |
-| `functions/src/ranking.ts:469` | events / COLLECTION | areaId ==; active == | Implicit/default | `COLLECTION/events/areaId:ASCENDING,active:ASCENDING` |
-| `functions/src/ranking.ts:472` | events / COLLECTION | areaId ==; active ==; date >= | date ASCENDING | `COLLECTION/events/areaId:ASCENDING,active:ASCENDING,date:ASCENDING` |
-| `functions/src/ranking.ts:473` | events / COLLECTION | areaId ==; active == | qualityScore DESCENDING | `COLLECTION/events/areaId:ASCENDING,active:ASCENDING,qualityScore:DESCENDING` |
-| `functions/src/ranking.ts:475` | events / COLLECTION | areaId ==; active ==; category ==; date >= | date ASCENDING | `COLLECTION/events/areaId:ASCENDING,active:ASCENDING,category:ASCENDING,date:ASCENDING` |
+| `functions/src/ranking.ts:481` | events / COLLECTION | areaId ==; active == | Implicit/default | `COLLECTION/events/areaId:ASCENDING,active:ASCENDING` |
+| `functions/src/ranking.ts:484` | events / COLLECTION | areaId ==; active ==; date >= | date ASCENDING | `COLLECTION/events/areaId:ASCENDING,active:ASCENDING,date:ASCENDING` |
+| `functions/src/ranking.ts:485` | events / COLLECTION | areaId ==; active == | qualityScore DESCENDING | `COLLECTION/events/areaId:ASCENDING,active:ASCENDING,qualityScore:DESCENDING` |
+| `functions/src/ranking.ts:487` | events / COLLECTION | areaId ==; active ==; category ==; date >= | date ASCENDING | `COLLECTION/events/areaId:ASCENDING,active:ASCENDING,category:ASCENDING,date:ASCENDING` |
 | `functions/src/rsvp-partners.ts:27` | rsvpPartnerAlerts / COLLECTION | status ==; dueAt <= | dueAt ASCENDING | `COLLECTION/rsvpPartnerAlerts/status:ASCENDING,dueAt:ASCENDING` |
 | `functions/src/social.ts:231` | invites / COLLECTION | eventId ==; status == | Implicit/default | `COLLECTION/invites/eventId:ASCENDING,status:ASCENDING` |
 | `functions/src/staff-operations.ts:21` | moderationQueue / COLLECTION | status == | firstReportedAt ASCENDING | `COLLECTION/moderationQueue/status:ASCENDING,firstReportedAt:ASCENDING` |
