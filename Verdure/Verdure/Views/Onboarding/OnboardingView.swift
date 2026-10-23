@@ -112,12 +112,16 @@ struct OnboardingView: View {
                                 .animation(.spring(response: 0.4), value: currentPage)
                         }
                     }
+                    .accessibilityHidden(true)   // the 8 pt capsules themselves stay out of the tree
+                    // One 44 pt element over the row (an overlay, so layout is untouched). Its
+                    // identifier carries which dots are lit, from the same comparison as the fill.
+                    .overlay {
+                        Color.clear.frame(width: 120, height: 44)
+                            .accessibilityElement()
+                            .accessibilityLabel("Page \(currentPage + 1) of \(totalPages)")
+                            .accessibilityIdentifier("onboardingDots-" + (0..<totalPages).filter { $0 == currentPage }.map(String.init).joined(separator: ","))
+                    }
                     .padding(.bottom, Spacing.sm)
-                    // One element for the whole row; the identifier carries which dots are lit
-                    // (derived from the same comparison as the fill) so UI tests can assert it.
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("Page \(currentPage + 1) of \(totalPages)")
-                    .accessibilityIdentifier("onboardingDots-" + (0..<totalPages).filter { $0 == currentPage }.map(String.init).joined(separator: ","))
 
                     ClayButton(buttonTitle,
                                systemImage: currentPage == totalPages - 1 ? "arrow.right" : nil,

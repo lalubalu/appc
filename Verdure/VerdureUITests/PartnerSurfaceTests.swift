@@ -18,14 +18,14 @@ import XCTest
     private func signInToFixture() -> XCUIApplication {
         let app = QA.launch(tab: "profile", extraArguments: ["-QAOfflineData", "NO", "-QAUseFirestoreEmulator", "YES", "-QAResetAuth", "YES"])
         let signIn = app.buttons["profileSignIn"]
-        for _ in 0..<20 where !signIn.isHittable { app.swipeUp() }
+        QA.reveal(signIn, in: app, maxSwipes: 20)
         QA.waitFor(signIn, "guest sign-in").tap()
         let email = QA.waitFor(app.textFields["Email address"], "email")
         email.tap(); email.typeText("qa-rewards-native-staff@example.test")
         let password = app.secureTextFields["Password"]
         password.tap(); password.typeText("local-rewards-native-only")
         let submit = app.buttons["authSubmit"]
-        for _ in 0..<4 where !submit.isHittable { app.swipeUp() }
+        QA.reveal(submit, in: app, maxSwipes: 4)
         QA.waitFor(submit, "sign-in submit").tap()
         QA.waitFor(app.buttons["openOfflinePacks"], "signed-in profile", timeout: 30)
         return app
@@ -89,7 +89,11 @@ import XCTest
         QA.waitFor(app.staticTexts["AVAILABLE POINTS"], "Rewards")
         let nearby = QA.waitFor(app.buttons["Nearby"], "Nearby rewards sort")
         nearby.tap()
-        XCTAssertTrue(app.staticTexts["Location unavailable · using the default order"].waitForExistence(timeout: 5))
+        // Without a location fix the store says so and keeps the default order; with one
+        // (QA.launch answers the permission prompt) Nearby itself is the active order.
+        if !app.staticTexts["Location unavailable · using the default order"].waitForExistence(timeout: 5) {
+            XCTAssertTrue(nearby.isSelected, "Nearby order should be active when location is available")
+        }
         QA.waitFor(app.buttons["Default"], "default rewards order").tap()
     }
 

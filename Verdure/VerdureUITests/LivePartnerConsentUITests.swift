@@ -5,21 +5,21 @@ import XCTest
         continueAfterFailure = false
         let app = QA.launch(tab: "profile", extraArguments: ["-QAOfflineData", "NO", "-QAUseFirestoreEmulator", "YES", "-QAResetAuth", "YES"])
         let signIn = app.buttons["profileSignIn"]
-        for _ in 0..<20 where !signIn.isHittable { app.swipeUp() }
+        QA.reveal(signIn, in: app, maxSwipes: 20)
         QA.waitFor(signIn, "Sign in").tap()
         let email = QA.waitFor(app.textFields["Email address"], "Email")
         email.tap(); email.typeText("qa-stories-native-owner@example.test")
         let password = app.secureTextFields["Password"]
         password.tap(); password.typeText("local-story-native-only")
         let submit = app.buttons["authSubmit"]
-        for _ in 0..<4 where !submit.isHittable { app.swipeUp() }
+        QA.reveal(submit, in: app, maxSwipes: 4)
         QA.waitFor(submit, "Sign-in submit").tap()
         QA.waitFor(app.buttons["openOfflinePacks"], "Signed-in profile", timeout: 30)
         let notifications = app.buttons["Notifications"]
-        for _ in 0..<25 where !notifications.isHittable { app.swipeUp() }
+        QA.reveal(notifications, in: app, maxSwipes: 25)
         QA.waitFor(notifications, "Notifications settings").tap()
         let toggle = app.switches["livePartnerAlertsToggle"]
-        for _ in 0..<5 where !toggle.isHittable { app.swipeUp() }
+        QA.reveal(toggle, in: app, maxSwipes: 5)
         QA.waitFor(toggle, "Adult-only nearby deals", timeout: 20)
         XCTAssertEqual(toggle.value as? String, "0", "Off by default")
         // The labelled SwiftUI wrapper includes the text; tap its actual

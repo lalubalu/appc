@@ -10,14 +10,14 @@ final class JourneyTests: XCTestCase {
     func testCuratedProgramActualSignInChipAndOfficialListingDetail() throws {
         var app = QA.launch(tab: "profile", extraArguments: ["-QAOfflineData", "NO", "-QAUseFirestoreEmulator", "YES", "-QAResetAuth", "YES"])
         let signIn = app.buttons["profileSignIn"]
-        for _ in 0..<20 where !signIn.isHittable { app.swipeUp() }
+        QA.reveal(signIn, in: app)
         QA.waitFor(signIn, "guest sign-in entry").tap()
         let email = QA.waitFor(app.textFields["Email address"], "email field")
         email.tap(); email.typeText("program-native-adult@example.test")
         let password = app.secureTextFields["Password"]
         password.tap(); password.typeText("local-program-native-only")
         let submit = app.buttons["authSubmit"]
-        for _ in 0..<4 where !submit.isHittable { app.swipeUp() }
+        QA.reveal(submit, in: app, maxSwipes: 4)
         QA.waitFor(submit, "sign-in submission").tap()
         QA.waitFor(app.buttons["openOfflinePacks"], "signed-in profile", timeout: 30)
         app.terminate()
@@ -70,7 +70,7 @@ final class JourneyTests: XCTestCase {
         card.tap()
         let opened = XCTAttachment(screenshot: app.screenshot()); opened.name = "Program after card tap"; opened.lifetime = .keepAlways; add(opened)
         let official = app.buttons["programOfficialListing"]
-        for _ in 0..<4 where !official.isHittable { app.swipeUp() }
+        QA.reveal(official, in: app, maxSwipes: 4)
         if !official.exists { print(app.debugDescription.prefix(12000)) }
         QA.waitFor(official, "official listing link")
         XCTAssertFalse(app.buttons["Upload Proof of Attendance"].exists)
@@ -83,20 +83,20 @@ final class JourneyTests: XCTestCase {
     func testOfflinePackSignInSizeDownloadRelaunchAndStoredTrailView() throws {
         var app = QA.launch(tab: "profile", extraArguments: ["-QAOfflineData", "NO", "-QAUseFirestoreEmulator", "YES", "-QAResetAuth", "YES"])
         let signIn = app.buttons["profileSignIn"]
-        for _ in 0..<20 where !signIn.isHittable { app.swipeUp() }
+        QA.reveal(signIn, in: app)
         QA.waitFor(signIn, "guest sign-in entry").tap()
         let email = QA.waitFor(app.textFields["Email address"], "email field")
         email.tap(); email.typeText("offline-native-plus@example.test")
         let password = app.secureTextFields["Password"]
         password.tap(); password.typeText("local-offline-native-only")
         let submit = app.buttons["authSubmit"]
-        for _ in 0..<4 where !submit.isHittable { app.swipeUp() }
+        QA.reveal(submit, in: app, maxSwipes: 4)
         QA.waitFor(submit, "actual sign-in submission").tap()
         QA.waitFor(app.buttons["openOfflinePacks"], "signed-in profile", timeout: 30)
         app.terminate()
         app = QA.launch(tab: "profile", extraArguments: ["-QAOfflineData", "NO", "-QAUseFirestoreEmulator", "YES"])
         let packs = app.buttons["openOfflinePacks"]
-        for _ in 0..<15 where !packs.isHittable { app.swipeUp() }
+        QA.reveal(packs, in: app)
         QA.waitFor(packs, "storage entry").tap()
         QA.waitFor(app.buttons["chooseOfflinePack"], "choose pack").tap()
         let search = QA.waitFor(app.textFields["offlineParkSearch"], "park selection search")
@@ -104,7 +104,7 @@ final class JourneyTests: XCTestCase {
         // Dismiss the keyboard without navigating away from the selection.
         app.staticTexts["Ready before you leave"].tap()
         let county = app.buttons["offline-choice:county-boundaries_20"]
-        for _ in 0..<12 where !county.isHittable { app.swipeUp() }
+        QA.reveal(county, in: app, maxSwipes: 12)
         QA.waitFor(county, "real County selection", timeout: 60).tap()
         let prepare = app.buttons["prepareOfflinePack"]
         for _ in 0..<8 where !prepare.isHittable { app.swipeDown() }
@@ -120,7 +120,7 @@ final class JourneyTests: XCTestCase {
         // physical GPS evidence. The UI must reload the persisted snapshot.
         app = QA.launch(tab: "profile", extraArguments: ["-QAOfflineData", "NO", "-QAUseFirestoreEmulator", "YES", "-QAForceOffline", "YES"])
         let stored = app.buttons["openOfflinePacks"]
-        for _ in 0..<15 where !stored.isHittable { app.swipeUp() }
+        QA.reveal(stored, in: app, maxSwipes: 15)
         QA.waitFor(stored, "offline storage entry").tap()
         let row = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'offline-pack:'")).firstMatch
         QA.waitFor(row, "persisted pack after relaunch").tap()
@@ -128,13 +128,13 @@ final class JourneyTests: XCTestCase {
         QA.waitFor(app.staticTexts["parkStatus"], "stored source status")
         XCTAssertFalse(app.buttons["Download for offline use"].exists)
         let event = app.buttons["park-event:offline-native-park-event"]
-        for _ in 0..<12 where !event.isHittable { app.swipeUp() }
+        QA.reveal(event, in: app, maxSwipes: 12)
         QA.waitFor(event, "stored event details").tap()
         QA.waitFor(app.staticTexts["RSVP and check-in are available when you're back online."], "offline event action explanation")
         XCTAssertFalse(app.buttons["Open event actions"].exists)
         app.navigationBars.buttons.firstMatch.tap()
         let map = app.buttons["parkTrailMap"]
-        for _ in 0..<12 where !map.isHittable { app.swipeUp() }
+        QA.reveal(map, in: app, maxSwipes: 12)
         QA.waitFor(map, "stored trail overlay").tap()
         QA.waitFor(app.descendants(matching: .any).matching(identifier: "parkTrailNotice").firstMatch, "stored trail notice")
         XCTAssertFalse(app.buttons["Directions"].exists)
@@ -149,7 +149,7 @@ final class JourneyTests: XCTestCase {
     func testParkTrailMapShowsOfficialNoticeWithoutRouteGuidance() throws {
         let app = QA.launch(tab: "explore", extraArguments: ["-QAOfflineData", "NO", "-QAUseFirestoreEmulator", "YES"])
         let directory = app.buttons["parkDirectory"]
-        for _ in 0..<4 where !directory.isHittable { app.swipeUp() }
+        QA.reveal(directory, in: app, maxSwipes: 4)
         QA.waitFor(directory, "park directory").tap()
         let search = QA.waitFor(app.searchFields.firstMatch, "park search")
         search.tap(); search.typeText("Los Gatos Creek")
@@ -158,11 +158,11 @@ final class JourneyTests: XCTestCase {
         // exposed to accessibility after scrolling them into the viewport.
         QA.waitFor(app.buttons["park-guide:city-parks_342"], "loaded Los Gatos Creek results", timeout: 60)
         let county = app.buttons["park-guide:county-boundaries_20"]
-        for _ in 0..<20 where !county.isHittable { app.swipeUp() }
+        QA.reveal(county, in: app, maxSwipes: 20)
         QA.waitFor(county, "real County park").tap()
         QA.waitFor(app.staticTexts["parkStatus"], "loaded County guide", timeout: 30)
         let map = app.buttons["parkTrailMap"]
-        for _ in 0..<12 where !map.isHittable { app.swipeUp() }
+        QA.reveal(map, in: app, maxSwipes: 12)
         QA.waitFor(map, "published trail map").tap()
         QA.waitFor(app.descendants(matching: .any).matching(identifier: "parkTrailNotice").firstMatch, "trail safety notice")
         XCTAssertTrue(app.links["Official closures and park information"].exists || app.buttons["Official closures and park information"].exists)
@@ -175,7 +175,7 @@ final class JourneyTests: XCTestCase {
     func testSourceBackedParkGuideRespectsClosedStatusAndAttribution() throws {
         let app = QA.launch(tab: "explore", extraArguments: ["-QAOfflineData", "NO", "-QAUseFirestoreEmulator", "YES"])
         let directory = app.buttons["parkDirectory"]
-        for _ in 0..<4 where !directory.isHittable { app.swipeUp() }
+        QA.reveal(directory, in: app, maxSwipes: 4)
         QA.waitFor(directory, "park directory").tap()
         let search = QA.waitFor(app.searchFields.firstMatch, "park search")
         search.tap(); search.typeText("River Glen Elementary Playground")
@@ -188,7 +188,7 @@ final class JourneyTests: XCTestCase {
         let attachment = XCTAttachment(screenshot: app.screenshot()); attachment.name = "Closed park guide"; attachment.lifetime = .keepAlways
         add(attachment)
         let attribution = app.staticTexts.matching(identifier: "parkAttribution").firstMatch
-        for _ in 0..<10 where !attribution.isHittable { app.swipeUp() }
+        QA.reveal(attribution, in: app, maxSwipes: 10)
         XCTAssertTrue(attribution.exists)
         XCTAssertTrue(attribution.label.contains("City of San José"))
         XCTAssertTrue(attribution.label.contains("CC BY"))
@@ -199,8 +199,8 @@ final class JourneyTests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-hasCompletedOnboarding", "NO", "-QADisableMotion", "YES", "-QAOfflineData", "YES"]
         app.launch()
-        for _ in 0..<4 { QA.waitFor(app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Continue'")).firstMatch, "onboarding continue").tap() }
-        QA.waitFor(app.buttons["Sign Up"], "signup mode").tap()
+        QA.continueUntil(app.buttons["Sign Up"], in: app)
+        app.buttons["Sign Up"].tap()
         app.swipeUp()
         QA.waitFor(app.textFields["Birth year"], "neutral birth year")
         XCTAssertFalse(app.textFields["Your name"].exists)
@@ -421,8 +421,7 @@ final class JourneyTests: XCTestCase {
         app.launch()
 
         QA.waitFor(app.staticTexts["Step Outside.\nConnect Within."], "page 1")
-        app.buttons["Continue"].tap()
-        QA.waitFor(app.staticTexts["Earn Rewards\nFor Exploring"], "page 2")
+        QA.continueUntil(app.staticTexts["Earn Rewards\nFor Exploring"], in: app, maxTaps: 2)
         app.buttons["Continue"].tap()
         QA.waitFor(app.staticTexts["Build Real\nConnections"], "page 3")
         app.buttons["Continue"].tap()

@@ -81,7 +81,7 @@ final class DemoWalkthroughUITests: XCTestCase {
         var swiped = false
         for _ in 0..<maxSwipes where !(element.exists && element.isHittable) { app.swipeUp(); swiped = true }
         // Let the scroll coast to a stop: a tap during deceleration only stops the scroll.
-        if swiped { Thread.sleep(forTimeInterval: 1.5) }
+        if swiped { QA.settle(element) }
     }
 
     /// Taps until the field owns the keyboard (the first tap can land while the auth
@@ -104,9 +104,9 @@ final class DemoWalkthroughUITests: XCTestCase {
     private func onboardAndSignIn(_ app: XCUIApplication) {
         assertLoaded(app, "Onboarding", anchor: app.staticTexts["Step Outside.\nConnect Within."])
         snap(app, "onboarding")
-        for _ in 0..<3 { continueTap(app) }
         let parks = app.buttons["Parks interest"].firstMatch
-        XCTAssertTrue(parks.waitForExistence(timeout: 8)); parks.tap()
+        QA.continueUntil(parks, in: app)
+        parks.tap()
         app.buttons["Community interest"].firstMatch.tap()
         snap(app, "onboarding-interests")
         continueTap(app)
@@ -224,12 +224,18 @@ final class DemoWalkthroughUITests: XCTestCase {
         onboardAndSignIn(app)
         app.buttons["Places"].firstMatch.tap()
         let open = app.buttons["Plan my adventure"].firstMatch
-        scrollTo(open, in: app, maxSwipes: 6)
-        XCTAssertTrue(open.waitForExistence(timeout: loadTimeout)); open.tap()
-        let run = app.buttons.matching(NSPredicate(format: "label == 'Plan my adventure'")).element(boundBy: 0)
-        XCTAssertTrue(run.waitForExistence(timeout: loadTimeout), "planner sheet missing")
+        QA.reveal(open, in: app, maxSwipes: 6)
+        if !open.waitForExistence(timeout: loadTimeout) {
+            // ExploreView offers the planner only with two or more places that have coordinates.
+            throw XCTSkip("Planner entry hidden: fewer than two nearby places (OpenStreetMap/Overpass unreachable).")
+        }
+        open.tap()
+        // The sheet's CTA shares the tile's label; take the one on top (the sheet).
+        XCTAssertTrue(app.staticTexts["How long have you got?"].waitForExistence(timeout: loadTimeout), "planner sheet missing")
+        let runs = app.buttons.matching(NSPredicate(format: "label == 'Plan my adventure'"))
+        let run = runs.element(boundBy: max(0, runs.count - 1))
         snap(app, "planner")
-        scrollTo(run, in: app, maxSwipes: 4)
+        QA.reveal(run, in: app, maxSwipes: 4)
         run.tap()
         let credit = app.links["Weather data by Open-Meteo.com"]
         let notConfigured = app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] \"isn't configured\"")).firstMatch

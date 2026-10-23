@@ -29,18 +29,18 @@ import XCTest
         try await prepareEmptyOwnedStory()
         let app = QA.launch(tab: "profile", extraArguments: ["-QAOfflineData", "NO", "-QAUseFirestoreEmulator", "YES", "-QAResetAuth", "YES"])
         let signIn = app.buttons["profileSignIn"]
-        for _ in 0..<20 where !signIn.isHittable { app.swipeUp() }
+        QA.reveal(signIn, in: app, maxSwipes: 20)
         QA.waitFor(signIn, "Sign in").tap()
         let email = QA.waitFor(app.textFields["Email address"], "Email")
         email.tap(); email.typeText("qa-stories-native-owner@example.test")
         let password = app.secureTextFields["Password"]
         password.tap(); password.typeText("local-story-native-only")
         let submit = app.buttons["authSubmit"]
-        for _ in 0..<4 where !submit.isHittable { app.swipeUp() }
+        QA.reveal(submit, in: app, maxSwipes: 4)
         QA.waitFor(submit, "Submit").tap()
         QA.waitFor(app.buttons["openOfflinePacks"], "Signed-in profile", timeout: 30)
         let organizer = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Organizer profile Fictional Native Story Organizer")).firstMatch
-        for _ in 0..<25 where !organizer.isHittable { app.swipeUp() }
+        QA.reveal(organizer, in: app, maxSwipes: 25)
         QA.waitFor(organizer, "Approved organizer profile").tap()
         QA.waitFor(app.buttons["myPlaceStories"], "My place stories").tap()
         QA.waitFor(app.buttons["ownedStory:osm-999999999999998"], "Verified place", timeout: 20).tap()

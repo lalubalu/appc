@@ -29,7 +29,17 @@ enum QA {
         ]
         app.launchArguments += extraArguments
         app.launch()
+        allowLocationIfAsked()
         return app
+    }
+
+    /// Each test run reinstalls the app, which resets its location permission, so the
+    /// system prompt can sit over the first screen and leave the app without GPS
+    /// (it then browses the launch-area centre). Answer it the way a user would.
+    static func allowLocationIfAsked() {
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let allow = springboard.alerts.buttons["Allow While Using App"]
+        if allow.waitForExistence(timeout: 3) { allow.tap() }
     }
 
     /// Run Apple's accessibility audit on the current screen.
@@ -104,6 +114,41 @@ enum QA {
                 }
             }
         }
+    }
+
+    /// Scroll until `element` is hittable AND clear of the floating tab bar. XCUITest
+    /// reports a row under the bar as hittable, and the tap then lands on a tab.
+    static func reveal(_ element: XCUIElement, in app: XCUIApplication, maxSwipes: Int = 20) {
+        var swiped = false
+        for _ in 0..<maxSwipes where !(element.exists && element.isHittable && element.frame.maxY < app.frame.height - 140) {
+            app.swipeUp(); swiped = true
+        }
+        if swiped { settle(element) }
+    }
+
+    /// A swipe keeps the list coasting for a few seconds, and a tap during deceleration
+    /// only stops the scroll (standard UIKit). Wait until the element stops moving.
+    static func settle(_ element: XCUIElement, timeout: TimeInterval = 5) {
+        var last = element.exists ? element.frame : .zero
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.4)
+            let now = element.exists ? element.frame : .zero
+            if now == last { return }
+            last = now
+        }
+    }
+
+    /// Onboarding: tap Continue until `target` appears. The first synthesized tap after a
+    /// cold launch is sometimes dropped while the app finishes launching; the pager can
+    /// no longer advance past sign-in, so an extra tap cannot overshoot.
+    static func continueUntil(_ target: XCUIElement, in app: XCUIApplication, maxTaps: Int = 8,
+                              file: StaticString = #filePath, line: UInt = #line) {
+        let cta = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Continue'")).firstMatch
+        for _ in 0..<maxTaps where !target.waitForExistence(timeout: 2) {
+            if cta.waitForExistence(timeout: 5) { cta.tap() }
+        }
+        XCTAssertTrue(target.waitForExistence(timeout: 8), "onboarding never reached \(target)", file: file, line: line)
     }
 
     /// Wait helper with a clear failure message.
