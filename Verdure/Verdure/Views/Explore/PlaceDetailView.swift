@@ -64,7 +64,7 @@ struct PlaceDetailView: View {
                     actions
                     eventsSection
                     if place.id.hasPrefix("osm-") {
-                        OpenStreetMapCredit()
+                        OpenStreetMapCredit(asOf: placesService.osmDataDate)
                     }
                 }
                 .padding(Spacing.md)

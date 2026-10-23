@@ -189,11 +189,9 @@ struct RootView: View {
             gameState.connectCloud(firestore: firestoreService, functions: functionsService, userID: user.uid)
             Task { await moderationService.refreshBlocks() }
             Task { await socialService.refreshAll() }
-            Task {
-                let center = locationManager.userCoordinate
-                await placesService.fetchNearbyPlaces(around: center)
-                await eventsService.fetchNearbyEvents(around: center)
-            }
+            InitialLoad.start(around: locationManager.userCoordinate,
+                              places: { await placesService.fetchNearbyPlaces(around: $0) },
+                              events: { await eventsService.fetchNearbyEvents(around: $0) })
         }
     }
 
