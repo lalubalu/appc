@@ -122,6 +122,20 @@ export function conditionalFetchFor(s: Pick<SourceDoc, "etag" | "lastModified">,
   return { fetchImpl, validators: () => ({ etag, lastModified }) };
 }
 
+/**
+ * Adapters that walk several pages from one source URL. The conditional request covers only
+ * the first page, and an unchanged first page says nothing about the rest (Midpen's page 0
+ * can stay the same while pages 1–7 gain or lose programmes), so these always read fully.
+ */
+export const PAGINATED_SOURCES: ReadonlySet<SourceId> = new Set<SourceId>(["midpen"]);
+
+/** The fetch a source's run uses: conditional for single-document feeds, plain for paginated ones. */
+export function sourceFetchFor(s: Pick<SourceDoc, "type" | "etag" | "lastModified">, inner: typeof fetch = fetch):
+  { fetchImpl: typeof fetch; validators: () => { etag: string | null; lastModified: string | null } } {
+  if (PAGINATED_SOURCES.has(s.type)) return { fetchImpl: inner, validators: () => ({ etag: null, lastModified: null }) };
+  return conditionalFetchFor(s, inner);
+}
+
 export interface IsolatedFetch {
   records: NormalizedEvent[];
   attempted: number;
@@ -141,7 +155,7 @@ export async function fetchSourcesIsolated(source: SourceId, area: LaunchArea, k
   const docs = (sources ?? await loadActiveSources(area.id, source)).filter((s) => s.type === source && s.areaId === area.id && !isDeniedHost(s.host));
   const out: IsolatedFetch = { records: [], attempted: docs.length, succeeded: 0, notModified: 0, failures: [] };
   for (const s of docs) {
-    const cond = conditionalFetchFor(s, inner);
+    const cond = sourceFetchFor(s, inner);
     try {
       const records = await fetchOneSource(s, area, keys, cond.fetchImpl);
       out.records.push(...records);

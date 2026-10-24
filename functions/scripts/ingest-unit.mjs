@@ -400,6 +400,16 @@ ok("midpen: a table with no event links is not mistaken for events",
   const endless = [];
   await fetchMidpen(SAN_JOSE, MIDPEN_FEED, async (url) => { endless.push(url); return new Response(mpHtml, { status: 200 }); });
   ok("midpen: a site that ignores ?page= stops at the safety cap", endless.length === MIDPEN_PAGE_CAP);
+  // A 304 on page 0 said nothing about pages 1–7, yet it skipped the whole listing.
+  const { sourceFetchFor } = await import("../lib/ingest/index.js");
+  const seen = [];
+  const answer = async (url, init) => { const h = new Headers(init?.headers ?? {}); seen.push(h.get("if-none-match"));
+    return h.get("if-none-match") ? new Response(null, { status: 304 }) : new Response(Number(new URL(url).searchParams.get("page")) < 2 ? mpHtml : "<table></table>", { status: 200 }); };
+  const read = await fetchMidpen(SAN_JOSE, MIDPEN_FEED, sourceFetchFor({ type: "midpen", etag: 'W/"1792783021"', lastModified: "Fri, 23 Oct 2026 19:17:01 GMT" }, answer).fetchImpl);
+  ok("midpen: never conditional, so a stored ETag can't skip pages 1+", read.length === 2 * mpItems.length && seen.every((x) => x === null), JSON.stringify(seen));
+  const icsSeen = [];
+  sourceFetchFor({ type: "ics", etag: 'W/"1"' }, async (u, init) => { icsSeen.push(new Headers(init?.headers ?? {}).get("if-none-match")); return new Response("", { status: 200 }); }).fetchImpl("https://example.org/feed.ics");
+  ok("single-document feeds stay conditional", icsSeen[0] === 'W/"1"');
 }
 
 console.log("\n── dedupe + scoping ──");
