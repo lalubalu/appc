@@ -1508,10 +1508,12 @@ struct EventDetailSheet: View {
     private func detailRow(_ icon: String, _ label: String, _ value: String) -> some View {
         HStack(spacing: Spacing.md) {
             Image(systemName: icon).font(.system(size: 14, weight: .semibold)).foregroundStyle(Palette.spruce.base).frame(width: 24)
+                .accessibilityHidden(true)
             Text(label).font(VType.body(13, .medium)).foregroundStyle(Palette.inkSoft).frame(width: 72, alignment: .leading)
             Text(value).font(VType.body(14, .medium)).foregroundStyle(Palette.ink)
             Spacer()
         }
+        .accessibilityElement(children: .combine)
     }
 }
 

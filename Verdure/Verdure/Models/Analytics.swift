@@ -102,10 +102,11 @@ enum Analytics {
             "appVersion": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?",
         ]
 
-        // `[String: Any]` is not Sendable, so the write is issued synchronously
-        // with a completion handler rather than awaited across an isolation
-        // boundary. `addDocument` does not block on the network — Firestore
-        // queues it and retries — so this is still fire-and-forget.
+        // `[String: Any]` is not Sendable, so the write is issued right here
+        // with the completion-handler API rather than handed to a Task (Swift 6
+        // region checking rejects sending `payload` into one). `addDocument`
+        // does not block on the network — Firestore queues it and retries — so
+        // this is still fire-and-forget from the caller's point of view.
         let ref = Firestore.firestore().collection("analytics").document(day).collection("events")
         ref.addDocument(data: payload) { error in
             // Intentionally silent in release. A failed analytics write is
