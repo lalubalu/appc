@@ -120,6 +120,37 @@ final class DemoWalkthroughUITests: XCTestCase {
         clearSystemAlerts(app)
     }
 
+    /// Leaves the simulator signed in to the seeded demo account (scripts/demo-investor-local.mjs)
+    /// with the system prompts answered, so a live demo starts on the Events feed.
+    func testPrepareSignedInDemo() {
+        let app = launch()
+        onboardAndSignIn(app)
+        tab(app, "Discover")
+        assertLoaded(app, "Events", anchor: app.buttons["Discover"].firstMatch)
+        snap(app, "demo-ready")
+    }
+
+    /// Read-only tour of the signed-in demo account left by testPrepareSignedInDemo:
+    /// every tab loads with no error copy. Run after it; it does not sign in.
+    func testTourSignedInDemo() {
+        XCUIDevice.shared.location = XCUILocation(location: QA.sanJose)
+        let app = XCUIApplication()
+        app.launchArguments += ["-QAUseFirestoreEmulator", "YES", "-QAEmulatorHost", "127.0.0.1",
+                                "-QAOfflineData", "NO", "-QADisableMotion", "YES", "-dailyGem.splashDay", QA.today]
+        app.launch()
+        for name in ["Discover", "Plan", "Friends", "Rewards", "Profile"] {
+            tab(app, name)
+            assertLoaded(app, name, anchor: app.buttons[name].firstMatch)
+            if name == "Friends" {
+                // The seeded friends RSVP'd; their plans load after the friend list.
+                let plan = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Maya Ortiz' AND label CONTAINS ' · '")).firstMatch
+                XCTAssertTrue(plan.waitForExistence(timeout: loadTimeout), "Going soon never showed the friends' plans")
+            }
+            QA.settle(app.buttons[name].firstMatch)
+            snap(app, name.lowercased())
+        }
+    }
+
     // MARK: The walkthrough
 
     func testJudgeWalkthrough() {
