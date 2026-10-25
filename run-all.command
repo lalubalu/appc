@@ -80,6 +80,9 @@ if [ "$RELOAD" -eq 1 ]; then
   node functions/scripts/program-native-fixture.mjs >>"$LOG_DIR/fixtures.log" 2>&1 || true
   node functions/scripts/rewards-native-fixture.mjs >>"$LOG_DIR/fixtures.log" 2>&1 || true
   node functions/scripts/seed-stories-native.mjs >>"$LOG_DIR/fixtures.log" 2>&1 || true
+  say_step "Data: the demo account (Demo Judge, three friends, RSVPs, collected places) and the For You demo accounts"
+  node functions/scripts/demo-investor-local.mjs >"$LOG_DIR/demo-account.log" 2>&1 && tail -1 "$LOG_DIR/demo-account.log" || echo "  demo account seeding failed — see $LOG_DIR/demo-account.log"
+  node functions/scripts/foryou-interests-e2e.mjs --keep >"$LOG_DIR/foryou-accounts.log" 2>&1 && echo "  For You demo accounts kept" || echo "  For You accounts failed — see $LOG_DIR/foryou-accounts.log"
   say_step "Data: counts"
   node --input-type=module -e '
     import { initializeApp } from "firebase-admin/app"; import { getFirestore } from "firebase-admin/firestore";
