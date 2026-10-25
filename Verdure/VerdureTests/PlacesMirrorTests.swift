@@ -128,6 +128,68 @@ final class PlacesMirrorTests: XCTestCase {
         XCTAssertEqual(snapshot.dateLabel.count, 10)
     }
 
+    // MARK: - Keyed providers (CAC 2026, 1.5): real results with a key, silence without one
+
+    private static let npsJSON = """
+    {"total":"1","data":[{"id":"NPS-1","fullName":"Fixture National Historic Site","latLong":"lat:37.34, long:-121.88","description":"Fixture.","images":[{"url":"https://example.test/p.jpg"}]}]}
+    """.data(using: .utf8)!
+    private static let ridbJSON = """
+    {"RECDATA":[{"FacilityID":"77","FacilityName":"Fixture Recreation Area","FacilityLatitude":37.35,"FacilityLongitude":-121.9,"FacilityTypeDescription":"Trailhead","FacilityDescription":"Fixture."}]}
+    """.data(using: .utf8)!
+
+    private func withEnvironment(_ values: [String: String?], _ body: () async -> Void) async {
+        var previous: [String: String?] = [:]
+        for (k, v) in values { previous[k] = ProcessInfo.processInfo.environment[k]; if let v { setenv(k, v, 1) } else { unsetenv(k) } }
+        await body()
+        for (k, v) in previous { if let v { setenv(k, v, 1) } else { unsetenv(k) } }
+    }
+
+    func testKeyedProvidersAreSkippedSilentlyWithoutTheirKeys() async {
+        let seen = Recorder()
+        let service = PlacesAPIService(transport: { request in
+            seen.append(request)
+            return (Self.overpassJSON, HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        }, snapshot: nil, stateCode: { _ in "CA" })
+        await withEnvironment(["NPS_API_KEY": nil, "RECREATION_GOV_KEY": nil]) {
+            await service.fetchNearbyPlaces(around: self.sanJose)
+        }
+        let hosts = seen.requests.compactMap { $0.url?.host }
+        XCTAssertFalse(hosts.contains("developer.nps.gov"), "no NPS request without a key: \(hosts)")
+        XCTAssertFalse(hosts.contains("ridb.recreation.gov"), "no Recreation.gov request without a key: \(hosts)")
+        XCTAssertNil(service.lastError, "a missing key is not an error")
+        XCTAssertTrue(service.places.allSatisfy { $0.id.hasPrefix("osm-") })
+    }
+
+    func testKeyedProvidersReturnRealPlacesWhenTheirKeysArePresent() async throws {
+        // The build injects the keys through Info.plist (Secrets.xcconfig); when the
+        // bundle has none, the environment stands in. Either way a key must be
+        // SENT and the fixture answers must become real places with coordinates.
+        let seen = Recorder()
+        let service = PlacesAPIService(transport: { request in
+            seen.append(request)
+            switch request.url!.host {
+            case "developer.nps.gov":
+                XCTAssertTrue((request.url!.query ?? "").range(of: "api_key=[^&]{8,}", options: .regularExpression) != nil, "the NPS key is sent as api_key")
+                return (Self.npsJSON, HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+            case "ridb.recreation.gov":
+                XCTAssertGreaterThanOrEqual(request.value(forHTTPHeaderField: "apikey")?.count ?? 0, 8, "the Recreation.gov key is sent in the apikey header")
+                return (Self.ridbJSON, HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+            default:
+                return (Self.overpassJSON, HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+            }
+        }, snapshot: nil, stateCode: { _ in "CA" })
+        await withEnvironment(["NPS_API_KEY": "test-nps-key-0123456789abcdef0123456789", "RECREATION_GOV_KEY": "11111111-2222-4333-8444-555555555555"]) {
+            await service.fetchNearbyPlaces(around: self.sanJose)
+        }
+        let names = service.places.map(\.name)
+        XCTAssertTrue(names.contains("Fixture National Historic Site"), "\(names)")
+        XCTAssertTrue(names.contains("Fixture Recreation Area"), "\(names)")
+        let nps = service.places.first { $0.id == "nps-NPS-1" }
+        XCTAssertEqual(nps?.latitude, 37.34); XCTAssertEqual(nps?.longitude, -121.88)
+        XCTAssertNil(nps?.rating, "no fabricated rating")
+        XCTAssertTrue(service.places.first { $0.id == "rec-77" }?.category == .trails)
+    }
+
     private final class Recorder: @unchecked Sendable {
         private let lock = NSLock()
         private var items: [URLRequest] = []

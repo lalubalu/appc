@@ -84,6 +84,8 @@ final class PlacesAPIService {
     private let cacheTTL: TimeInterval = 3600 // 1 hour
     private let transport: PlacesTransport
     private let snapshot: OSMSnapshot?
+    /// Resolves a coordinate to a US state code for the NPS query (CLGeocoder in the app; a stub in tests).
+    private let stateCode: @Sendable (CLLocationCoordinate2D) async -> String?
 
     /// Overpass mirrors, tried in order with a 25-second limit each. The public
     /// instance was at capacity for a whole night on 2026-10-22; the others
@@ -100,9 +102,11 @@ final class PlacesAPIService {
 
     // MARK: - Init
 
-    init(transport: PlacesTransport? = nil, snapshot: OSMSnapshot? = OSMSnapshot.bundled()) {
+    init(transport: PlacesTransport? = nil, snapshot: OSMSnapshot? = OSMSnapshot.bundled(),
+         stateCode: (@Sendable (CLLocationCoordinate2D) async -> String?)? = nil) {
         self.transport = transport ?? { request in try await URLSession.shared.data(for: request) }
         self.snapshot = snapshot
+        self.stateCode = stateCode ?? { c in await PlacesAPIService.reverseStateCode(c) }
         if let last = UserDefaults.standard.string(forKey: Self.lastAreaKey) { loadCachedPlaces(areaKey: last) }
         if places.isEmpty {
             useSampleFallback()
@@ -371,6 +375,7 @@ final class PlacesAPIService {
         guard let url = comps.url, let data = await fetchJSON(url, headers: ["apikey": key]) else { return [] }
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let rec = root["RECDATA"] as? [[String: Any]] else { return [] }
+        // (Both keyed providers are silent when their key is absent: the guard above returns before any request.)
 
         return rec.compactMap { f -> Place? in
             let name = Sanitize.text(f["FacilityName"] as? String, max: 100)
@@ -403,7 +408,7 @@ final class PlacesAPIService {
     /// Docs: https://www.nps.gov/subjects/developer/api-documentation.htm
     private func fetchNPSParks(center: CLLocationCoordinate2D) async -> [Place] {
         let key = ProviderConfig.value("NpsApiKey", env: "NPS_API_KEY")
-        guard !key.isEmpty, let state = await Self.reverseStateCode(center) else { return [] }
+        guard !key.isEmpty, let state = await stateCode(center) else { return [] }
         var comps = URLComponents(string: "https://developer.nps.gov/api/v1/parks")!
         comps.queryItems = [
             .init(name: "stateCode", value: state),
@@ -435,6 +440,17 @@ final class PlacesAPIService {
                 photoURL: Sanitize.url(firstImage)
             )
         }
+    }
+
+    /// GET JSON through the injected transport; nil on any failure (the provider is simply absent from the list).
+    private func fetchJSON(_ url: URL, headers: [String: String] = [:]) async -> Data? {
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 15
+        request.setValue(Self.userAgent, forHTTPHeaderField: "User-Agent")
+        for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
+        guard let (data, response) = try? await transport(request),
+              let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else { return nil }
+        return data
     }
 
     private static func categorizeRecreation(_ text: String) -> PlaceCategory {

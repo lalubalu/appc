@@ -16,8 +16,18 @@ build/
 # XcodeGen
 # Keep project.yml, ignore generated xcodeproj internals managed by user
 
-# Secrets — API keys injected via xcconfig
-# NOTE: Verdure/Secrets.xcconfig IS committed (private repo) so partners can build.
+# Secrets — NEVER committed (CAC 2026, 1.5). Copy the .template files and fill them in locally.
+#   Verdure/Secrets.xcconfig          Firebase ids + NPS / Recreation.gov keys (built into Info.plist)
+#   Verdure/Verdure/GoogleService-Info.plist   the Firebase iOS config
+#   functions/.secret.local            defineSecret() values for the local emulators
+# functions/.env stays tracked ON PURPOSE: it holds non-secret defaults that keep the
+# emulators non-interactive;  fails the build if a key lands in it.
+Verdure/Secrets.xcconfig
+**/GoogleService-Info.plist
+!**/GoogleService-Info.plist.template
+functions/.secret.local
+functions/.env.local
+*.p8
 Connectify/Secrets.xcconfig
 Connectify/Connectify/GoogleService-Info.plist
 Connectify/Connectify/Info.plist
