@@ -459,5 +459,34 @@ console.log("── adapters (W4.5): rss-ics ──");
 }
 
 ok("no module reached the global fetch", globalFetchCalls === 0, String(globalFetchCalls));
+console.log("\n── inspect.ts: an apex that refuses everything but whose robots.txt redirects to www. is inspected at www. (cdm.org, 2026-10-25) ──");
+{
+  const seen = [];
+  const stub = async (input) => {
+    const url = String(input instanceof Request ? input.url : input); seen.push(url);
+    const u = new URL(url);
+    if (u.hostname === "apex.example") {
+      if (u.pathname === "/robots.txt") return new Response("User-agent: *\nAllow: /\n", { status: 200, headers: { "content-type": "text/plain" } });   // served from www after a redirect
+      return new Response("Forbidden", { status: 403, headers: { "content-type": "text/html" } });
+    }
+    if (u.hostname === "www.apex.example") {
+      if (u.pathname === "/robots.txt") return new Response("User-agent: *\nAllow: /\n", { status: 200, headers: { "content-type": "text/plain" } });
+      if (u.pathname === "/") return new Response("<html><head><title>Apex Museum</title></head><body><a href=\"/terms-of-use/\">Terms of Use</a></body></html>", { status: 200, headers: { "content-type": "text/html" } });
+      if (u.pathname === "/terms-of-use/") return new Response("<html><body><p>The content may not be used for any commercial purpose.</p></body></html>", { status: 200, headers: { "content-type": "text/html" } });
+    }
+    return new Response("", { status: 404 });
+  };
+  // Response.url is read-only; a redirect is modelled by answering the apex robots request with the www URL.
+  const redirecting = async (input) => {
+    const url = String(input instanceof Request ? input.url : input);
+    if (url === "https://apex.example/robots.txt") { const r = await stub("https://www.apex.example/robots.txt"); Object.defineProperty(r, "url", { value: "https://www.apex.example/robots.txt" }); return r; }
+    return stub(url);
+  };
+  const ins = await inspectSource("apex.example", { area: SAN_JOSE, fetchImpl: redirecting, throttle: new HostThrottle(0), now: new Date("2026-10-25T00:00:00Z") });
+  ok("inspection moves to www. when the apex refuses its home page and robots.txt lands on www.", ins.home.status === 200 && /www\.apex\.example/.test(ins.home.finalUrl || ins.params?.siteUrl || seen.find((u) => /www\.apex\.example\/$/.test(u)) || ""), JSON.stringify({ status: ins.home.status, final: ins.home.finalUrl, seen: seen.slice(0, 6) }));
+  const d = await decideSource(ins, { area: SAN_JOSE, fetchImpl: redirecting, throttle: new HostThrottle(0), now: new Date("2026-10-25T00:00:00Z") });
+  ok("…so its terms page is found and the commercial clause rejects it", d.rules.termsAllow.pass === false && /commercial/.test(d.rules.termsAllow.evidence), JSON.stringify(d.rules.termsAllow));
+}
+
 console.log(`\n══ discovery-unit: ${passed} passed, ${failed} failed ══`);
 process.exit(failed ? 1 : 0);

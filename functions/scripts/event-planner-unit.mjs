@@ -87,6 +87,10 @@ ok("same user two weeks later receives different still-upcoming stops",
   const multi = sequenceEventsFallback(perDay), multiOther = sequenceEventsFallback([...perDay].reverse());
   ok("fallback: one event per day → three stops on three days, best-ranked first, in date order, and the intro says why", multi.stops.map((s) => s.eventId).join() === "d0,d1,d2" && /^Next up: 3 events over 3 days$/.test(multi.title) && /later days/.test(multi.intro), JSON.stringify([multi.title, multi.stops.map((s) => s.eventId)]));
   ok("fallback: a different ranking over the same days starts somewhere else (the E2E personalisation check)", multiOther.stops[0].eventId !== multi.stops[0].eventId, JSON.stringify(multiOther.stops.map((s) => s.eventId)));
+  // Three events at the very same time (the W2 seed): one cannot attend them all, so the plan is the best one plus the others as labelled alternatives.
+  const sameTime = ["a", "b", "c"].map((id) => ({ id, title: `Same-time ${id}`, category: "Social", organizer: "o", startMs: at(18), locationName: `Venue ${id}`, isFree: true, social: 0, latitude: 37.3382, longitude: -121.8863 }));
+  const clash = sequenceEventsFallback(sameTime);
+  ok("fallback: same-time events yield the best-ranked one plus alternatives labelled as such, never a one-card plan", clash.stops.length === 3 && clash.stops[0].eventId === "a" && clash.stops.slice(1).every((s) => /At the same time as Same-time a/.test(s.why)) && /alternatives at the same time/.test(clash.intro), JSON.stringify([clash.intro, clash.stops.map((s) => s.why)]));
   ok("fallback: one event alone is still a one-stop plan, not a crash", sequenceEventsFallback([ranked[0]]).stops.length === 1 && sequenceEventsFallback([]).stops.length === 0);
   ok("isAllDayListing: 'All day' label, or a local-midnight start that ends 20+ hours later; a 9 am class is not",
      isAllDayListing(at(0), at(23, 59), undefined) && isAllDayListing(at(9), undefined, "All day") && !isAllDayListing(at(9), at(10), "9:00 AM") && !isAllDayListing(at(0), at(2), undefined));

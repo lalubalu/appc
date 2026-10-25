@@ -1621,12 +1621,13 @@ async function main() {
 
   // CAC 2026 (1.2): the Adventure Planner answers with NO model key — the rules engine plans from the candidate allowlist.
   const planCandidates = [
-    { id: "osm-1", name: "St. James Park", category: "Parks", latitude: 37.3395, longitude: -121.8900, hours: "sunrise-sunset" },
+    // Hours are 24/7 so the check holds at whatever hour the suite runs (a sunrise-sunset park is closed after dark, which the engine rightly refuses).
+    { id: "osm-1", name: "St. James Park", category: "Parks", latitude: 37.3395, longitude: -121.8900, hours: "24/7" },
     { id: "osm-2", name: "Guadalupe River Trail", category: "Trails", latitude: 37.3360, longitude: -121.8940, hours: "24/7" },
-    { id: "osm-3", name: "Plaza de Cesar Chavez", category: "Parks", latitude: 37.3328, longitude: -121.8898 },
-    { id: "osm-4", name: "Northside Community Center", category: "Community", latitude: 37.3480, longitude: -121.8830, hours: "Mo-Su 06:00-22:00" },
+    { id: "osm-3", name: "Plaza de Cesar Chavez", category: "Parks", latitude: 37.3328, longitude: -121.8898, hours: "24/7" },
+    { id: "osm-4", name: "Northside Community Center", category: "Community", latitude: 37.3480, longitude: -121.8830, hours: "24/7" },
   ];
-  const adventure = await call("planAdventure", { lat: 37.3382, lng: -121.8863, interests: ["Parks", "Trails"], timeOfDay: "afternoon", durationMinutes: 120, candidates: planCandidates }, profileUser.idToken);
+  const adventure = await call("planAdventure", { lat: 37.3382, lng: -121.8863, interests: ["Parks", "Community"], timeOfDay: "afternoon", durationMinutes: 120, candidates: planCandidates }, profileUser.idToken);
   const advStops = adventure.result?.stops ?? [];
   ok("adventure planner: a plan comes back with no ANTHROPIC_API_KEY, from the rules engine, with 2–4 stops that are all supplied candidates",
     adventure.result?.engine === "rules" && advStops.length >= 2 && advStops.length <= 4 && advStops.every((st) => planCandidates.some((c) => c.id === st.placeId && c.name === st.name)),

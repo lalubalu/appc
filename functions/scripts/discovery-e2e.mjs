@@ -152,7 +152,12 @@ for (const host of EVIDENCE_HOSTS) {
   const dec = await decideSource(ins, { area, fetchImpl, throttle, now: NOW, originInArea: true, originNote: "evidence host" });
   inspections[host] = { platform: ins.platform, adapter: ins.adapter, verdict: dec.verdict, failed: dec.failed, terms: dec.rules.termsAllow, robots: dec.rules.robotsAllow, sample: ins.sample && { count: ins.sample.count, upcoming: ins.sample.upcoming, inRadius: ins.sample.inRadius } };
 }
-ok("Children's Discovery Museum: terms reject (commercial use barred)", inspections["www.cdm.org"].terms.pass === false && /commercial/i.test(inspections["www.cdm.org"].terms.evidence), inspections["www.cdm.org"].terms.evidence);
+// The museum is never activated. When its terms page is readable the commercial clause rejects it; from a Node client its
+// WAF answers 403 to every page (2026-10-21 and 2026-10-25 recordings, while curl gets 200), and then the 403s reject it instead.
+// The hand-fetched terms page is still checked in discovery-unit (terms/cdm-org-terms.html).
+ok("Children's Discovery Museum: never active — rejected by the commercial clause when its terms page is readable, else by the 403s its WAF gives a Node client",
+   inspections["www.cdm.org"].verdict === "rejected" && ((inspections["www.cdm.org"].terms.pass === false && /commercial/i.test(inspections["www.cdm.org"].terms.evidence)) || inspections["www.cdm.org"].failed.includes("machineReadable")),
+   JSON.stringify({ verdict: inspections["www.cdm.org"].verdict, failed: inspections["www.cdm.org"].failed, terms: inspections["www.cdm.org"].terms.evidence }));
 ok("ACTIVE Network: on the deny-list AND its API terms reject (24-hour storage)", inspections["developer.active.com"].failed.includes("notDenied") && inspections["developer.active.com"].terms.pass === false, JSON.stringify(inspections["developer.active.com"]));
 ok("SJSU Localist: every rule passes", inspections["events.sjsu.edu"].verdict === "active", JSON.stringify(inspections["events.sjsu.edu"]));
 ok("SJPL BiblioCommons: every rule passes", inspections["sjpl.bibliocommons.com"].verdict === "active", JSON.stringify(inspections["sjpl.bibliocommons.com"]));

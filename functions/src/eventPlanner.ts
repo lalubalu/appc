@@ -242,13 +242,25 @@ export function sequenceEventsFallback(rows: EventPlanCandidate[]): {
     }
     chain.sort((a, b) => a.startMs - b.startMs);
   }
-  const chosen = flexible && (first.allDay || chain.length < 3) ? [...chain, flexible] : chain;
+  // Still one stop (everything else that fits clashes with it in time): offer the next-ranked
+  // same-time events as alternatives rather than a one-card plan. They are labelled as such.
+  const alternatives: EventPlanCandidate[] = [];
+  if (chain.length + (flexible ? 1 : 0) < 2) {
+    for (const e of rows) {
+      if (alternatives.length + chain.length >= 3) break;
+      if (e.allDay || chain.includes(e) || alternatives.includes(e)) continue;
+      alternatives.push(e);
+    }
+  }
+  const chosen = flexible && (first.allDay || chain.length < 3) ? [...chain, flexible, ...alternatives] : [...chain, ...alternatives];
   const weekday = new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", weekday: "long" }).format(first.startMs);
   // The plan card already shows each event's time, venue and price; the why adds what it can't.
   const stops = chosen.map((e, i) => {
     const parts: string[] = [];
     if (e === first) parts.push("Your best-ranked match for these choices");
-    if (e.allDay) {
+    if (alternatives.includes(e)) {
+      parts.push(`At the same time as ${first.title} — an alternative if that one falls through`);
+    } else if (e.allDay) {
       parts.push(e === first ? "runs all day, so fit it in when it suits" : "Runs all day, so fit it in when it suits");
     } else if (i > 0 && !chosen[i - 1].allDay) {
       const prev = chosen[i - 1];
@@ -269,7 +281,7 @@ export function sequenceEventsFallback(rows: EventPlanCandidate[]): {
     if (e.social >= 0.69) parts.push("a friend is going");
     return { eventId: e.id, why: `${parts.join(" · ")}.` };
   });
-  const timed = chosen.filter((e) => !e.allDay);
+  const timed = chosen.filter((e) => !e.allDay && !alternatives.includes(e));
   const free = chosen.every((e) => e.isFree);
   const title = spansDays && timed.length >= 2 ? `Next up: ${chosen.length} events over ${new Set(timed.map((e) => localISODate(e.startMs))).size} days`
     : timed.length >= 2 ? `${weekday}: ${chosen.length} events from ${clockLA(timed[0].startMs)}`
@@ -280,7 +292,8 @@ export function sequenceEventsFallback(rows: EventPlanCandidate[]): {
     ? `${timed.length} timed events in order, ${clockLA(timed[0].startMs)} to about ${clockLA(timed[timed.length - 1].startMs + ASSUMED_EVENT_MINUTES * 60_000)}, each reachable after the one before.`
     : timed.length === 1 ? `${timed[0].title} starts at ${clockLA(timed[0].startMs)}.` : "";
   const flexibleText = flexible && chosen.includes(flexible) ? `${flexible.title} runs all day, so fit it in when it suits.` : "";
-  const intro = [timedText, flexibleText, free ? "All free." : ""].filter(Boolean).join(" ")
+  const altText = alternatives.length ? `${alternatives.length === 1 ? "One alternative" : `${alternatives.length} alternatives`} at the same time, in case the first falls through.` : "";
+  const intro = [timedText, altText, flexibleText, free ? "All free." : ""].filter(Boolean).join(" ")
     || `Only one matching event fits that day.`;
   return { title, intro, stops };
 }
