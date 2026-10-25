@@ -42,7 +42,11 @@ console.log("\n── port of score_event ──");
   ok("interest_match 1.0 when a topic tag maps to a stated interest, with John's reason", r.components.interest === 1 && r.reasons.includes("Matches your interest in family activities"));
   ok("interest_match 0.5 with no stated interests", scoreEventV2(ev("a"), baseCtx, 0.5, {}, {}).components.interest === 0.5);
   ok("interest_match 0.0 when interests exist but none match (topic, v1 category map and synonyms all miss)", scoreEventV2(ev("a"), { ...baseCtx, interests: ["food"] }, 0.5, {}, {}).components.interest === 0);
-ok("interest_match also honours v1's category map ('tech' covers Workshop) so no v1 match is lost", scoreEventV2(ev("a"), { ...baseCtx, interests: ["tech"] }, 0.5, {}, {}).components.interest === 1);
+ok("interest_match also honours v1's SPECIFIC category map ('tech' covers Hackathon; a Workshop catch-all no longer counts — CAC 2026 false-match fix)",
+   scoreEventV2(ev("a", { category: "Hackathon" }), { ...baseCtx, interests: ["tech"] }, 0.5, {}, {}).components.interest === 1 &&
+   scoreEventV2(ev("a"), { ...baseCtx, interests: ["tech"] }, 0.5, {}, {}).components.interest === 0);
+ok("app labels are understood by v2 too: a 'Parks' user matches an outdoors-tagged event and the reason names the pick",
+   (() => { const r = scoreEventV2(ev("p", { topicTags: ["outdoors"], title: "Bird Walk" }), { ...baseCtx, interests: ["Parks"] }, 0.5, {}, {}); return r.components.interest === 1 && r.reasons.includes("Matches your interest in Parks"); })());
   ok("distance: 1 - d/max_distance; 'Close by' under 2 mi", r.components.distance === Number((1 - 0.5 / 10).toFixed(3)) && r.reasons.includes("Close by (0.5 mi)"));
   ok("distance: 'Near your selected area' inside half the radius", scoreEventV2(ev("a"), baseCtx, 4, {}, { maxDistanceMiles: 10 }).reasons.includes("Near your selected area (4.0 mi)"));
   ok("distance: online events score 0.7 with the online reason", scoreEventV2(ev("a", { virtual: true }), baseCtx, undefined, {}, {}).components.distance === 0.7 &&

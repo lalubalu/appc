@@ -25,8 +25,9 @@
  */
 
 import type { RankableEvent, RankingContext, ScoredEvent } from "./ranking.js";
-import { INTEREST_TO_CATEGORY, INTEREST_SYNONYMS, haversineMiles, interestText, socialScore } from "./ranking.js";
+import { INTEREST_TO_CATEGORY, INTEREST_SYNONYMS, haversineMiles, socialScore } from "./ranking.js";
 import { interestsForTopics } from "./ingest/annotate.js";
+import { interestTerms, matchInterests, labelForTerm } from "./interests.js";
 
 // ── Weights and constants ────────────────────────────────────────────────────
 
@@ -293,24 +294,28 @@ export const PRETTY: Record<string, string> = {
   fitness: "fitness", hiking: "hiking",
 };
 
-/** The reason line for an interest match: names the label the user picked when we know it. */
-export function interestReason(matched: readonly string[], ctx: Pick<RankingContext, "interestLabels">): string {
-  const labels = ctx.interestLabels ?? {};
-  // Prefer the most specific pick ("hiking" ← Trails only) over a shared one ("outdoors" ← Parks, Trails).
-  const best = matched.filter((m) => labels[m]?.length).sort((a, b) => labels[a].length - labels[b].length)[0];
-  return best ? `Because you like ${labels[best][0]}` : `Matches your interest in ${PRETTY[matched[0]] ?? matched[0]}`;
-}
-
-/** Does this event match one of the user's interests (topicTags via TOPIC_TO_INTEREST, plus v1's category map and synonyms)? */
+/**
+ * Does this event match one of the user's interests? Returns the matching
+ * server TERMS. The user's stored values are normalised first (interests.ts):
+ * the app saves PlaceCategory labels such as "Parks", and before CAC 2026 none
+ * of them could match here. John's topic-tag path is kept (port fidelity),
+ * joined by v1's precise matcher, the specific-category map and the aliases.
+ */
 export function matchedInterests(ev: RankableEvent, interests: readonly string[]): string[] {
-  if (!interests.length) return [];
-  const wanted = new Set(interests.map((i) => i.toLowerCase()));
+  const wanted = new Set(interestTerms(interests));
+  if (!wanted.size) return [];
   const fromTopics = interestsForTopics(ev.topicTags ?? []).filter((i) => wanted.has(i));
+  const fromPrecise = matchInterests(ev, interests).map((m) => m.term);
   const cat = ev.category ?? "";
   const fromCategory = [...wanted].filter((i) => (INTEREST_TO_CATEGORY[i] ?? []).includes(cat));
-  const text = interestText(ev);
+  const text = ` ${[ev.title, ev.description, ...(ev.tags ?? [])].filter(Boolean).join(" ").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()} `;
   const fromSynonyms = [...wanted].filter((i) => (INTEREST_SYNONYMS[i] ?? []).some((term) => text.includes(` ${term} `)));
-  return [...new Set([...fromTopics, ...fromCategory, ...fromSynonyms])];
+  return [...new Set([...fromPrecise, ...fromTopics, ...fromCategory, ...fromSynonyms])];
+}
+
+/** The name a reason uses for a matched term: the user's own pick when it produced the term ("Parks"), else the term's plain name. */
+export function interestDisplayName(interests: readonly string[], term: string): string {
+  return labelForTerm(interests, term);
 }
 
 function localWeekday(ms: number): number {
@@ -332,7 +337,7 @@ export function scoreEventV2(ev: RankableEvent, ctx: RankingContext, distance: n
   if (!ctx.interests.length) comps.interest = 0.5;
   else {
     comps.interest = matched.length ? 1.0 : 0.0;
-    if (matched.length) reasons.push(interestReason(matched, ctx));
+    if (matched.length) reasons.push(`Matches your interest in ${interestDisplayName(ctx.interests, matched[0])}`);
   }
 
   // Distance
@@ -508,7 +513,16 @@ export function rankEventsV2(events: RankableEvent[], ctx: RankingContext, opts:
 /** v1 produces up to three reasons from its own `parts`; each one is backed by a component value above a documented threshold. */
 export const V1_REASON_RULES: Array<{ part: string; min: number; text: (ev: RankableEvent, ctx: RankingContext, value: number) => string | null }> = [
   { part: "social", min: 0.69, text: (ev, ctx) => { const n = ctx.friendsGoing[ev.id] ?? 0; return n === 1 ? "A friend is going" : n > 1 ? `${n} friends are going` : null; } },
-  { part: "interest", min: 0.9, text: (ev, ctx) => { const m = matchedInterests(ev, ctx.interests); return m.length ? interestReason(m, ctx) : "Matches what you've attended"; } },
+  // "Because you like Parks" names the user's OWN pick and is emitted only when
+  // that pick matched this listing directly (parts.interestMatch, not a floor or
+  // behaviour). A high interest term with no direct match is behavioural.
+  { part: "interest", min: 0.9, text: (ev, ctx, _value) => {
+    const direct = matchInterests(ev, ctx.interests).find((m) => m.strength >= 0.9);
+    // The user's own pick verbatim ("Parks"); a stored server term reads as its plain name ("family activities").
+    if (direct) return `Because you like ${labelForTerm(ctx.interests, direct.term)}`;
+    const attendedTotal = Object.values(ctx.attendedCategories ?? {}).reduce((a, b) => a + b, 0);
+    return attendedTotal > 0 && (ctx.attendedCategories[ev.category ?? ""] ?? 0) > 0 ? "Matches what you've attended" : null;
+  } },
   { part: "distance", min: 0.75, text: (ev, ctx) => ctx.lat !== undefined && ctx.lng !== undefined && ev.latitude !== undefined && ev.longitude !== undefined
     ? `Close by (${haversineMiles(ctx.lat, ctx.lng, ev.latitude, ev.longitude).toFixed(1)} mi)` : null },
   { part: "timing", min: 0.8, text: (ev, ctx) => (ev.startMs - ctx.nowMs) < 86_400_000 ? "Happening today or tomorrow" : "Coming up this week" },

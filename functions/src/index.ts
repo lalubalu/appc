@@ -446,9 +446,11 @@ export { onFulfilmentWritten, sweepFulfilments, runFulfilment } from "./fulfillm
 // inert for paying members. See subscriptions.ts for the ownership-binding model.
 export { linkSubscription, appStoreNotifications, refreshMySubscription, getAppAccountToken } from "./subscriptions.js";
 
-// ── AI Adventure Planner ────────────────────────────────────────────────────
-// Grounded in real nearby places: the model chooses from a candidate allowlist
-// and any stop it invents is dropped server-side. See adventure.ts.
+// ── Adventure Planner ───────────────────────────────────────────────────────
+// A rules engine by default (adventure-engine.ts); a language model only when
+// ANTHROPIC_API_KEY is configured. Either way grounded in real nearby places:
+// stops come from a candidate allowlist and anything else is dropped
+// server-side. See adventure.ts.
 export { planAdventure } from "./adventure.js";
 
 // Personalized ranking. Nothing read users/{uid}.interests before this — the

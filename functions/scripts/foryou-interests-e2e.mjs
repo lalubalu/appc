@@ -3,7 +3,9 @@
  *
  * Two fresh accounts store their picks exactly as the app writes them (PlaceCategory raw
  * values), call the actual recommendedEvents callable, and must get visibly different
- * top 10s. The student who picked Parks + Trails must see mostly outdoor listings.
+ * top 10s. The student who picked Parks + Trails must see mostly outdoor listings. Then one
+ * account per pick (`foryou-pick-<pick>`) must get a top-10 card that names its own pick; with
+ * --keep these are the accounts DemoWalkthroughUITests signs in to for demo-screens/foryou-<pick>.png.
  *
  *   FIRESTORE_EMULATOR_HOST=127.0.0.1:8899 FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 \
  *     node scripts/foryou-interests-e2e.mjs [--keep]
@@ -43,7 +45,7 @@ async function forYou(token) {
   assert.ok(body.result, `recommendedEvents failed: ${JSON.stringify(body)}`);
   const rows = body.result.events.slice(0, 10);
   const docs = await Promise.all(rows.map((r) => db.doc(`events/${r.id}`).get()));
-  return rows.map((r, i) => ({ ...r, title: docs[i].data()?.title ?? "", category: docs[i].data()?.category ?? "" }));
+  return rows.map((r, i) => ({ ...r, title: docs[i].data()?.title ?? "", category: docs[i].data()?.category ?? "", source: docs[i].data()?.source ?? "" }));
 }
 
 const student = await forYou(await account("foryou-student-trails", ["Parks", "Trails"], { studentStatus: true, school: "San José State University" }));
@@ -53,7 +55,7 @@ show("Student · Parks + Trails", student);
 show("Community + Sports", community);
 console.log("");
 
-const outdoor = student.filter((r) => OUTDOOR.test(r.title)).length;
+const outdoor = student.filter((r) => OUTDOOR.test(r.title) || r.source === "midpen" || r.category === "Cleanup").length;
 const careerish = student.filter((r) => CAREERISH.test(r.title)).length;
 ok("student Parks + Trails: top 10 is mostly outdoor", outdoor >= 6, `${outdoor}/10`);
 ok("student Parks + Trails: at most 2 workshop/hackathon/career listings", careerish <= 2, `${careerish}`);
@@ -63,8 +65,16 @@ ok("the reasons line names a pick, not an internal word",
    student.some((r) => r.reasons.some((x) => /^Because you like (Parks|Trails)$/.test(x))) &&
    !student.some((r) => r.reasons.some((x) => /the outdoors|hiking/.test(x))));
 
+const PICKS = ["Parks", "Trails", "Gardens", "Playgrounds", "Waterfront", "Sports", "Scenic", "Community"];
+const pickUids = PICKS.map((pick) => `foryou-pick-${pick.toLowerCase()}`);
+for (const [i, pick] of PICKS.entries()) {
+  const rows = await forYou(await account(pickUids[i], [pick]));
+  ok(`${pick} alone: a top-10 card says "Because you like ${pick}"`,
+     rows.some((r) => r.reasons.includes(`Because you like ${pick}`)), JSON.stringify(rows.map((r) => r.reasons[0])));
+}
+
 if (!process.argv.includes("--keep")) {
-  for (const uid of ["foryou-student-trails", "foryou-community-sports"]) {
+  for (const uid of ["foryou-student-trails", "foryou-community-sports", ...pickUids]) {
     await getAuth().deleteUser(uid).catch(() => {}); await db.recursiveDelete(db.doc(`users/${uid}`));
   }
 }

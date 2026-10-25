@@ -25,7 +25,7 @@ import CoreLocation
         QA.reveal(signIn, in: app, maxSwipes: 20)
         QA.waitFor(signIn, "guest sign-in").tap()
         let email = QA.waitFor(app.textFields["Email address"], "email")
-        QA.type("qa-rewards-native-staff@example.test", into: email)
+        QA.type("qa-rewards-native-staff@example.test\n", into: email)
         let password = app.secureTextFields["Password"]
         QA.type("local-rewards-native-only\n", into: password)   // Return closes the keyboard that covers submit
         let submit = app.buttons["authSubmit"]
@@ -128,7 +128,7 @@ import CoreLocation
         app = QA.launch(tab: "rewards", extraArguments: ["-QAOfflineData", "NO", "-QAUseFirestoreEmulator", "YES"], location: partnerOrigin)
         let redeem = app.buttons["redeem-perk:\(perkID)"]
         QA.waitFor(redeem, "actual stocked reward", timeout: 30)
-        for _ in 0..<8 where redeem.frame.midY >= app.frame.height - 160 { app.swipeUp() }
+        for _ in 0..<8 where redeem.frame.midY >= app.frame.height - 160 { QA.scroll(app) }
         let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: redeem)
         XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 15), .completed, "Wait for the actual account balance before redemption.")
         XCTAssertTrue(redeem.isHittable)

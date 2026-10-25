@@ -152,7 +152,12 @@ for (const host of EVIDENCE_HOSTS) {
   const dec = await decideSource(ins, { area, fetchImpl, throttle, now: NOW, originInArea: true, originNote: "evidence host" });
   inspections[host] = { platform: ins.platform, adapter: ins.adapter, verdict: dec.verdict, failed: dec.failed, terms: dec.rules.termsAllow, robots: dec.rules.robotsAllow, sample: ins.sample && { count: ins.sample.count, upcoming: ins.sample.upcoming, inRadius: ins.sample.inRadius } };
 }
-ok("Children's Discovery Museum: terms reject (commercial use barred)", inspections["www.cdm.org"].terms.pass === false && /commercial/i.test(inspections["www.cdm.org"].terms.evidence), inspections["www.cdm.org"].terms.evidence);
+// The museum is never activated. When its terms page is readable the commercial clause rejects it; from a Node client its
+// WAF answers 403 to every page (2026-10-21 and 2026-10-25 recordings, while curl gets 200), and then the 403s reject it instead.
+// The hand-fetched terms page is still checked in discovery-unit (terms/cdm-org-terms.html).
+ok("Children's Discovery Museum: never active — rejected by the commercial clause when its terms page is readable, else by the 403s its WAF gives a Node client",
+   inspections["www.cdm.org"].verdict === "rejected" && ((inspections["www.cdm.org"].terms.pass === false && /commercial/i.test(inspections["www.cdm.org"].terms.evidence)) || inspections["www.cdm.org"].failed.includes("machineReadable")),
+   JSON.stringify({ verdict: inspections["www.cdm.org"].verdict, failed: inspections["www.cdm.org"].failed, terms: inspections["www.cdm.org"].terms.evidence }));
 ok("ACTIVE Network: on the deny-list AND its API terms reject (24-hour storage)", inspections["developer.active.com"].failed.includes("notDenied") && inspections["developer.active.com"].terms.pass === false, JSON.stringify(inspections["developer.active.com"]));
 ok("SJSU Localist: every rule passes", inspections["events.sjsu.edu"].verdict === "active", JSON.stringify(inspections["events.sjsu.edu"]));
 ok("SJPL BiblioCommons: every rule passes", inspections["sjpl.bibliocommons.com"].verdict === "active", JSON.stringify(inspections["sjpl.bibliocommons.com"]));
@@ -255,11 +260,20 @@ ok("a 304 to the conditional request is a successful run: no parsing, no event w
   JSON.stringify({ notModified: second.notModified, succeeded: second.succeeded, records: second.records.length, failures: second.failures, streak: stored2.failureStreak, last: stored2.lastEventCount }));
 let nm = false; try { await conditionalFetchFor({ etag: "\"v1\"", lastModified: null }, etagFetch).fetchImpl("https://cond.example.org/events.ics"); } catch (e) { nm = e instanceof NotModified; }
 ok("conditionalFetchFor signals NotModified instead of handing the adapter an empty body", nm);
+// runSource carries the 304 out, so a caller can tell "every feed answered, nothing new" from "nothing
+// ran" (refresh-public-corpus-local.mjs read fetched 0 as a failure and aborted every second reload).
+const realFetch = globalThis.fetch; globalThis.fetch = etagFetch;
+let viaRun; try { viaRun = await runSource("ics", area, {}, undefined, [{ ...icsDoc, etag: stored.etag }]); } finally { globalThis.fetch = realFetch; }
+ok("runSource reports the 304 as notModified with no error, so an unchanged feed is not read as a failed one",
+  viaRun.notModified === 1 && viaRun.fetched === 0 && viaRun.errors.length === 0, JSON.stringify({ notModified: viaRun.notModified, fetched: viaRun.fetched, errors: viaRun.errors }));
 
 // ── 7. Intake ───────────────────────────────────────────────────────────────
 console.log("── W4.4: intake ──");
 ok("a submitted calendar URL becomes a candidate (a URL to inspect, never an event)", (await recordSourceSubmission("https://library.example.org/events.ics", "organizer", "ip:test", area.id)).accepted === true && (await db.doc(`sourceSubmissions/${area.id}_library.example.org`).get()).exists);
 ok("a deny-listed URL is refused at intake", (await recordSourceSubmission("https://www.eventbrite.com/o/x", "organizer", "ip:test", area.id)).accepted === false);
+ok("a Google Maps URL is refused at intake even though google.com itself is not denied (the path-qualified entry; red-team gap fixed 2026-10-25)",
+   (await recordSourceSubmission("https://www.google.com/maps/place/some-venue", "organizer", "ip:test", area.id)).accepted === false &&
+   (await recordSourceSubmission("https://maps.google.com/?q=x", "organizer", "ip:test", area.id)).accepted === false);
 ok("a removed host is refused at intake", (await recordSourceSubmission("https://never-a-source.example.org/cal", "organizer", "ip:test", area.id)).accepted === false);
 
 // ── Evidence ────────────────────────────────────────────────────────────────

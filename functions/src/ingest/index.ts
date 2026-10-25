@@ -201,7 +201,7 @@ export async function runSource(source: SourceId, area: LaunchArea, keys: Keys, 
     source, areaId: area.id, fetched: 0, created: 0, updated: 0, merged: 0,
     mergeRate: 0, suspectedDuplicates: 0, suspectedDuplicateRate: 0,
     markedStale: 0, deactivated: 0, skipped: 0, unchanged: 0, fuzzyMerged: 0, rejected: 0, rejectedByReason: {}, writes: 0,
-    errors: [], durationMs: 0,
+    notModified: 0, errors: [], durationMs: 0,
   };
   try {
     // W4.7: live fetches are isolated per source document; payload mode (tests, migration check) is unchanged.
@@ -209,6 +209,7 @@ export async function runSource(source: SourceId, area: LaunchArea, keys: Keys, 
     const records = payload ?? isolated!.records;
     if (isolated) for (const f of isolated.failures) result.errors.push(`${f.id}: ${f.error}${f.paused ? " (paused)" : ""}`);
     result.fetched = records.length;
+    result.notModified = isolated?.notModified ?? 0;
     const index = await loadAreaIndex(area);
     const stats = await upsertBatch(records, area, index, runStart);
     Object.assign(result, stats);

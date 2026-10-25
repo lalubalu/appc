@@ -471,8 +471,9 @@ export async function recordSourceSubmission(urlRaw: unknown, origin: "organizer
   try { url = new URL(String(urlRaw ?? "").trim()); if (!/^https?:$/.test(url.protocol)) throw new Error(); } catch { return { accepted: false, host: "", reason: "Enter a calendar URL starting with https://." }; }
   const host = normalizeHost(url.hostname);
   if (!validHost(host)) return { accepted: false, host, reason: "That host name is not valid." };
-  // The full URL too: path-scoped entries ("google.com/maps") cannot match a bare host.
-  if (isDeniedHost(host) || isDeniedHost(url.href)) return { accepted: false, host, reason: `${host} cannot be used as a source (deny-list).` };
+  // The deny-list has path-qualified entries (google.com/maps): check the whole URL as well as the host, or a
+  // Google Maps link slips past on its hostname alone (red team, 2026-10-22).
+  if (isDeniedHost(host) || isDeniedHost(url.href)) return { accepted: false, host, reason: `${host}${isDeniedHost(host) ? "" : url.pathname.split("/").slice(0, 2).join("/")} cannot be used as a source (deny-list).` };
   if (await isRemovedHost(host)) return { accepted: false, host, reason: `${host} asked to be removed and will not be re-added.` };
   await db.collection("sourceSubmissions").doc(candidateId(areaId, host)).set({ url: url.href.slice(0, 1000), host, areaId, origin, requester, submittedAt: Timestamp.now(), processedAt: null }, { merge: true });
   return { accepted: true, host };

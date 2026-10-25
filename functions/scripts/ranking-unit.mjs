@@ -8,9 +8,9 @@
  */
 import {
   WEIGHTS, WEIGHT_SUM, rankEvents, scoreEvent, interestScore, distanceScore,
-  socialScore, timingScore, noveltyScore, feedbackScore, haversineMiles, INTEREST_TO_CATEGORY,
-  normalizeInterests, topicsForInterests, withinRadius, DEFAULT_RETRIEVAL_RADIUS_MILES,
+  socialScore, timingScore, noveltyScore, feedbackScore, haversineMiles, INTEREST_TO_CATEGORY, EXPLORATION_REASON, statedInterestMatch,
 } from "../lib/ranking.js";
+import { normalizeInterests, interestTerms, labelForTerm, matchInterests, stripVenueNames, APP_LABEL_TO_TERMS, SERVER_INTEREST_TERMS, TERM_CATEGORIES, retrievalTopics, retrievalCategories } from "../lib/interests.js";
 import { reasonsForV1 } from "../lib/ranking-v2.js";
 
 let pass = 0, fail = 0;
@@ -34,7 +34,8 @@ const ev = (id, o = {}) => ({
 
 console.log("── weights ──");
 ok("weights sum to exactly 1.0", Math.abs(WEIGHT_SUM - 1) < 1e-9, String(WEIGHT_SUM));
-ok("distance is the heaviest single term", WEIGHTS.distance === Math.max(...Object.values(WEIGHTS)));
+ok("interest and distance are the two heaviest terms, tied at 0.20 (CAC 2026: interest 0.16 → 0.20, distance 0.24 → 0.20)",
+   WEIGHTS.interest === 0.20 && WEIGHTS.distance === 0.20 && Math.max(...Object.values(WEIGHTS)) === 0.20);
 ok("a household with a four-year-old ranks a child-suitable event higher",
   interestScore(ev("family", { ageSuitability: "children", minimumAge: 4 }),
     { ...baseCtx, householdYoungestAge: 4 }) >
@@ -109,8 +110,14 @@ console.log("\n── interest term ──");
   ok("stated interest matches its mapped categories",
      interestScore(ev("a", { category: "Hackathon" }), stated) === 1 &&
      interestScore(ev("a", { category: "Sports" }), stated) === 0);
-  ok("interest map covers every app interest with at least one category",
-     Object.values(INTEREST_TO_CATEGORY).every((v) => Array.isArray(v) && v.length > 0));
+  ok("every app interest label (PlaceCategory) normalises to at least one server term with a lexicon",
+     ["Parks", "Trails", "Gardens", "Playgrounds", "Waterfront", "Sports", "Scenic", "Community"].every((label) => {
+       const terms = interestTerms([label]);
+       return terms.length > 0 && terms.every((t) => SERVER_INTEREST_TERMS.includes(t) && t in TERM_CATEGORIES);
+     }));
+  ok("no app-reachable interest maps to a catch-all category (Workshop/Social/Meetup) — those produced the false matches",
+     interestTerms(["Parks", "Trails", "Gardens", "Playgrounds", "Waterfront", "Sports", "Scenic", "Community"])
+       .flatMap((t) => INTEREST_TO_CATEGORY[t] ?? []).every((c) => !["Workshop", "Social", "Meetup"].includes(c)));
   const hiking = { ...baseCtx, interests: ["hiking"] };
   ok("semantic interest matches a trail day without the word hiking",
      interestScore(ev("trail", { category: "Volunteer", title: "Trail Day at Rancho San Antonio" }), hiking) > 0.8);
@@ -238,6 +245,159 @@ console.log("\n── novelty + diversity ──");
   ok("the top result is never damped", out[0].parts.diversity === 1);
 }
 
+console.log("\n── CAC 2026: app labels are understood (1.1 cause 1) ──");
+{
+  const n = normalizeInterests(["Parks", "Trails", "parks", "Nonsense", 42, "outdoors"]);
+  ok("app labels expand to server terms, duplicates and unknown values are dropped, terms pass through",
+     JSON.stringify(n) === JSON.stringify([{ label: "Parks", terms: ["outdoors"] }, { label: "Trails", terms: ["hiking", "outdoors"] }, { label: "outdoors", terms: ["outdoors"] }]), JSON.stringify(n));
+  ok("every PlaceCategory label is in the normaliser table", ["parks", "trails", "gardens", "playgrounds", "waterfront", "sports", "scenic", "community"].every((k) => k in APP_LABEL_TO_TERMS));
+  ok("the user's own label is recovered from a term for the reasons line", labelForTerm(["Parks", "Community"], "volunteering") === "Community" && labelForTerm(["Parks"], "outdoors") === "Parks" && labelForTerm(["outdoors"], "outdoors") === "the outdoors");
+  const parks = { ...baseCtx, interests: ["Parks"] };
+  ok("BEFORE the fix the interest term was 0 for every event of a 'Parks' user; now a bird walk scores 1",
+     interestScore(ev("walk", { title: "Lake Elizabeth Bird Walk", category: "Workshop" }), parks) === 1);
+  ok("'Community' matches a Volunteer-category listing by category alone", statedInterestMatch(ev("v", { category: "Volunteer", title: "Saturday Shift" }), { ...baseCtx, interests: ["Community"] }) === 1);
+  ok("'Sports' matches the Sports category and a yoga title", statedInterestMatch(ev("y", { category: "Sports", title: "Thing" }), { ...baseCtx, interests: ["Sports"] }) === 1 &&
+     statedInterestMatch(ev("y2", { category: "Workshop", title: "Family Yoga" }), { ...baseCtx, interests: ["Sports"] }) === 1);
+  ok("retrieval topics and categories derive from the same lexicon (Parks → outdoors tag + Cleanup; Community → civic/community/volunteer + Cleanup/Festival/Market/Volunteer)",
+     JSON.stringify(retrievalTopics(interestTerms(["Parks"]))) === JSON.stringify(["outdoors"]) && JSON.stringify(retrievalCategories(interestTerms(["Parks"]))) === JSON.stringify(["Cleanup"]) &&
+     JSON.stringify(retrievalTopics(interestTerms(["Community"]))) === JSON.stringify(["civic", "community", "volunteer"]) &&
+     JSON.stringify(retrievalCategories(interestTerms(["Community"]))) === JSON.stringify(["Cleanup", "Festival", "Market", "Volunteer"]));
+}
+
+console.log("\n── CAC 2026: no false matches (1.1 cause 4) ──");
+{
+  const storytime = ev("st", { title: "Family Storytime", category: "Workshop", locationName: "Mitchell Park Library · Midtown Room", organizer: "Palo Alto City Library",
+    description: "Join us at Mitchell Park Library for songs and stories. Educational Park families welcome." });
+  ok("a storytime at Mitchell Park Library is NOT a Parks match (venue names are stripped, bare 'park' is not a phrase)",
+     statedInterestMatch(storytime, { ...baseCtx, interests: ["Parks"] }) === 0 && !/Mitchell Park Library/.test(stripVenueNames(storytime.description, storytime)),
+     JSON.stringify([statedInterestMatch(storytime, { ...baseCtx, interests: ["Parks"] }), stripVenueNames(storytime.description, storytime)]));
+  const craft = ev("cr", { title: "Art History for Kids: Design a Diya", category: "Workshop", locationName: "San Lorenzo · Greenhouse Community Room", description: "Crafts in the Greenhouse Community Room." });
+  ok("a film night ('Cinema Sunday: Yellow Rose') is NOT a Gardens match, a rose garden tour is", statedInterestMatch(ev("ys", { title: "Cinema Sunday: Yellow Rose", category: "Festival" }), { ...baseCtx, interests: ["Gardens"] }) === 0 && statedInterestMatch(ev("rg", { title: "Rose Garden Tour", category: "Meetup" }), { ...baseCtx, interests: ["Gardens"] }) === 1);
+  ok("a craft class in the Greenhouse Community Room is NOT a Gardens match", statedInterestMatch(craft, { ...baseCtx, interests: ["Gardens"] }) === 0);
+  const homework = ev("hw", { title: "Homework Help Center", category: "Workshop", description: "Drop in for help from our trained volunteer tutors. Volunteers staff the center on weekdays." });
+  ok("'volunteer' in a description is not a Volunteering/Community match", statedInterestMatch(homework, { ...baseCtx, interests: ["Community"] }) === 0 && statedInterestMatch(homework, { ...baseCtx, interests: ["volunteering"] }) === 0);
+  const cleanup = ev("cu", { title: "Coyote Creek Restoration Morning", category: "Workshop", description: "Volunteers needed: help us remove invasive plants. Gloves and tools provided." });
+  ok("'Restoration' in the title IS a Community match (and a Waterfront one via 'creek')",
+     statedInterestMatch(cleanup, { ...baseCtx, interests: ["Community"] }) === 1 && statedInterestMatch(cleanup, { ...baseCtx, interests: ["Waterfront"] }) === 1);
+  const descOnly = ev("do", { title: "Saturday Morning at the Farm", category: "Workshop", description: "Volunteers needed: help us remove invasive plants. Gloves and tools provided." });
+  ok("'volunteers needed … help us remove invasive' only in the description LIFTS the score (0.8) but is not a direct match",
+     statedInterestMatch(descOnly, { ...baseCtx, interests: ["Community"] }) === 0.8 && scoreEvent(descOnly, { ...baseCtx, interests: ["Community"] }).parts.interestMatch === 0);
+  const umbrella = ev("um", { title: "Personal Emergency Preparedness Workshop", category: "Workshop", tags: ["library", "Health & Fitness", "Adults"] });
+  ok("a library's umbrella tag 'Health & Fitness' is not a Sports match (a CPR class is not a sport)", statedInterestMatch(umbrella, { ...baseCtx, interests: ["Sports"] }) === 0);
+  const tagLift = ev("tl", { title: "Evening Session", category: "Workshop", tags: ["library", "Yoga & Tai Chi series"] });
+  ok("a phrase inside a feed label that is not allow-listed as a whole is a lift (0.8), not a direct match", statedInterestMatch(tagLift, { ...baseCtx, interests: ["Sports"] }) === 0.8 && scoreEvent(tagLift, { ...baseCtx, interests: ["Sports"] }).parts.interestMatch === 0);
+  const midpen = ev("mp", { title: "Trees & Friends", category: "Sports", source: "midpen", tags: ["outdoors", "parks", "Hike"], description: "Hike · About 5.5 miles." });
+  ok("an allow-listed whole feed tag ('Hike', 'outdoors') IS a direct Parks match", matchInterests(midpen, ["Parks"])[0]?.via === "tag" && statedInterestMatch(midpen, { ...baseCtx, interests: ["Parks"] }) === 1);
+  ok("'The Songs of Nature: An Art Exhibit' is not an outdoors match (bare 'nature' is not a phrase)", statedInterestMatch(ev("sn", { title: "The Songs of Nature: An Art Exhibit", category: "Festival" }), { ...baseCtx, interests: ["Parks"] }) === 0);
+  ok("'South Bay Needlepointers' and a geothermal 'Reservoir' seminar are not Waterfront matches",
+     statedInterestMatch(ev("nb", { title: "The South Bay Needlepointers (SBN) Stitch-In", category: "Workshop" }), { ...baseCtx, interests: ["Waterfront"] }) === 0 &&
+     statedInterestMatch(ev("rs", { title: "ESE Seminar: Reservoir Evolution and Stress Changes", category: "Workshop" }), { ...baseCtx, interests: ["Waterfront"] }) === 0);
+  ok("'Open Lab Hours at AI Center for Civic and Social Good' is not a Community match (bare 'civic' is not a phrase)",
+     statedInterestMatch(ev("cv", { title: "Open Lab Hours at AI Center for Civic and Social Good", category: "Workshop" }), { ...baseCtx, interests: ["Community"] }) === 0);
+  const boardGames = ev("bg", { title: "Go: The Game", category: "Social", description: "Learn the ancient board game. All skill levels." });
+  ok("a board-game afternoon (tagged 'sports' by the word game) is NOT a Sports match", statedInterestMatch(boardGames, { ...baseCtx, interests: ["Sports"] }) === 0);
+  ok("a listing from a discovered source classified Cleanup with nothing outdoor about it is a lift, not a Parks match (allcove's 'glitter jars'); a config source's Cleanup still is",
+     scoreEvent(ev("gj", { title: "senses and sensibility: glitter jars", category: "Cleanup", source: "wordpress-tec", organizer: "allcove" }), { ...baseCtx, interests: ["Parks"] }).parts.interestMatch === 0 &&
+     statedInterestMatch(ev("gj", { title: "senses and sensibility: glitter jars", category: "Cleanup", source: "wordpress-tec" }), { ...baseCtx, interests: ["Parks"] }) === 0.8 &&
+     statedInterestMatch(ev("cc", { title: "Saturday Shift", category: "Cleanup", source: "bibliocommons" }), { ...baseCtx, interests: ["Parks"] }) === 1 &&
+     statedInterestMatch(ev("sb", { title: "Native Planting at Palo Alto Baylands!", category: "Volunteer", source: "wordpress-tec", tags: [] }), { ...baseCtx, interests: ["Community"] }) === 1);
+  ok("a 'Social' catch-all category is NOT a Community match by itself", statedInterestMatch(ev("s", { category: "Social", title: "Resume Review" }), { ...baseCtx, interests: ["Community"] }) === 0);
+  ok("a ticketed tribute concert classified Festival is a lift (0.8) for Community, not a direct match; a parade or celebration in the title is",
+     statedInterestMatch(ev("cl", { category: "Festival", title: "Candlelight - Queen vs ABBA" }), { ...baseCtx, interests: ["Community"] }) === 0.8 &&
+     statedInterestMatch(ev("pa", { category: "Festival", title: "Halloween Program & Costume Parade" }), { ...baseCtx, interests: ["Community"] }) === 1);
+  ok("a used book sale tagged 'Families' / 'Kids: Family Events' is at most a lift for Playgrounds, never a direct match",
+     scoreEvent(ev("bs", { category: "Market", title: "Friends of the Library Used Book Sale", tags: ["library", "Families", "Kids: Family Events", "Adults"] }), { ...baseCtx, interests: ["Playgrounds"] }).parts.interestMatch === 0);
+  ok("a lecture ABOUT story time is not a Playgrounds match, and a seminar is never an outdoors one",
+     statedInterestMatch(ev("lec", { category: "Workshop", title: "WGSS Lecture: Drag Story Time as a Site of Resistance" }), { ...baseCtx, interests: ["Playgrounds"] }) === 0 &&
+     statedInterestMatch(ev("sem", { category: "Workshop", title: "Seminar: Trail Networks and Urban Form" }), { ...baseCtx, interests: ["Trails"] }) === 0 &&
+     statedInterestMatch(ev("st2", { category: "Workshop", title: "Drag Story Time" }), { ...baseCtx, interests: ["Playgrounds"] }) === 1);
+  ok("'Bay Area Coders' is not a Waterfront match but 'Bay Trail Bird Walk' is",
+     statedInterestMatch(ev("ba", { title: "Bay Area Coders Meetup", category: "Meetup" }), { ...baseCtx, interests: ["Waterfront"] }) === 0 &&
+     statedInterestMatch(ev("bt", { title: "Bay Trail Bird Walk", category: "Meetup" }), { ...baseCtx, interests: ["Waterfront"] }) === 1);
+  ok("a description-only match is refused when the title's own topic points elsewhere",
+     statedInterestMatch(ev("mv", { title: "Vintage Film Lab", category: "Workshop", description: "Digitize film with help from volunteers needed on site." }), { ...baseCtx, interests: ["Community"] }) === 0);
+  ok("the match reports which pick matched and how", JSON.stringify(matchInterests(cleanup, ["Parks", "Community"]).map((m) => [m.label, m.term, m.strength, m.via])) ===
+     JSON.stringify([["Parks", "outdoors", 1, "title"], ["Community", "volunteering", 1, "title"], ["Community", "community", 0.8, "description"]]), JSON.stringify(matchInterests(cleanup, ["Parks", "Community"])));
+}
+
+console.log("\n── CAC 2026: a direct match ranks above every non-match (1.1 cause 3) ──");
+{
+  const near = ev("near-career", { category: "Workshop", title: "Resume Clinic", qualityScore: 0.95, startMs: days(2) });
+  const far = ev("far-hike", { category: "Meetup", title: "Guided Hike at Rancho San Antonio", qualityScore: 0.3, startMs: days(12), latitude: SJ.lat + 0.25, longitude: SJ.lng - 0.2 });
+  const ctx = { ...baseCtx, interests: ["Parks", "Trails"], studentStatus: true, school: "SJSU" };
+  const out = rankEvents([near, far], ctx);
+  ok("a far, low-quality, 12-days-out hike outranks a near, complete, same-week career workshop for a Parks + Trails student",
+     out[0].id === "far-hike" && out[0].parts.interestMatch === 1 && out[1].parts.interestMatch === 0, JSON.stringify(out.map((o) => [o.id, o.score])));
+  ok("the student floor still lifts the workshop's interest term (0.75) — it just cannot beat a direct match",
+     out[1].parts.interest === 0.75 && out[0].parts.interest === 1);
+  const noInterests = rankEvents([near, far], { ...baseCtx, studentStatus: true });
+  ok("with no stated interests the order is the plain score (near career workshop first) — tiering is off", noInterests[0].id === "near-career" && noInterests.every((o) => o.parts.interestMatch === 0));
+  ok("nothing is dropped: both events are returned", out.length === 2 && noInterests.length === 2);
+  const nearHike = ev("near-hike", { category: "Meetup", title: "Evening Trail Walk", startMs: days(3) });
+  const two = rankEvents([far, nearHike, near], ctx).map((o) => o.id);
+  ok("inside the matching group the nearer, sooner hike leads", JSON.stringify(two) === JSON.stringify(["near-hike", "far-hike", "near-career"]), JSON.stringify(two));
+}
+
+console.log("\n── CAC 2026: the exploration slot is labelled and is the only off-interest card (1.1 cause 6) ──");
+{
+  const matches = Array.from({ length: 12 }, (_, i) => ev(`hike-${String(i).padStart(2, "0")}`, { category: "Meetup", title: `Trail Walk ${i}`, startMs: days(1 + i % 6), qualityScore: 0.6 }));
+  const others = [
+    ev("concert", { category: "Festival", title: "Jazz in the Plaza", qualityScore: 0.95, startMs: days(2) }),
+    ev("career", { category: "Workshop", title: "Career Fair", qualityScore: 0.9, startMs: days(2) }),
+    ev("thin", { category: "Social", title: "Board Games", qualityScore: 0.2, startMs: days(2) }),
+  ];
+  const ctx = { ...baseCtx, interests: ["Trails"] };
+  const out = rankEvents([...others, ...matches], ctx);
+  const top10 = out.slice(0, 10);
+  ok("nine of the top ten match the pick and the tenth is the exploration card", top10.slice(0, 9).every((o) => o.parts.interestMatch === 1) && top10[9].parts.exploration === 1 && top10[9].parts.interestMatch === 0);
+  ok("the exploration card is the highest-quality non-match and carries its own reason", top10[9].id === "concert" && JSON.stringify(top10[9].reasons) === JSON.stringify([EXPLORATION_REASON]));
+  ok("every other non-match ranks below every match", out.slice(10).filter((o) => o.parts.interestMatch === 1).length === 3 && out.findIndex((o) => o.id === "career") > 12);
+  ok("output length equals input length", out.length === 15);
+}
+
+console.log("\n── CAC 2026: the pick's primary meaning leads its shared outdoors matches ──");
+{
+  const ctx = { ...baseCtx, interests: ["Waterfront"] };
+  const hike = ev("hike", { category: "Meetup", title: "Guided Hike", startMs: days(1) });
+  const creek = ev("creek", { category: "Meetup", title: "Coyote Creek Bird Walk", startMs: days(6), latitude: SJ.lat + 0.1 });
+  const out = rankEvents([hike, creek], ctx).map((o) => o.id);
+  ok("for a Waterfront pick the creek walk (primary: waterfront) leads the sooner, nearer general hike (secondary: outdoors)", JSON.stringify(out) === JSON.stringify(["creek", "hike"]), JSON.stringify(out));
+  ok("both are still direct matches", rankEvents([hike, creek], ctx).every((o) => o.parts.interestMatch === 1));
+}
+
+console.log("\n── CAC 2026: a recurring listing is one card, not three (series collapse in v1) ──");
+{
+  const ctx = { ...baseCtx, interests: ["Community"] };
+  const series = [1, 3, 5].map((d) => ev(`lab-${d}`, { category: "Volunteer", title: "Forge Volunteer Hours", locationName: "Forge", source: "livewhale", startMs: days(d) }));
+  const other = ev("sale", { category: "Market", title: "Friends Book Sale", startMs: days(2) });
+  const out = rankEvents([...series, other], ctx);
+  ok("the soonest occurrence stays, the later two move to the end, nothing is dropped", out.length === 4 && out[0].id === "lab-1" && out.slice(-2).map((o) => o.id).sort().join() === "lab-3,lab-5", JSON.stringify(out.map((o) => o.id)));
+  ok("the kept card carries the later dates (ISO, sorted, ≤ 5)", JSON.stringify(out[0].moreDates) === JSON.stringify([new Date(days(3)).toISOString(), new Date(days(5)).toISOString()]), JSON.stringify(out[0].moreDates));
+  ok("a one-off listing is untouched", out.find((o) => o.id === "sale").moreDates === undefined);
+}
+
+console.log("\n── CAC 2026: the reasons line names the user's own pick and is never wrong ──");
+{
+  const hike = ev("h", { category: "Meetup", title: "Guided Hike at Alum Rock", startMs: days(3) });
+  const ctx = { ...baseCtx, interests: ["Parks", "Community"] };
+  const s = scoreEvent(hike, ctx);
+  const reasons = reasonsForV1(hike, ctx, s.parts);
+  ok("'Because you like Parks' — the pick, not a server term", reasons[0] === "Because you like Parks", JSON.stringify(reasons));
+  const workshop = ev("w", { category: "Workshop", title: "Resume Clinic", startMs: days(3) });
+  const student = { ...baseCtx, interests: ["Parks"], studentStatus: true, school: "Org" };
+  const sw = scoreEvent(workshop, student);
+  ok("a student-floor event (interest 0.9 via same school) gets NO 'Because you like' reason", sw.parts.interest === 0.9 && !reasonsForV1(workshop, student, sw.parts).some((r) => r.startsWith("Because you like")));
+  const blended = { ...baseCtx, interests: ["Parks"], attendedCategories: { Workshop: 4 } };
+  const sb = scoreEvent(workshop, blended);
+  ok("behaviour blended with a non-matching pick (0.6) earns no interest reason at all — never 'Because you like Parks' on a resume clinic",
+     sb.parts.interest === 0.6 && !reasonsForV1(workshop, blended, sb.parts).some((r) => r.startsWith("Because you like") || r.startsWith("Matches")), JSON.stringify(reasonsForV1(workshop, blended, sb.parts)));
+  const attendedOnly = { ...baseCtx, attendedCategories: { Workshop: 4 } };
+  const sa = scoreEvent(workshop, attendedOnly);
+  ok("a purely behavioural match says so instead of claiming a pick", sa.parts.interest === 1 && reasonsForV1(workshop, attendedOnly, sa.parts).includes("Matches what you've attended") && !reasonsForV1(workshop, attendedOnly, sa.parts).some((r) => r.startsWith("Because you like")), JSON.stringify(reasonsForV1(workshop, attendedOnly, sa.parts)));
+  const community = ev("c", { category: "Volunteer", title: "Saturday Shift", startMs: days(3) });
+  ok("the pick that actually matched is the one named (Community, not Parks)", reasonsForV1(community, ctx, scoreEvent(community, ctx).parts)[0] === "Because you like Community");
+}
+
 console.log("\n── determinism ──");
 {
   const events = [ev("b"), ev("a"), ev("c")];
@@ -253,111 +413,6 @@ console.log("\n── scoring shape ──");
      s.score >= 0 && s.score <= 1 && Object.values(s.parts).every((p) => p >= 0 && p <= 1), JSON.stringify(s));
   ok("parts are returned so a placement can be explained on-device",
      ["interest", "distance", "social", "timing", "novelty"].every((k) => k in s.parts));
-}
-
-console.log("\n── the app's own interest labels (onboarding saves PlaceCategory raw values) ──");
-{
-  // The app writes "Parks", "Trails", … to users/{uid}.interests. Before normalization only
-  // "Community" matched anything, so a hiker's For You filled with career and dev listings.
-  const n = normalizeInterests(["Parks", "Trails", "Playgrounds", "Sports", "Community", "outdoors", "Mystery"]);
-  ok("app labels map onto ranking interests; unknown labels pass through",
-     ["outdoors", "hiking", "family", "fitness", "community", "mystery"].every((i) => n.interests.includes(i)), JSON.stringify(n));
-  ok("each mapped interest remembers the label the user picked",
-     n.labels.hiking?.[0] === "Trails" && n.labels.outdoors?.includes("Parks") && n.labels.fitness?.[0] === "Sports");
-
-  // A mixed slate at comparable distance (~2.5 mi): outdoor programs (Midpen-style hikes are
-  // classified Sports), community meetups, and deliberately well-structured opportunity listings
-  // (higher quality, free, sooner). Distance stays the heaviest weight by design, so the slate
-  // holds it level to isolate what the user picked.
-  const outdoor = [
-    ["hike-1", "Guided Hike: Rancho San Antonio Ridge", "Sports"], ["hike-2", "Sunset Hike at Sierra Azul", "Sports"],
-    ["walk-1", "Nature Walk for Beginners", "Social"], ["park-1", "Park Cleanup at Guadalupe River Park", "Cleanup"],
-    ["trail-1", "Trail Restoration Day", "Volunteer"], ["bird-1", "Birding Ramble at Alviso Marsh", "Meetup"],
-    ["garden-1", "Community Garden Workday in the park", "Volunteer"], ["hike-3", "Wildflower Hike, Coyote Valley", "Sports"],
-    ["hike-4", "Family Trail Hike at Almaden Quicksilver", "Sports"], ["walk-2", "Docent-led Nature Walk at Alum Rock Park", "Festival"],
-    ["hike-5", "Full Moon Hike at Fremont Older", "Sports"], ["park-2", "Park Ranger Talk at Vasona Lake", "Meetup"],
-  ].map(([id, title, category], i) => ev(id, { title, category, organizer: `Midpen ${i % 4}`, startMs: days(2 + (i % 5)),
-      latitude: SJ.lat + 0.03, longitude: SJ.lng - 0.02, qualityScore: 0.6, topicTags: ["outdoors"] }));
-  const community = Array.from({ length: 10 }, (_, i) => ev(`comm-${i}`, { title: `Neighborhood Association Meetup ${i}`,
-      category: "Meetup", organizer: `Neighbors ${i % 3}`, startMs: days(2 + (i % 5)), latitude: SJ.lat - 0.03, longitude: SJ.lng + 0.02, qualityScore: 0.6, topicTags: ["community"] }));
-  const careerish = [
-    ["career-1", "Career Fair: Tech Employers", "Workshop"], ["career-2", "Resume Workshop for Engineers", "Workshop"],
-    ["hack-1", "Student Hackathon 2026", "Hackathon"], ["dev-1", "iOS Developers Meetup", "Meetup"],
-    ["career-3", "Interview Skills Workshop", "Workshop"], ["career-4", "Networking Night: Startups", "Workshop"],
-    ["hack-2", "AI Build Weekend", "Hackathon"], ["dev-2", "Intro to Python Workshop", "Workshop"],
-    ["career-5", "Internship Info Session", "Workshop"], ["vol-1", "Tutoring Volunteers Needed", "Volunteer"],
-  ].map(([id, title, category], i) => ev(id, { title, category, organizer: "San José State University", startMs: days(1 + (i % 4)),
-      latitude: SJ.lat - 0.03, longitude: SJ.lng - 0.02, qualityScore: 0.95, isFree: true, tags: ["Opportunity"], topicTags: ["tech"] }));
-  const slate = [...outdoor, ...community, ...careerish];
-  const outdoorIds = new Set(outdoor.map((e) => e.id));
-  const careerIds = new Set(careerish.filter((e) => e.category !== "Volunteer").map((e) => e.id));
-  const ctxFor = (labels, extra = {}) => { const n = normalizeInterests(labels);
-    return { ...baseCtx, interests: n.interests, interestLabels: n.labels, ...extra }; };
-  const top = (ctx) => rankEvents(slate, ctx).slice(0, 10).map((s) => s.id);
-
-  const trails = top(ctxFor(["Trails", "Parks"]));
-  const comm = top(ctxFor(["Community"]));
-  const outdoorIn = (ids) => ids.filter((id) => outdoorIds.has(id)).length;
-  ok("['Trails','Parks'] fills the top 10 with outdoor/hike events", outdoorIn(trails) >= 8, trails.join(","));
-  ok("…well above ['Community']", outdoorIn(trails) - outdoorIn(comm) >= 4, `${outdoorIn(trails)} vs ${outdoorIn(comm)}: ${comm.join(",")}`);
-  ok("the two top-10s differ", JSON.stringify(trails) !== JSON.stringify(comm));
-
-  const student = top(ctxFor(["Parks", "Trails"], { studentStatus: true, school: "San José State University" }));
-  ok("a student who picked Parks + Trails gets a mostly outdoor top 10", outdoorIn(student) >= 7, student.join(","));
-  ok("…with at most 2 workshop/hackathon/career events", student.filter((id) => careerIds.has(id)).length <= 2, student.join(","));
-  ok("a direct interest match outranks the student opportunity floor",
-     interestScore(outdoor[0], ctxFor(["Parks", "Trails"], { studentStatus: true })) >
-     interestScore(careerish[0], ctxFor(["Parks", "Trails"], { studentStatus: true })));
-  ok("a student with no stated interests keeps the opportunity floor",
-     interestScore(careerish[0], { ...baseCtx, studentStatus: true }) >= 0.75);
-
-  const hike = outdoor[0];
-  const scored = scoreEvent(hike, ctxFor(["Parks", "Trails"]));
-  const why = reasonsForV1(hike, ctxFor(["Parks", "Trails"]), scored.parts);
-  ok("the reasons line names what the user picked", why.includes("Because you like Trails"), JSON.stringify(why));
-  ok("…never an internal word", !why.some((r) => /the outdoors|hiking/.test(r)), JSON.stringify(why));
-
-  // Real San José listings that were labelled "Because you like Parks" (emulator corpus, 2026-10-23).
-  const picks = ctxFor(["Parks", "Trails"]);
-  const yoga = ev("yoga", { title: "Community Yoga and Heartfulness Meditation", category: "Sports",
-    description: "Experience the soothing calm of yoga and meditation.", locationName: "Cambrian · Community Room" });
-  const ell = ev("ell", { title: "English Language Learner (ELL) for Beginners", category: "Workshop",
-    description: "English learners are invited to beginner friendly lessons at the Rose Garden Branch Library. " +
-      "Invitamos a participar en nuestras clases en la biblioteca Rose Garden." });
-  const parkBranch = ev("branch", { title: "Tabletop Gamers", category: "Social", description: "Meet at the Educational Park Branch." });
-  ok("indoor yoga (Sports) is not a Parks/Trails match", interestScore(yoga, picks) === 0, String(interestScore(yoga, picks)));
-  ok("a library branch named 'Rose Garden' / 'Educational Park' is not a Parks match",
-     interestScore(ell, picks) === 0 && interestScore(parkBranch, picks) === 0);
-  const ellWhy = reasonsForV1(ell, picks, scoreEvent(ell, picks).parts);
-  ok("…and its reasons never claim the user's pick", !ellWhy.some((r) => r.startsWith("Because you like")), JSON.stringify(ellWhy));
-  ok("a real garden or park listing still matches",
-     interestScore(ev("g", { title: "Community Garden Workday in the park", category: "Volunteer" }), picks) >= 0.9);
-}
-
-console.log("\n── interest retrieval and false matches ──");
-{
-  ok("interests map to the topic tags the annotator assigns", JSON.stringify(topicsForInterests(["outdoors", "hiking"])) === JSON.stringify(["outdoors"])
-     && topicsForInterests(["community"]).join(",") === "civic,community,social" && topicsForInterests([]).length === 0);
-  const sj = { lat: 37.3352, lng: -121.8811 };
-  const at = (id, dLat) => ({ id, latitude: sj.lat + dLat, longitude: sj.lng, startMs: 0 });
-  const near = at("near", 0.1), far = at("far", 0.3), none = { id: "none", startMs: 0 };   // ~7 mi, ~21 mi
-  ok(`the interest pool keeps events within the user's radius (default ${DEFAULT_RETRIEVAL_RADIUS_MILES} mi)`,
-     withinRadius([near, far, none], sj).map((e) => e.id).join(",") === "near"
-     && withinRadius([near, far], { ...sj, radiusMiles: 25 }).length === 2);
-  const picks = { ...baseCtx, ...(() => { const n = normalizeInterests(["Parks", "Trails"]); return { interests: n.interests, interestLabels: n.labels }; })() };
-  // Real San José listings (2026-10-23) that matched "park"/"garden" without being outdoors.
-  const library = (title, description, locationName) => ev(title, { title, description, locationName, source: "bibliocommons", category: "Workshop" });
-  ok("a library branch named for a park is not a Parks match (venue, not topic)",
-     interestScore(library("OneinMath: Math Program for K-3rd at Educational Park", "Math games for kids.", "Educational Park · Community Room"), picks) === 0
-     && interestScore(library("Teen Lounge", "Meet at Mitchell Park Library.", "Mitchell Park Library · Teen Room"), picks) === 0);
-  ok("'park' as a verb is not a Parks match",
-     interestScore(library("Pipe Cleaner Flowers", "It is recommended to park at the 4th Street garage.", "King Library · TeenHQ"), picks) === 0
-     && interestScore(library("Baby Storytime", "Please park strollers in the rear.", "Saratoga Library · Community room"), picks) === 0);
-  ok("a home-gardening talk indoors is not a Parks match",
-     interestScore(library("Master Gardeners: Wild at Home", "Turn your garden into a thriving habitat.", "Willow Glen · Community Room"), picks) === 0);
-  ok("real outdoor listings still match", interestScore(ev("m1", { title: "Explorer Hike: Lichen Eyes", category: "Sports", source: "midpen" }), picks) >= 0.9
-     && interestScore(ev("m2", { title: "Evening at the park", description: "Meet in the park by the creek.", category: "Social" }), picks) >= 0.9
-     && interestScore(ev("m3", { title: "Community Garden Workday", category: "Volunteer" }), picks) >= 0.9);
 }
 
 console.log(`\n══ ${pass} passed, ${fail} failed ══`);

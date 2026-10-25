@@ -34,23 +34,33 @@ final class DemoWalkthroughUITests: XCTestCase {
         add(a)
     }
 
-    /// System prompts (location, notifications, "Save Password?") sit above the app.
-    private func clearSystemAlerts(_ app: XCUIApplication) {
+    /// After sign-in: relaunch signed in with the system prompts answered, then wait for the feed.
+    ///
+    /// The keychain "Save Password?" sheet is a remote view: a synthesized tap on its "Not Now"
+    /// does not reach it, and terminating the app dismisses it. (Sending the app Home did too, but
+    /// on its return the app redrew blank and loaded the signed-in feed for seconds, and the next
+    /// tap — the Plan tab, the Places segment — was lost.) The location prompt comes back on the
+    /// relaunch because nothing answered it; it is answered before the feed settles, since the
+    /// location it grants is part of what the feed loads.
+    private func relaunchSignedIn(_ app: XCUIApplication) {
+        app.terminate()
+        app.launchArguments = ["-QAUseFirestoreEmulator", "YES", "-QAEmulatorHost", "127.0.0.1",
+                               "-QAOfflineData", "NO", "-QADisableMotion", "YES", "-dailyGem.splashDay", QA.today]
+        app.launch()
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-        // The keychain "Save Password?" sheet is a remote view: a synthesized tap on its
-        // "Not Now" does not reach it. Backgrounding the app dismisses it as Not Now.
-        // Its text is not reliably in the app's tree, so after sign-in always background once.
-        _ = app.staticTexts["Save Password?"].waitForExistence(timeout: 10)
-        XCUIDevice.shared.press(.home)
-        app.activate()
-        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
         for _ in 0..<3 {
             let alert = springboard.alerts.firstMatch
-            guard alert.waitForExistence(timeout: 2) else { return }
+            guard alert.waitForExistence(timeout: 5) else { break }
             for label in ["Allow While Using App", "Allow Once", "Allow", "OK"] where alert.buttons[label].exists {
                 alert.buttons[label].tap(); break
             }
         }
+        XCTAssertTrue(app.buttons["Discover"].firstMatch.waitForExistence(timeout: loadTimeout), "the relaunch did not stay signed in")
+        // The signed-in feed lands well after the tabs (events, then the ranked slate) and a tap
+        // while it re-renders is lost. The ranked slate is the last read: act once its first card
+        // has stopped changing.
+        let slate = app.buttons.matching(NSPredicate(format: "label CONTAINS ', Why: '")).firstMatch
+        XCTAssertTrue(QA.waitUntilStable(slate, quiet: 1.5, timeout: 60), "the signed-in For You slate never settled")
     }
 
     private static let errorPredicate = NSPredicate(format:
@@ -78,10 +88,19 @@ final class DemoWalkthroughUITests: XCTestCase {
         button.tap()
     }
 
-    private func scrollTo(_ element: XCUIElement, in app: XCUIApplication, maxSwipes: Int = 12) {
+    /// Scroll until `element` is hittable. Held drags by default: a swipe keeps the list coasting
+    /// for seconds after its frames look still, and a tap during deceleration only stops the
+    /// scroll. `fling` is for screenshots, where nothing is tapped next.
+    private func scrollTo(_ element: XCUIElement, in app: XCUIApplication, maxSwipes: Int = 12, fling: Bool = false) {
         var swiped = false
-        for _ in 0..<maxSwipes where !(element.exists && element.isHittable) { app.swipeUp(); swiped = true }
-        // Let the scroll coast to a stop: a tap during deceleration only stops the scroll.
+        for _ in 0..<maxSwipes where !(element.exists && element.isHittable) {
+            if fling { app.swipeUp() } else {
+                app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75))
+                    .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)),
+                           withVelocity: .fast, thenHoldForDuration: 0.3)
+            }
+            swiped = true
+        }
         if swiped { QA.settle(element) }
     }
 
@@ -109,7 +128,7 @@ final class DemoWalkthroughUITests: XCTestCase {
         let email = app.textFields["Email address"]
         XCTAssertTrue(email.waitForExistence(timeout: 8), "auth screen missing")
         snap(app, "sign-in")
-        type(account, into: email)
+        type(account + "\n", into: email)
         // Return closes the software keyboard, which otherwise covers the submit button.
         type(password + "\n", into: app.secureTextFields["Password"])
         let submit = app.buttons["authSubmit"]
@@ -117,7 +136,7 @@ final class DemoWalkthroughUITests: XCTestCase {
         submit.tap()
         XCTAssertTrue(app.buttons["Discover"].firstMatch.waitForExistence(timeout: 30),
                       "sign-in did not reach the main tabs (seed the account with scripts/demo-account-local.mjs)")
-        clearSystemAlerts(app)
+        relaunchSignedIn(app)
     }
 
     /// Leaves the simulator signed in to the seeded demo account (scripts/demo-investor-local.mjs)
@@ -162,8 +181,10 @@ final class DemoWalkthroughUITests: XCTestCase {
         assertLoaded(app, "Events feed", anchor: poster)
         snap(app, "events-feed")
         let ranked = app.buttons.matching(NSPredicate(format: "label CONTAINS ', Why: '")).firstMatch
-        scrollTo(ranked, in: app, maxSwipes: 8)
+        // Wait for the card before scrolling: swiping while the slate still loaded carried the feed
+        // past the card before it existed, and the tap then went to an off-screen point.
         XCTAssertTrue(ranked.waitForExistence(timeout: loadTimeout), "no card carries a reasons line")
+        QA.reveal(ranked, in: app, maxSwipes: 4)
         snap(app, "events-feed-reasons")
 
         // Event detail: why, show less, hide, series. The row is rebuilt as the ranked slate
@@ -198,9 +219,12 @@ final class DemoWalkthroughUITests: XCTestCase {
         assertLoaded(app, "Place detail", anchor: app.navigationBars.firstMatch)
         snap(app, "place-detail")
         if isOSM {
-            let osm = app.links["© OpenStreetMap contributors"].firstMatch
+            // Match by label: SwiftUI does not always expose this Link with the link type.
+            let osm = app.descendants(matching: .any)["© OpenStreetMap contributors"].firstMatch
             scrollTo(osm, in: app, maxSwipes: 8)
-            XCTAssertTrue(osm.exists, "OpenStreetMap credit missing on an OSM place")
+            // Visible, not merely laid out: at the end of the page it sat under the floating tab bar.
+            XCTAssertTrue(osm.exists && osm.frame.maxY <= app.buttons["Discover"].firstMatch.frame.minY,
+                          "OpenStreetMap credit missing or under the tab bar on an OSM place")
             snap(app, "credit-osm-place")
         } else {
             XCTContext.runActivity(named: "NOTE: no OpenStreetMap place nearby (Overpass unavailable); OSM credit covered by DataCreditTests") { _ in }
@@ -227,7 +251,7 @@ final class DemoWalkthroughUITests: XCTestCase {
         let acknowledgements = app.staticTexts["Data and acknowledgements"]
         assertLoaded(app, "Terms", anchor: app.navigationBars["Legal"])
         snap(app, "terms")
-        scrollTo(acknowledgements, in: app, maxSwipes: 30)
+        scrollTo(acknowledgements, in: app, maxSwipes: 30, fling: true)
         XCTAssertTrue(acknowledgements.exists, "Data and acknowledgements missing from Terms")
         for _ in 0..<4 { app.swipeUp() }
         snap(app, "credit-terms-end")
@@ -238,9 +262,12 @@ final class DemoWalkthroughUITests: XCTestCase {
 
     /// For You follows each account's own picks (accounts from
     /// `scripts/foryou-interests-e2e.mjs --keep`): the ranked cards say which pick they match.
+    /// One account per pick, then the two two-pick accounts; one screenshot each.
     func testForYouFollowsEachAccountsPicks() {
-        for (account, picks, name) in [("foryou-student-trails@example.test", ["Parks", "Trails"], "foryou-student-trails"),
-                                       ("foryou-community-sports@example.test", ["Community", "Sports"], "foryou-community")] {
+        let single = ["Parks", "Trails", "Gardens", "Playgrounds", "Waterfront", "Sports", "Scenic", "Community"]
+            .map { ("foryou-pick-\($0.lowercased())@example.test", [$0], "foryou-\($0.lowercased())") }
+        for (account, picks, name) in single + [("foryou-student-trails@example.test", ["Parks", "Trails"], "foryou-student-trails"),
+                                                ("foryou-community-sports@example.test", ["Community", "Sports"], "foryou-community-sports")] {
             let app = launch()
             onboardAndSignIn(app, email: account, password: "local-foryou-check", picks: picks)
             let pick = picks.map { "label CONTAINS 'Because you like \($0)'" }.joined(separator: " OR ")
@@ -275,11 +302,13 @@ final class DemoWalkthroughUITests: XCTestCase {
         assertLoaded(app, "Planner plan", anchor: credit)
         let stops = app.staticTexts.matching(NSPredicate(format: "label MATCHES %@", "^[0-9]+ min$"))
         XCTAssertGreaterThanOrEqual(stops.count, 2, "a plan has at least two stops")
-        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'from where you started'")).firstMatch.exists,
-                      "the intro gives the start, finish and distance home")
+        // The engine kept in the merge (functions/src/adventure-engine.ts) opens with the plan's length
+        // and stop count; the Mac's earlier "… from where you started" sentence is not part of it.
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label MATCHES %@", "^(\\d+ stops within about \\d+ minutes|About \\d+ minutes across \\d+ real places|A \\d+-minute loop of \\d+ places).*"))
+                        .firstMatch.exists, "the intro gives the plan's length and stop count")
         XCTAssertEqual(app.staticTexts.matching(NSPredicate(format: "label MATCHES %@", ".*\\bAI\\b.*")).count, 0, "plans never claim AI")
         snap(app, "planner-plan")
-        scrollTo(credit, in: app, maxSwipes: 3)
+        scrollTo(credit, in: app, maxSwipes: 3, fling: true)
         snap(app, "credit-weather")
         // The rest of the plan, every stop with its time and reason.
         app.swipeUp()
@@ -292,10 +321,24 @@ final class DemoWalkthroughUITests: XCTestCase {
         let app = launch()
         onboardAndSignIn(app)
         tab(app, "Plan")
+        // The defaults ("This weekend", "Short drive") leave little on a Sunday afternoon, and the
+        // planner then says, correctly, "Not enough real events fit yet". A full day ahead, anywhere
+        // nearby, always has supply.
+        let tomorrow = QA.waitFor(app.buttons["Tomorrow"].firstMatch, "the Tomorrow choice")
+        XCTAssertTrue(QA.waitUntilStable(tomorrow), "the plan form never settled")
+        tomorrow.tap()
+        let anywhere = app.buttons["Anywhere nearby"].firstMatch
+        anywhere.tap()
+        XCTAssertTrue(tomorrow.isSelected && anywhere.isSelected, "the plan choices did not take")
         let find = app.buttons["Find real events"]
         QA.reveal(find, in: app, maxSwipes: 6)
         XCTAssertTrue(find.waitForExistence(timeout: loadTimeout), "Find real events missing")
         find.tap()
+        // Each walkthrough run spends two of the Demo Judge's five free plans this month; a third run
+        // without a reseed is refused (the app working as designed), so say that rather than "no plan".
+        let quota = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Your monthly free plans are used'")).firstMatch
+        XCTAssertFalse(quota.waitForExistence(timeout: 5),
+                       "the Demo Judge's free plans for this month are used: reseed with ./run-all.command --reload-only")
         let first = app.staticTexts["STOP 01"]
         QA.reveal(first, in: app, maxSwipes: 6)
         assertLoaded(app, "Event plan", anchor: first)

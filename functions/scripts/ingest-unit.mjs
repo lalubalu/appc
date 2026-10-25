@@ -29,7 +29,7 @@ import { isSameEvent, isWithinHorizon, auditSuspectedDuplicates, listingChecks, 
   auditFuzzyDuplicates, contentHash, unchangedSighting, isOnlineListing, UNCHANGED_REWRITE_MS } from "../lib/ingest/store.js";
 import { annotateEvent, inferAdultOnly, adultOnlyReason, inferTopicTags, interestsForTopics, mentionsAlcohol, alcoholBrandPresents, TOPIC_TAGS } from "../lib/ingest/annotate.js";
 import { SAN_JOSE, isInsideArea } from "../lib/ingest/areas.js";
-import { coercePayloadRecord } from "../lib/ingest/index.js";
+import { coercePayloadRecord, fetchOneSource } from "../lib/ingest/index.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixture = (name) => readFileSync(join(here, "..", "test-fixtures", name), "utf8");
@@ -728,6 +728,17 @@ console.log("\n── sources are data (W4.1) ──");
   ok("seeds: bibliocommons seeds carry the adapter's own parameter shape", seedsOfType("bibliocommons").every((x) => typeof x.params.library === "string" && typeof x.params.name === "string"));
   const d = sourceDocFromSeed(seedsOfType("localist", "san-jose-ca")[0]);
   ok("seed → document: active, origin config, url derived from the host, params carried verbatim", d.status === "active" && d.origin === "config" && d.url === "https://events.sjsu.edu/api/2/events" && d.params.host === "events.sjsu.edu");
+}
+
+console.log("\n── CAC 2026 (1.5): a missing provider key is a silent skip, never an error ──");
+{
+  const { sourceDocFromSeed } = await import("../lib/ingest/sources-registry.js");
+  const { seedsOfType } = await import("../lib/ingest/sources-config.js");
+  const npsDoc = sourceDocFromSeed(seedsOfType("nps", "san-jose-ca")[0]);
+  let threw = null, records = null;
+  const neverFetch = async () => { throw new Error("the network must not be touched when the key is missing"); };
+  try { records = await fetchOneSource(npsDoc, SAN_JOSE, { ticketmaster: "", nps: "", serpapi: "" }, neverFetch); } catch (e) { threw = e; }
+  ok("nps with no key and no park codes: resolves to an empty list, throws nothing, makes no request", threw === null && Array.isArray(records) && records.length === 0, String(threw));
 }
 
 console.log(`\n══ ${passed} passed, ${failed} failed ══`);

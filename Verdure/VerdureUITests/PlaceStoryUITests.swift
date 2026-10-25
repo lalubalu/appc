@@ -32,7 +32,7 @@ import XCTest
         QA.reveal(signIn, in: app, maxSwipes: 20)
         QA.waitFor(signIn, "Sign in").tap()
         let email = QA.waitFor(app.textFields["Email address"], "Email")
-        QA.type("qa-stories-native-owner@example.test", into: email)
+        QA.type("qa-stories-native-owner@example.test\n", into: email)
         let password = app.secureTextFields["Password"]
         QA.type("local-story-native-only\n", into: password)   // Return closes the keyboard that covers submit
         let submit = app.buttons["authSubmit"]

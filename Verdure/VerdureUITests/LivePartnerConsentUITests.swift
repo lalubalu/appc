@@ -8,16 +8,21 @@ import XCTest
         QA.reveal(signIn, in: app, maxSwipes: 20)
         QA.waitFor(signIn, "Sign in").tap()
         let email = QA.waitFor(app.textFields["Email address"], "Email")
-        QA.type("qa-stories-native-owner@example.test", into: email)
+        QA.type("qa-stories-native-owner@example.test\n", into: email)
         let password = app.secureTextFields["Password"]
         QA.type("local-story-native-only\n", into: password)   // Return closes the keyboard that covers submit
         let submit = app.buttons["authSubmit"]
         QA.reveal(submit, in: app, maxSwipes: 4)
         QA.waitFor(submit, "Sign-in submit").tap()
         QA.waitForSignedIn(app)
+        // This fixture account owns an approved organizer. Its row loads after sign-in, grows to two
+        // lines and pushes the rows below it down; the Notifications tap landed during that move and
+        // the sheet never opened. Position and tap once the row has landed.
+        QA.waitFor(app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Organizer profile'")).firstMatch, "organizer row", timeout: 20)
         let notifications = app.buttons["Notifications"]
         QA.reveal(notifications, in: app, maxSwipes: 25)
-        QA.waitFor(notifications, "Notifications settings").tap()
+        XCTAssertTrue(QA.waitUntilStable(QA.waitFor(notifications, "Notifications settings")), "Notifications row never settled")
+        notifications.tap()
         let toggle = app.switches["livePartnerAlertsToggle"]
         QA.reveal(toggle, in: app, maxSwipes: 5)
         QA.waitFor(toggle, "Adult-only nearby deals", timeout: 20)

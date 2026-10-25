@@ -1,11 +1,12 @@
 import Foundation
 @preconcurrency import FirebaseFunctions
 
-// MARK: - AI Adventure Planner (client)
+// MARK: - Adventure Planner (client)
 //
 // Sends the nearby places the app ALREADY fetched from its providers, plus the
 // user's interests and how long they have, and gets back an itinerary built
-// only from those places.
+// only from those places. The server plans with its rules engine; a language
+// model is used only when the project has configured a key for it.
 //
 // The candidate list travels client → server on purpose: the app has already
 // paid for those provider calls this session, and re-fetching them inside the
@@ -32,6 +33,9 @@ struct AdventurePlan: Sendable, Hashable {
     let stops: [AdventureStop]
     let weatherSummary: String?
     let temperatureF: Int?
+    /// One-line notes from the planner (sunset time, heat, rain, unposted hours).
+    /// Empty when the server predates them.
+    var notes: [String] = []
 
     var totalMinutes: Int { stops.reduce(0) { $0 + $1.minutes } }
 
@@ -143,6 +147,7 @@ final class AdventurePlannerService: Sendable {
             stops: stops,
             weatherSummary: weather?["summary"] as? String,
             temperatureF: weather?["temperatureF"] as? Int,
+            notes: (data["notes"] as? [String] ?? []).map { Sanitize.text($0, max: 200) }.filter { !$0.isEmpty },
             plansRemaining: data["plansRemaining"] as? Int,
             isPlus: data["isPlus"] as? Bool ?? false
         )
@@ -167,10 +172,11 @@ final class AdventurePlannerService: Sendable {
                 return .failed(error.localizedDescription)
             case .resourceExhausted: return .rateLimited(error.localizedDescription)
             case .failedPrecondition:
-                // The server uses failed-precondition for both "not enough
-                // places" and "not configured"; the message distinguishes them.
+                // The server explains itself ("Everything nearby is closed at this
+                // hour", "Not enough nearby places…"): show its sentence rather than
+                // a fixed one that may be wrong for the situation.
                 return error.localizedDescription.localizedCaseInsensitiveContains("configured")
-                    ? .notConfigured : .notEnoughPlaces
+                    ? .notConfigured : .failed(error.localizedDescription)
             case .unavailable, .deadlineExceeded: return .offline
             // .notFound is the pre-deploy state: the callable doesn't exist yet.
             case .notFound: return .notConfigured

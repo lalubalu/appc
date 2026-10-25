@@ -38,3 +38,5 @@ firebase-export-*/
 /.sprint-firebase.json
 
 .sprint-regression-firebase.json
+functions/.env.local
+*.p8

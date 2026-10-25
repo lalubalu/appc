@@ -5,7 +5,7 @@ import StoreKit
 //
 // HONEST-COPY POLICY (App Store 2.3.1/3.1.2 safety): this sheet lists ONLY
 // features that exist in the shipping build. Roadmap items from the Verdure
-// Subscription Model doc (AI Adventure Planner, AR Adventures, health
+// Subscription Model doc (Adventure Planner, AR Adventures, health
 // integrations, premium navigation, smart insights, Community+) are NOT sold
 // here — they get added to `features` one by one as they actually ship. A
 // single muted line acknowledges that more is in development, promising nothing.

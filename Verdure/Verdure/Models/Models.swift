@@ -343,16 +343,23 @@ enum EventCategory: String, CaseIterable, Identifiable, Codable {
 extension PlaceCategory {
     /// Event categories that align with this place interest — powers the
     /// "For You" event recommendations on the Events tab.
+    /// OFFLINE FALLBACK ONLY. The server ranks "For You" (functions/src/interests.ts
+    /// normalises these labels and matches listings by phrase and specific
+    /// category); this map is used solely when the ranking callable is
+    /// unreachable. CAC 2026: the catch-all categories (Meetup, Social,
+    /// Workshop, Hackathon) are gone from it — "Trails → Sports + Meetup" and
+    /// "Community → Hackathon" were how career and developer events reached
+    /// a Parks + Trails user with the backend down.
     var relatedEventCategories: [EventCategory] {
         switch self {
         case .parks: return [.cleanup, .volunteer, .festival]
-        case .trails: return [.sports, .meetup]
-        case .gardens: return [.workshop, .volunteer, .market]
-        case .playgrounds: return [.social, .volunteer]
+        case .trails: return [.cleanup, .volunteer]
+        case .gardens: return [.volunteer, .market]
+        case .playgrounds: return [.festival]
         case .waterfront: return [.cleanup, .festival]
-        case .sports: return [.sports, .meetup]
-        case .scenic: return [.meetup, .workshop]
-        case .community: return [.social, .meetup, .market, .festival, .hackathon]
+        case .sports: return [.sports]
+        case .scenic: return [.cleanup, .festival]
+        case .community: return [.volunteer, .cleanup, .market, .festival]
         }
     }
 }

@@ -183,6 +183,28 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
+          "fieldPath": "areaId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "active",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "topicTags",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "date",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
           "fieldPath": "hidden",
           "order": "ASCENDING"
         },
@@ -705,16 +727,16 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "areaId",
-          "order": "ASCENDING"
-        },
-        {
           "fieldPath": "active",
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "topicTags",
-          "arrayConfig": "CONTAINS"
+          "fieldPath": "adultOnly",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "areaId",
+          "order": "ASCENDING"
         },
         {
           "fieldPath": "date",

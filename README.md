@@ -7,10 +7,10 @@ parks, trails and community events around you, show up in person, and turn time
 outside into real rewards.
 
 <p>
-  <img src="AppStore/screenshots/6.9-inch/events.png" width="200" alt="Events">
-  <img src="AppStore/screenshots/6.9-inch/explore.png" width="200" alt="Explore">
-  <img src="AppStore/screenshots/6.9-inch/collect.png" width="200" alt="Collection">
-  <img src="AppStore/screenshots/6.9-inch/profile.png" width="200" alt="Profile">
+  <img src="demo-screens/04-events-feed.jpg" width="200" alt="Events feed with For You picks">
+  <img src="demo-screens/07-event-detail-why.jpg" width="200" alt="Event detail: why you're seeing this">
+  <img src="demo-screens/12-map.jpg" width="200" alt="Map of nearby places">
+  <img src="demo-screens/planner-plan.jpg" width="200" alt="Adventure Planner plan with weather">
 </p>
 
 ---
@@ -26,7 +26,11 @@ outside into real rewards.
 - **Progress** through streaks, monthly challenges and badges computed from what
   you genuinely did.
 - **Redeem** points for gift cards, including limited-time seasonal drops.
-- **Verdure+** (optional): premium reward tiers, early access to drops, member badge.
+- **Plan** an outing: the Adventure Planner builds an itinerary from real nearby
+  places and today's weather (Open-Meteo), and the event planner sequences real
+  events — both work with no AI key (a deterministic engine on the server).
+- **Verdure+** (optional): unlimited planner (free members get 5 plans a month),
+  early access to partner perks, cash gift cards, advanced stats.
 
 ## Design principles
 
@@ -40,6 +44,18 @@ Two rules shape most of the code:
    Every earn and redemption goes through a Cloud Function; Firestore rules deny
    client writes to `pointsBalance`, `lifetimePoints`, `checkedInEventIDs`,
    `redeemedRewardIDs` and `plusExpiresAt`.
+
+## Built with
+
+| | |
+|---|---|
+| **Languages** | Swift (iOS app), TypeScript (Cloud Functions, Node 20), JavaScript/React (website), Python (the discovery reference engine in `reference/`) |
+| **Apple frameworks** | SwiftUI, SceneKit, MapKit, CoreLocation, CoreMotion, PhotosUI, StoreKit 2 |
+| **Libraries** | Firebase iOS SDK (Auth, Firestore, Functions, Storage, Messaging, Crashlytics); `firebase-admin`, `firebase-functions`, `@apple/app-store-server-library`, `sharp`; website: Next.js, React, Supabase JS, Lenis, lucide-react, Vercel Analytics |
+| **Data** | OpenStreetMap (ODbL), Open-Meteo (CC BY 4.0), National Park Service and Recreation.gov APIs, public library, university, city and open-space calendars — credited in the app under Terms → Data and acknowledgements |
+| **Fonts** | Fredoka and Rubik (SIL Open Font License) |
+| **Tools** | Xcode, XcodeGen, Firebase Local Emulator Suite, Node/npm |
+| **AI assistance** | Parts of the code, the tests and the documentation were written with an AI coding assistant (Claude Code); the sessions are recorded in [`CLAUDE.md`](CLAUDE.md), [`FINAL-REPORT.md`](FINAL-REPORT.md) and [`docs/MAC-VERIFICATION-2026-10-25.md`](docs/MAC-VERIFICATION-2026-10-25.md) |
 
 ## Architecture
 
@@ -95,17 +111,25 @@ cd Verdure && xcodegen generate      # required after adding/removing files
 open Verdure.xcodeproj               # ⌘R on an iPhone simulator (iOS 17+)
 ```
 
-Firebase config lives in `Verdure/Secrets.xcconfig` (gitignored). External data
-providers self-disable when their key is absent, so the app runs without any keys.
+Firebase config lives in `Verdure/Secrets.xcconfig` (gitignored; copy the
+`.template`). External data providers self-disable when their key is absent, so
+the app runs without any keys.
+
+**The whole stack in one step (macOS).** `./run-all.command` builds the backend,
+starts the Firebase emulators with saved data, loads today's public events, park
+guides and the demo accounts, then builds and launches the app on the simulator
+(needs Xcode and Java 21; the header lists its flags). Sign in as
+`demo-judge@example.test` / `local-demo-walkthrough`. Screenshots of every screen
+are in [`demo-screens/`](demo-screens/).
 
 ## Testing
 
 ```bash
 # iOS: unit + UI journeys + accessibility audits
 cd Verdure && xcodebuild test -project Verdure.xcodeproj -scheme Verdure \
-  -destination 'platform=iOS Simulator,name=iPhone 16 Pro'
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
 
-# Backend: gates, units, then the server contract against local emulators (needs Java 17+)
+# Backend: gates, units, then the server contract against local emulators (needs Java 21)
 cd functions && npm run check:classifier && npm run check:indexes
 cd functions && npm run test:units && npm run e2e && npm run redteam
 cd functions && npm run e2e:ingest && npm run e2e:sources     # write-path metering, /sources registry
@@ -116,12 +140,15 @@ npx firebase-tools@13 emulators:exec --only firestore --project connectify-19dd8
 | Suite | Covers |
 |---|---|
 | iOS unit + UI + a11y | Transactions, cloud-merge safety, gamification, journeys across every tab, Apple accessibility audits, text-size matrix (needs Xcode) |
-| Backend units (12 suites) | Fulfilment, subscriptions, ingest (adapters, annotate, listing checks, dedupe), ranking v1/v2, notifications, partners, planners, parks, offline, programs, place stories |
+| Backend units (17 suites) | Fulfilment, subscriptions, ingest (adapters, annotate, listing checks, dedupe), ranking v1/v2, notifications, partners, planners, adventure engine, parks, offline, programs, place stories, rank eval, discovery, the local stack script |
 | Backend E2E + red team | Rules lockdown and minor protection, check-in proof/GPS, Verdure+, redemption, fulfilment queue, rate limiting, attack suite |
 | Ingest / sources / discovery E2E | Real SDK writes metered per collection, `/sources` migration parity, discovery decisions with evidence, removal, pause/resume |
 
-Current counts are in the latest sprint report under `docs/` (halfway:
-`docs/HALFWAY-REPORT-2026-10-18.md`). Every backend number is from the local
+Current counts are in [`FINAL-REPORT.md`](FINAL-REPORT.md) § 1.6 and
+[`docs/MAC-VERIFICATION-2026-10-25.md`](docs/MAC-VERIFICATION-2026-10-25.md):
+backend units 17 suites, E2E 363/363, red team 96 attacks blocked, acceptance
+64/64, iOS unit 161/161, every UI class green (one partner-consent UI test is
+intermittent, 6 of 8 runs; see the verification doc). Every backend number is from the local
 emulator; the recorded corpus in `functions/test-fixtures/` replaces the live
 internet in every test.
 
@@ -149,6 +176,8 @@ npx firebase-tools@13 deploy --only storage,functions   # needs Blaze + Storage 
 
 | File | What's in it |
 |---|---|
+| [`FINAL-REPORT.md`](FINAL-REPORT.md) | CAC 2026: every fix with its root cause and test, numbers before → after |
+| [`docs/MAC-VERIFICATION-2026-10-25.md`](docs/MAC-VERIFICATION-2026-10-25.md) | The Mac run: fixes, iOS results, screenshots, open items |
 | [`CLAUDE.md`](CLAUDE.md) | Architecture, design system, deploy status, changelog |
 | [`QA.md`](QA.md) | Test strategy, QA harness, known issues |
 | [`AppStore/LISTING.md`](AppStore/LISTING.md) | Listing copy, privacy label, review notes, blockers |

@@ -1,5 +1,12 @@
 /**
- * AI Adventure Planner — an itinerary built from REAL nearby places.
+ * Adventure Planner — an itinerary built from REAL nearby places.
+ *
+ * CAC 2026 (1.2): there is no Anthropic key and none is being bought. The plan
+ * is built by the deterministic engine in adventure-engine.ts — the same
+ * allowlist, open hours, weather, sunset and the user's picks, applied as
+ * rules. The model path below stays intact and runs ONLY when a key is
+ * configured; if the model call fails, the engine answers instead. Either way
+ * every stop is matched back to a supplied candidate before it leaves.
  *
  * THE DESIGN CONSTRAINT THAT SHAPES EVERYTHING HERE.
  * This repo spent a whole release removing fabricated data — invented ratings,
@@ -22,12 +29,12 @@
  *   firebase functions:secrets:set ANTHROPIC_API_KEY
  */
 
-import { modelKey } from "./model-key.js";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret, defineString } from "firebase-functions/params";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { plusActiveFrom } from "./common.js";
-import { planOuting, EngineError, describeCode, type Conditions } from "./adventure-engine.js";
+import { buildPlan, type EngineWeather } from "./adventure-engine.js";
+import { modelKey } from "./model-key.js";
 
 const db = () => getFirestore();
 
@@ -43,10 +50,10 @@ const PLAN_LIMIT = { max: 30, windowMs: 60 * 60 * 1000 };
 /// Verdure+ sells (see PaywallView.features, first row).
 export const FREE_PLANS_PER_MONTH = 5;
 
-/// What one plan costs us in vendor spend, in cents. One Claude call plus the
-/// Open-Meteo lookup (free). Rounded up deliberately — an under-estimate here
-/// silently understates the treasury burn that decides whether this feature
-/// can stay free at all.
+/// What one MODEL plan costs us in vendor spend, in cents. One Claude call plus
+/// the Open-Meteo lookup (free). Rounded up deliberately — an under-estimate
+/// here silently understates the treasury burn that decides whether this
+/// feature can stay free at all. A rules-engine plan costs 0 and is booked as 0.
 export const PLAN_VENDOR_COST_CENTS = 2;
 
 /// Calendar month in UTC. Quota keys and treasury buckets must agree on this,
@@ -68,7 +75,6 @@ interface Candidate {
   latitude?: number;
   longitude?: number;
   hours?: string;
-  hasPhoto?: boolean;
 }
 
 interface Stop {
@@ -79,76 +85,38 @@ interface Stop {
   why: string;
 }
 
-/** Current conditions, or null when the service is unreachable. */
-async function fetchWeather(lat: number, lng: number): Promise<{
-  temperatureF: number; precipitation: number; code: number; summary: string;
-} | null> {
+/** Current conditions plus today's sunrise and sunset, or null when the service is unreachable. Exported for the planner review script. */
+export async function fetchWeather(lat: number, lng: number, fetchImpl: typeof fetch = fetch): Promise<EngineWeather | null> {
   const q = new URLSearchParams({
     latitude: String(lat),
     longitude: String(lng),
     current: "temperature_2m,precipitation,weather_code",
+    daily: "sunrise,sunset",
+    forecast_days: "1",
+    timeformat: "unixtime",
+    timezone: "auto",
     temperature_unit: "fahrenheit",
   });
   try {
-    const res = await fetch(`https://api.open-meteo.com/v1/forecast?${q}`, {
+    const res = await fetchImpl(`https://api.open-meteo.com/v1/forecast?${q}`, {
       signal: AbortSignal.timeout(8000),
     });
     if (!res.ok) return null;
     const body = await res.json() as {
       current?: { temperature_2m?: number; precipitation?: number; weather_code?: number };
+      daily?: { sunrise?: number[]; sunset?: number[] };
     };
     const c = body.current;
     if (!c) return null;
     const code = Number(c.weather_code ?? 0);
+    const sunrise = Number(body.daily?.sunrise?.[0]), sunset = Number(body.daily?.sunset?.[0]);
     return {
       temperatureF: Number(c.temperature_2m ?? 0),
       precipitation: Number(c.precipitation ?? 0),
       code,
       summary: describeWeather(code),
-    };
-  } catch {
-    return null;
-  }
-}
-
-/** Open-Meteo conditions for the deterministic planner: now, the next 48 hours (rain
- * chance, temperature, wind), today's sunrise and sunset, and the local UTC offset. */
-export async function fetchConditions(lat: number, lng: number): Promise<Conditions | null> {
-  const q = new URLSearchParams({
-    latitude: String(lat), longitude: String(lng),
-    current: "temperature_2m,precipitation,weather_code,wind_speed_10m",
-    hourly: "precipitation_probability,temperature_2m,wind_speed_10m,weather_code",
-    daily: "sunrise,sunset", timezone: "auto", forecast_days: "2",
-    temperature_unit: "fahrenheit", wind_speed_unit: "kmh",
-  });
-  try {
-    const res = await fetch(`https://api.open-meteo.com/v1/forecast?${q}`, { signal: AbortSignal.timeout(8000) });
-    if (!res.ok) return null;
-    const b = await res.json() as {
-      utc_offset_seconds?: number;
-      current?: { temperature_2m?: number; precipitation?: number; weather_code?: number; wind_speed_10m?: number };
-      hourly?: { time?: string[]; precipitation_probability?: Array<number | null>; temperature_2m?: number[];
-        wind_speed_10m?: number[]; weather_code?: number[] };
-      daily?: { sunrise?: string[]; sunset?: string[] };
-    };
-    const off = Number(b.utc_offset_seconds);
-    const sunrise = b.daily?.sunrise?.[0], sunset = b.daily?.sunset?.[0];
-    if (!Number.isFinite(off) || !b.current || !sunrise || !sunset) return null;
-    // Open-Meteo returns local wall-clock times ("2026-10-23T18:19"); convert with the offset.
-    const local = (t: string) => Date.parse(`${t}:00Z`) - off * 1000;
-    const h = b.hourly ?? {};
-    return {
-      utcOffsetSeconds: off,
-      sunriseMs: local(sunrise),
-      sunsetMs: local(sunset),
-      current: {
-        tempF: Number(b.current.temperature_2m ?? 0), code: Number(b.current.weather_code ?? 0),
-        windKmh: Number(b.current.wind_speed_10m ?? 0), precipMm: Number(b.current.precipitation ?? 0),
-      },
-      hourly: (h.time ?? []).map((t, i) => ({
-        ms: local(t), precipProb: Number(h.precipitation_probability?.[i] ?? 0), tempF: Number(h.temperature_2m?.[i] ?? 0),
-        windKmh: Number(h.wind_speed_10m?.[i] ?? 0), code: Number(h.weather_code?.[i] ?? 0),
-      })),
+      sunriseMs: Number.isFinite(sunrise) && sunrise > 0 ? sunrise * 1000 : undefined,
+      sunsetMs: Number.isFinite(sunset) && sunset > 0 ? sunset * 1000 : undefined,
     };
   } catch {
     return null;
@@ -156,7 +124,7 @@ export async function fetchConditions(lat: number, lng: number): Promise<Conditi
 }
 
 /** WMO weather codes → plain English, so the prompt reads like a forecast. */
-function describeWeather(code: number): string {
+export function describeWeather(code: number): string {
   if (code === 0) return "clear";
   if (code <= 3) return "partly cloudy";
   if (code <= 48) return "foggy";
@@ -367,7 +335,6 @@ export const planAdventure = onCall(
         latitude: Number.isFinite(Number(c.latitude)) ? Number(c.latitude) : undefined,
         longitude: Number.isFinite(Number(c.longitude)) ? Number(c.longitude) : undefined,
         hours: typeof c.hours === "string" ? c.hours.slice(0, 120) : undefined,
-        hasPhoto: c.hasPhoto === true,
       }))
       .filter((c: Candidate) => c.id && c.name)
       .slice(0, 40);
@@ -377,101 +344,73 @@ export const planAdventure = onCall(
         "Not enough nearby places to plan an outing yet.");
     }
 
-    // The model path is used only when a key is configured; without one, or if the call
-    // fails, the deterministic engine plans from the same candidates (adventure-engine.ts).
+    // Read from the environment the secret binding populates: unlike .value() it logs no
+    // "No value found for secret parameter" warning on every plan when no key is configured.
     const apiKey = modelKey();
-    let plan: { title: string; intro: string; stops: Array<{
-      placeId: string; name: string; category: string | null; latitude: number | null; longitude: number | null;
-      order: number; minutes: number; why: string; }> } | null = null;
-    let weather: { temperatureF: number; summary: string } | null = null;
-    let source: "model" | "engine" = "engine";
+    const nowMs = Date.now();
+    const weather = await fetchWeather(lat, lng);
 
+    // The rules engine is the default. The model runs only when a key is set,
+    // and the engine still answers if the model call fails.
+    let engine: "rules" | "model" = "rules";
+    let plan: { title: string; intro: string; stops: Stop[]; notes?: string[] };
     if (apiKey) {
       try {
-        const current = await fetchWeather(lat, lng);
-        const prompt = buildPrompt({ interests, timeOfDay, durationMinutes, weather: current, candidates });
-        const modelPlan = await callClaude(prompt, apiKey, ADVENTURE_MODEL.value());
-
-        // THE GUARANTEE. Drop any stop that isn't a candidate we supplied, and
-        // re-attach OUR name and coordinates rather than the model's — so even a
-        // correct id can't come back with a subtly rewritten name.
-        const byId = new Map(candidates.map((c) => [c.id, c]));
-        const stops = modelPlan.stops
-          .filter((s) => s && typeof s.placeId === "string" && byId.has(s.placeId))
-          .slice(0, 6)
-          .map((s, i) => {
-            const c = byId.get(s.placeId)!;
-            return {
-              placeId: c.id,
-              name: c.name,
-              category: c.category ?? null,
-              latitude: c.latitude ?? null,
-              longitude: c.longitude ?? null,
-              order: i + 1,
-              minutes: Math.min(300, Math.max(5, Math.floor(Number(s.minutes)) || 30)),
-              why: String(s.why ?? "").slice(0, 300),
-            };
-          });
-
-        const dropped = modelPlan.stops.length - stops.length;
-        if (dropped > 0) {
-          // Worth a log line: a model that keeps inventing places is a prompt
-          // regression, and this is the only place it would ever show up.
-          console.warn(`[planAdventure] dropped ${dropped} hallucinated stop(s)`);
-        }
-        if (stops.length > 0) {
-          plan = { title: modelPlan.title, intro: modelPlan.intro, stops };
-          weather = current ? { temperatureF: Math.round(current.temperatureF), summary: current.summary } : null;
-          source = "model";
-        }
+        const prompt = buildPrompt({ interests, timeOfDay, durationMinutes, weather, candidates });
+        plan = await callClaude(prompt, apiKey, ADVENTURE_MODEL.value());
+        engine = "model";
       } catch (e) {
-        console.warn("[planAdventure] model unavailable; deterministic planner used", e);
+        console.warn("[planAdventure] model failed; rules engine answers instead:", e instanceof Error ? e.message : e);
+        plan = buildPlan({ candidates, interests, timeOfDay, durationMinutes, weather, lat, lng, nowMs });
       }
+    } else {
+      plan = buildPlan({ candidates, interests, timeOfDay, durationMinutes, weather, lat, lng, nowMs });
     }
 
-    if (!plan) {
-      const conditions = await fetchConditions(lat, lng);
-      // Regenerate: each plan this month gets a new seed, and the previous plan's stops
-      // are avoided when an equally good option exists.
-      const last = await db().collection("users").doc(uid).collection("adventurePlans")
-        .orderBy("generatedAtMs", "desc").limit(1).get();
-      const previousStopIds = (last.docs[0]?.data()?.stops ?? [])
-        .map((x: { placeId?: unknown }) => String(x?.placeId ?? "")).filter(Boolean);
-      try {
-        const engine = planOuting({
-          lat, lng, nowMs: Date.now(), durationMinutes, interests, candidates, conditions,
-          seed: usedAfter, previousStopIds,
-        });
-        plan = {
-          title: engine.title,
-          intro: engine.intro,
-          stops: engine.stops.map((s) => ({
-            placeId: s.placeId, name: s.name, category: s.category, latitude: s.latitude, longitude: s.longitude,
-            order: s.order, minutes: s.minutes, why: s.why,
-          })),
+    // THE GUARANTEE. Drop any stop that isn't a candidate we supplied, and
+    // re-attach OUR name and coordinates rather than the model's — so even a
+    // correct id can't come back with a subtly rewritten name.
+    const byId = new Map(candidates.map((c) => [c.id, c]));
+    const stops = plan.stops
+      .filter((s) => s && typeof s.placeId === "string" && byId.has(s.placeId))
+      .slice(0, 6)
+      .map((s, i) => {
+        const c = byId.get(s.placeId)!;
+        return {
+          placeId: c.id,
+          name: c.name,
+          category: c.category ?? null,
+          latitude: c.latitude ?? null,
+          longitude: c.longitude ?? null,
+          order: i + 1,
+          minutes: Math.min(300, Math.max(5, Math.floor(Number(s.minutes)) || 30)),
+          why: String(s.why ?? "").slice(0, 300),
         };
-        weather = conditions
-          ? { temperatureF: Math.round(conditions.current.tempF), summary: describeCode(conditions.current.code) }
-          : null;
-      } catch (e) {
-        if (e instanceof EngineError) {
-          throw e.code === "not-enough-places"
-            ? new HttpsError("failed-precondition", "Not enough nearby places to plan an outing yet.")
-            : new HttpsError("out-of-range", e.message);
-        }
-        throw e;
-      }
+      });
+
+    const dropped = plan.stops.length - stops.length;
+    if (dropped > 0) {
+      // Worth a log line: a model that keeps inventing places is a prompt
+      // regression, and this is the only place it would ever show up.
+      console.warn(`[planAdventure] dropped ${dropped} hallucinated stop(s)`);
     }
 
-    // Vendor spend, recorded only once a model plan actually succeeded — a failed
-    // Claude call (or a deterministic plan) bills nothing and must not show up as burn.
-    // Best-effort: a bookkeeping write must never fail a plan the user already paid a
-    // quota slot for. Same /treasury/{yyyy-mm} bucket the cash ledger uses, under a
-    // separate key so gift-card liability and API spend stay distinguishable.
-    if (source === "model") try {
+    if (stops.length === 0) {
+      // The engine says why (everything closed after dark, nothing open for the time you have); the client shows this sentence.
+      throw new HttpsError("failed-precondition", plan.notes?.[0] ?? "Not enough nearby places to plan an outing yet.");
+    }
+
+    // Vendor spend, recorded only once the plan actually succeeded — a failed
+    // Claude call bills nothing and must not show up as burn, and a rules-engine
+    // plan costs 0. Best-effort: a bookkeeping write must never fail a plan the
+    // user already paid a quota slot for. Same /treasury/{yyyy-mm} bucket the
+    // cash ledger uses, under a separate key so gift-card liability and API
+    // spend stay distinguishable.
+    try {
       await db().collection("treasury").doc(mk).set({
         plannerCalls: FieldValue.increment(1),
-        plannerCostCents: FieldValue.increment(PLAN_VENDOR_COST_CENTS),
+        plannerCostCents: FieldValue.increment(engine === "model" ? PLAN_VENDOR_COST_CENTS : 0),
+        plannerRulesCalls: FieldValue.increment(engine === "rules" ? 1 : 0),
         plannerPlusCalls: FieldValue.increment(isPlus ? 1 : 0),
         updatedAt: FieldValue.serverTimestamp(),
       }, { merge: true });
@@ -482,9 +421,13 @@ export const planAdventure = onCall(
     const result = {
       title: plan.title,
       intro: plan.intro,
-      stops: plan.stops,
-      weather,
-      source,
+      stops,
+      notes: Array.isArray(plan.notes) ? plan.notes.slice(0, 4) : [],
+      engine,
+      weather: weather
+        ? { temperatureF: Math.round(weather.temperatureF), summary: weather.summary,
+            sunsetMs: weather.sunsetMs ?? null, attribution: "Weather data by Open-Meteo.com" }
+        : null,
       plansRemaining: isPlus ? null : Math.max(0, FREE_PLANS_PER_MONTH - usedAfter),
       isPlus,
       generatedAtMs: Date.now(),

@@ -163,13 +163,22 @@ export async function inspectSource(host: string, deps: InspectDeps): Promise<In
   const budget = { requests: 0, max: 40 };
   const get = async (url: string, maxBytes = PAGE_MAX_BYTES) => { budget.requests++; await throttle.wait(hostOf(url)); return discoveryFetch(url, { maxBytes }, fetchImpl); };
   const base = `https://${host}`;
-  const home = await get(base);
+  let home = await get(base);
   // A host whose home page redirects elsewhere (www., a new domain) is inspected where it lands.
+  const sameDomain = (h: string) => !!h && h !== host && h.endsWith(host.split(".").slice(-2).join("."));
   const landed = hostOf(home.finalUrl);
-  const site = landed && landed !== host && landed.endsWith(host.split(".").slice(-2).join(".")) ? `https://${landed}` : base;
+  let site = sameDomain(landed) ? `https://${landed}` : base;
+  let robots = await get(`${site}/robots.txt`, 60_000);
+  // A host that refuses its apex but serves www. (cdm.org answered 403 to every apex page while
+  // its robots.txt redirected to www.cdm.org) is inspected where robots.txt lands, so its terms
+  // page and feed are read rather than 20 identical 403s.
+  if ((home.status === 0 || home.status >= 400) && site === base && sameDomain(hostOf(robots.finalUrl))) {
+    site = `https://${hostOf(robots.finalUrl)}`;
+    home = await get(site);
+    robots = await get(`${site}/robots.txt`, 60_000);
+  }
   const meta = htmlMeta(home.text);
   const hasEventJsonLd = extractEvents(home.text).length > 0;
-  const robots = await get(`${site}/robots.txt`, 60_000);
   const probes: Probe[] = [];
   const results: Record<string, FetchedPage> = {};
   const list: Array<[string, string]> = [...STANDARD_PROBES];
