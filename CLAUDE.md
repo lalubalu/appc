@@ -97,7 +97,7 @@ firestore.rules / firestore.indexes.json / storage.rules — ship with the featu
 | `node scripts/personalization-e2e.mjs` / `foryou-interests-e2e.mjs` | For You acceptance per interest pick on the loaded emulator (writes `docs/PERSONALIZATION-REVIEW-<date>.md`) / the callable-level check whose `--keep` accounts the demo UI test uses |
 | `node scripts/planner-review.mjs` | regenerates the 11 Adventure Planner scenarios (`docs/PLANNER-REVIEW-<date>.md`) |
 | `node scripts/outdoor-supply.mjs`, `discover-outdoor-local.mjs` | outdoor/volunteer supply count and OSM-organisation discovery on the emulator (CAC 2026, 1.1 cause 5) |
-| `node scripts/osm-snapshot.mjs` | re-captures `Verdure/Verdure/Resources/osm-snapshot-san-jose.json` with the app's own Overpass query |
+| `python3 Verdure/scripts/build-osm-snapshot.py overpass <answer.json> <fetchedAt>` | rebuilds `Verdure/Verdure/Resources/osm-snapshot-san-jose.json` (the dated OpenStreetMap starting cache) from a live Overpass answer or a Geofabrik extract |
 | `npm run e2e` / `npm run redteam` | full emulator E2E / attack suite (auth, functions, firestore, storage emulators) |
 | `npm run e2e:ingest` / `npm run e2e:sources` | ingest write-path metering / `/sources` registry E2E (firestore emulator only) |
 | `npm run baseline` | corpus replay + measurements, writes `docs/BASELINE-*.json` |
