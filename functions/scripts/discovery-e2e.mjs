@@ -251,6 +251,9 @@ ok("conditionalFetchFor signals NotModified instead of handing the adapter an em
 console.log("── W4.4: intake ──");
 ok("a submitted calendar URL becomes a candidate (a URL to inspect, never an event)", (await recordSourceSubmission("https://library.example.org/events.ics", "organizer", "ip:test", area.id)).accepted === true && (await db.doc(`sourceSubmissions/${area.id}_library.example.org`).get()).exists);
 ok("a deny-listed URL is refused at intake", (await recordSourceSubmission("https://www.eventbrite.com/o/x", "organizer", "ip:test", area.id)).accepted === false);
+ok("a Google Maps URL is refused at intake even though google.com itself is not denied (the path-qualified entry; red-team gap fixed 2026-10-25)",
+   (await recordSourceSubmission("https://www.google.com/maps/place/some-venue", "organizer", "ip:test", area.id)).accepted === false &&
+   (await recordSourceSubmission("https://maps.google.com/?q=x", "organizer", "ip:test", area.id)).accepted === false);
 ok("a removed host is refused at intake", (await recordSourceSubmission("https://never-a-source.example.org/cal", "organizer", "ip:test", area.id)).accepted === false);
 
 // ── Evidence ────────────────────────────────────────────────────────────────

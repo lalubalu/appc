@@ -43,7 +43,7 @@ const { HostThrottle, replayFetch } = await import("../lib/discovery/http.js");
 const { runDiscovery, recheckSources, auditActiveSources, hostsFromCorpus } = await import("../lib/discovery/discover.js");
 const { RULE_NAMES, failingRules } = await import("../lib/discovery/decide.js");
 const { recommendEligibleFor } = await import("../lib/program-feed.js");
-const { loadContext, rankableFromDoc } = await import("../lib/ranking.js");
+const { loadContext, rankableFromDoc, EXPLORATION_REASON } = await import("../lib/ranking.js");
 const { reasonsForV1, V1_REASON_RULES, NOTIFY_V2 } = await import("../lib/ranking-v2.js");
 const { selectPlanCandidates } = await import("../lib/eventPlanner.js");
 const { decideDigest, readPrefs, MIN_QUALIFYING_EVENTS, SUGGESTION_HORIZON_DAYS } = await import("../lib/notifications.js");
@@ -236,7 +236,8 @@ const v2ReasonBacked = (r) => r.reasons.every((text) => {
 // v1: each reason must be producible by a V1_REASON_RULES entry whose component is at or above the rule's threshold.
 const V1_PREFIXES = [
   { part: "social", test: (t) => t === "A friend is going" || t.endsWith("friends are going") },
-  { part: "interest", test: (t) => t.startsWith("Matches ") },
+  // CAC 2026: the interest reason names the user's pick ("Because you like Parks") and is emitted only on a direct match (interestMatch 1).
+  { part: "interest", test: (t) => t.startsWith("Because you like ") || t === "Matches what you've attended" },
   { part: "distance", test: (t) => t.startsWith("Close by") },
   { part: "timing", test: (t) => t === "Happening today or tomorrow" || t === "Coming up this week" },
   { part: "feedback", test: (t) => t.startsWith("Similar to events") },
@@ -244,11 +245,22 @@ const V1_PREFIXES = [
   { part: "novelty", test: (t) => t.startsWith("Something new from") || t === "New for you" },
 ];
 const v1ReasonBacked = (r) => r.reasons.every((text) => {
+  // The labelled exploration slot and the series note are backed by their own fields, not a scored component.
+  if (text === EXPLORATION_REASON) return r.parts.exploration === 1 && r.parts.interestMatch === 0;
+  if (/^Repeats — \d+ more date/.test(text)) return Array.isArray(r.moreDates) && r.moreDates.length >= 1;
   const p = V1_PREFIXES.find((x) => x.test(text));
   if (!p) return false;
   const rule = V1_REASON_RULES.find((x) => x.part === p.part);
-  return typeof r.parts[p.part] === "number" && r.parts[p.part] >= rule.min;
+  if (!(typeof r.parts[p.part] === "number" && r.parts[p.part] >= rule.min)) return false;
+  // "Because you like …" additionally requires the DIRECT match flag, so a floor or behaviour can never produce it.
+  return p.part !== "interest" || !text.startsWith("Because you like") || r.parts.interestMatch === 1;
 });
+/** What recommendFor ships for a v1 row: the exploration label alone, or reasonsForV1 plus the series note, at most three. */
+const expectedV1Reasons = (ev, ctx, r) => {
+  if (r.parts.exploration === 1) return [EXPLORATION_REASON];
+  const more = Array.isArray(r.moreDates) ? r.moreDates.length : 0;
+  return [...reasonsForV1(ev, ctx, r.parts), ...(more ? [`Repeats — ${more} more date${more > 1 ? "s" : ""}`] : [])].slice(0, 3);
+};
 await step("reasons: every ranked event has 1–3 reasons, each backed by a component above threshold", async (detail) => {
   for (const uid of [ADULT, MINOR]) {
     const who = uid === ADULT ? "adult" : "minor";
@@ -265,9 +277,13 @@ await step("reasons: every ranked event has 1–3 reasons, each backed by a comp
         for (const r of rows) {
           const snap = await db.doc(`events/${r.id}`).get();
           const ev = rankableFromDoc(snap);
-          if (!ev || JSON.stringify(reasonsForV1(ev, ctx, r.parts)) !== JSON.stringify(r.reasons)) mismatch++;
+          if (!ev || JSON.stringify(expectedV1Reasons(ev, ctx, r)) !== JSON.stringify(r.reasons)) mismatch++;
         }
-        ok(`${who}/v1: shipped reasons equal reasonsForV1(event, context, parts) for every row`, mismatch === 0, String(mismatch));
+        ok(`${who}/v1: shipped reasons equal reasonsForV1(event, context, parts) (+ the series note, or the exploration label alone) for every row`, mismatch === 0, String(mismatch));
+        const explorations = rows.map((r, i) => [i, r]).filter(([, r]) => r.parts.exploration === 1);
+        ok(`${who}/v1: the exploration slot, when present, is the tenth card, is off-interest and is the only off-interest card in the top ten`,
+           explorations.every(([i]) => i === 9) && rows.slice(0, 10).every((r, i) => r.parts.interestMatch === 1 || r.parts.exploration === 1 || i >= 9 && explorations.length === 0 && rows.slice(0, 9).every((x) => x.parts.interestMatch === 1) === false),
+           JSON.stringify(rows.slice(0, 10).map((r, i) => [i, r.parts.interestMatch, r.parts.exploration ?? 0])));
       }
       detail[`${who}/${version}`] = { rows: rows.length, reasonCounts: counts.reduce((m, n) => ({ ...m, [n]: (m[n] ?? 0) + 1 }), {}), sample: rows.slice(0, 3).map((r) => r.reasons) };
     }

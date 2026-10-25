@@ -180,17 +180,17 @@ async function sequenceWithModel(candidates: EventPlanCandidate[], key: string):
 export function deterministicEventPlan(rows: EventPlanCandidate[], lat?: number, lng?: number): {
   title: string; intro: string; stops: Array<{ eventId: string; why: string }>;
 } {
-  const byStart = [...rows].sort((a, b) => a.startMs - b.startMs || a.id.localeCompare(b.id));
-  const chosen: EventPlanCandidate[] = [];
-  let lastEnd = -Infinity;
-  for (const e of byStart) {
-    if (chosen.length >= 3) break;
-    // Allow 90 minutes per event plus 30 to get between them before the next one may start.
-    if (e.startMs < lastEnd) continue;
-    chosen.push(e);
-    lastEnd = e.startMs + 120 * 60_000;
+  // Rows arrive in the user's RANKED order (interests, distance, friends), so the
+  // picks follow the person; the picked events are then put in start order and
+  // may not overlap (two hours per event incl. getting to the next one).
+  const picked: EventPlanCandidate[] = [];
+  for (const e of rows) {
+    if (picked.length >= 3) break;
+    if (picked.some((p) => Math.abs(p.startMs - e.startMs) < 120 * 60_000)) continue;
+    picked.push(e);
   }
-  if (chosen.length < 2) { chosen.length = 0; chosen.push(...byStart.slice(0, Math.min(3, byStart.length))); }
+  if (picked.length < 2) { picked.length = 0; picked.push(...rows.slice(0, Math.min(3, rows.length))); }
+  const chosen = [...picked].sort((a, b) => a.startMs - b.startMs || a.id.localeCompare(b.id));
   const clock = (ms: number) => new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", weekday: "short", hour: "numeric", minute: "2-digit" }).format(ms);
   const used = new Set<string>();
   const take = (pool: string[], seed: number) => { const fresh = pool.filter((p) => !used.has(p)); const v = (fresh.length ? fresh : pool)[seed % (fresh.length ? fresh : pool).length]; used.add(v); return v; };

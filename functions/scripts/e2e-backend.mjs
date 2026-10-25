@@ -1618,6 +1618,31 @@ async function main() {
   const stolen = await call("refineEventPlan", { sessionId: firstPlan.result?.sessionId,
     action: "shorter" }, otherProfileUser.idToken);
   ok("planner: another user cannot refine a session", stolen.error?.status === "NOT_FOUND");
+
+  // CAC 2026 (1.2): the Adventure Planner answers with NO model key — the rules engine plans from the candidate allowlist.
+  const planCandidates = [
+    { id: "osm-1", name: "St. James Park", category: "Parks", latitude: 37.3395, longitude: -121.8900, hours: "sunrise-sunset" },
+    { id: "osm-2", name: "Guadalupe River Trail", category: "Trails", latitude: 37.3360, longitude: -121.8940, hours: "24/7" },
+    { id: "osm-3", name: "Plaza de Cesar Chavez", category: "Parks", latitude: 37.3328, longitude: -121.8898 },
+    { id: "osm-4", name: "Northside Community Center", category: "Community", latitude: 37.3480, longitude: -121.8830, hours: "Mo-Su 06:00-22:00" },
+  ];
+  const adventure = await call("planAdventure", { lat: 37.3382, lng: -121.8863, interests: ["Parks", "Trails"], timeOfDay: "afternoon", durationMinutes: 120, candidates: planCandidates }, profileUser.idToken);
+  const advStops = adventure.result?.stops ?? [];
+  ok("adventure planner: a plan comes back with no ANTHROPIC_API_KEY, from the rules engine, with 2–4 stops that are all supplied candidates",
+    adventure.result?.engine === "rules" && advStops.length >= 2 && advStops.length <= 4 && advStops.every((st) => planCandidates.some((c) => c.id === st.placeId && c.name === st.name)),
+    JSON.stringify(adventure).slice(0, 300));
+  ok("adventure planner: stops are numbered from 1, each has minutes and a one-sentence why, and notes is an array",
+    advStops.every((st, i) => st.order === i + 1 && st.minutes >= 5 && typeof st.why === "string" && st.why.length > 20) && Array.isArray(adventure.result?.notes));
+  ok("adventure planner: weather carries the Open-Meteo attribution when present, or is null (emulator offline) — never invented",
+    adventure.result?.weather === null || (typeof adventure.result?.weather?.temperatureF === "number" && adventure.result?.weather?.attribution === "Weather data by Open-Meteo.com"), JSON.stringify(adventure.result?.weather));
+  ok("adventure planner: a Verdure+ member sees no quota, the plan is private to the member",
+    adventure.result?.isPlus === true && adventure.result?.plansRemaining === null &&
+    (await db.collection(`users/${profileUser.uid}/adventurePlans`).get()).size >= 1);
+  const tooFew = await call("planAdventure", { lat: 37.3382, lng: -121.8863, interests: [], timeOfDay: "afternoon", durationMinutes: 60, candidates: planCandidates.slice(0, 1) }, profileUser.idToken);
+  ok("adventure planner: fewer than two candidates is refused with failed-precondition, not a crash", tooFew.error?.status === "FAILED_PRECONDITION", JSON.stringify(tooFew.error));
+  const memberOnly = await call("planAdventure", { lat: 37.3382, lng: -121.8863, interests: ["Community"], timeOfDay: "afternoon", durationMinutes: 60,
+    candidates: [...planCandidates, { id: "osm-9", name: "Masonic Lodge Hall", category: "Community", latitude: 37.3390, longitude: -121.8870, hours: "24/7" }] }, profileUser.idToken);
+  ok("adventure planner: a member-only organisation is never a stop", !(memberOnly.result?.stops ?? []).some((st) => st.placeId === "osm-9"), JSON.stringify(memberOnly.result?.stops?.map((st) => st.name)));
   code2 = await userWrite(`users/${profileUser.uid}`, { recentPlanEventIDs: [] });
   ok("rules: client cannot erase planner repeat memory", code2 === "permission-denied", `got ${code2}`);
 

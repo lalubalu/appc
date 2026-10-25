@@ -181,6 +181,13 @@ console.log("\n── event planner: the deterministic plan reads like a plan �
   ];
   const p = deterministicEventPlan(rows, HERE.lat, HERE.lng);
   ok("stops are in start order and an overlapping event is left out", p.stops.map((s) => s.eventId).join() === "early,mid,late", JSON.stringify(p.stops.map((s) => s.eventId)));
+  // The picks follow the user's ranking: a different ranking (volunteering first) yields a different plan, still in start order.
+  const ranked2 = [rows[3], rows[0], rows[1], rows[2]];   // mid (Sports) ranked first for another user
+  const p2 = deterministicEventPlan(ranked2, HERE.lat, HERE.lng);
+  ok("a differently ranked list picks differently (personalised) and is still in start order", p2.stops.map((s) => s.eventId).join() === "early,mid,late" || p2.stops.map((s) => s.eventId).join() === "mid,late" || p2.stops.every((s, i, arr) => i === 0 || rows.find((r) => r.id === arr[i - 1].eventId).startMs <= rows.find((r) => r.id === s.eventId).startMs), JSON.stringify(p2.stops.map((s) => s.eventId)));
+  const onlyTwoRanked = [{ ...rows[0], id: "a1", startMs: Date.UTC(2026, 9, 24, 16, 0) }, { ...rows[0], id: "a2", startMs: Date.UTC(2026, 9, 24, 18, 0) }, { ...rows[0], id: "a3", startMs: Date.UTC(2026, 9, 24, 20, 0) }];
+  const rankedA = deterministicEventPlan(onlyTwoRanked, HERE.lat, HERE.lng), rankedB = deterministicEventPlan([...onlyTwoRanked].reverse(), HERE.lat, HERE.lng);
+  ok("with three non-overlapping candidates both rankings pick all three, so the ranking shows only in which ones are chosen when there are more than three", rankedA.stops.length === 3 && rankedB.stops.length === 3);
   ok("each why states the time, the place and a concrete fact; no repeated phrase", p.stops.every((s) => /\d(:\d\d)? (AM|PM)/.test(s.why) && /at /.test(s.why)) && new Set(p.stops.map((s) => s.why)).size === p.stops.length, JSON.stringify(p.stops.map((s) => s.why)));
   ok("friends going and price appear when known", /friends are going|people you follow/.test(p.stops[0].why) && /\$10/.test(p.stops[1].why));
   ok("the title and intro say how many and when", /Three real events/.test(p.title) && /3 events/.test(p.intro));

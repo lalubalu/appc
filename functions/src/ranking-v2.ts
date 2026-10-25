@@ -517,8 +517,9 @@ export const V1_REASON_RULES: Array<{ part: string; min: number; text: (ev: Rank
   // that pick matched this listing directly (parts.interestMatch, not a floor or
   // behaviour). A high interest term with no direct match is behavioural.
   { part: "interest", min: 0.9, text: (ev, ctx, _value) => {
-    const direct = matchInterests(ev, ctx.interests)[0];
-    if (direct) return `Because you like ${direct.label}`;
+    const direct = matchInterests(ev, ctx.interests).find((m) => m.strength >= 0.9);
+    // The user's own pick verbatim ("Parks"); a stored server term reads as its plain name ("family activities").
+    if (direct) return `Because you like ${labelForTerm(ctx.interests, direct.term)}`;
     const attendedTotal = Object.values(ctx.attendedCategories ?? {}).reduce((a, b) => a + b, 0);
     return attendedTotal > 0 && (ctx.attendedCategories[ev.category ?? ""] ?? 0) > 0 ? "Matches what you've attended" : null;
   } },
