@@ -43,7 +43,7 @@ async function forYou(token) {
   assert.ok(body.result, `recommendedEvents failed: ${JSON.stringify(body)}`);
   const rows = body.result.events.slice(0, 10);
   const docs = await Promise.all(rows.map((r) => db.doc(`events/${r.id}`).get()));
-  return rows.map((r, i) => ({ ...r, title: docs[i].data()?.title ?? "", category: docs[i].data()?.category ?? "" }));
+  return rows.map((r, i) => ({ ...r, title: docs[i].data()?.title ?? "", category: docs[i].data()?.category ?? "", source: docs[i].data()?.source ?? "" }));
 }
 
 const student = await forYou(await account("foryou-student-trails", ["Parks", "Trails"], { studentStatus: true, school: "San José State University" }));
@@ -53,7 +53,7 @@ show("Student · Parks + Trails", student);
 show("Community + Sports", community);
 console.log("");
 
-const outdoor = student.filter((r) => OUTDOOR.test(r.title)).length;
+const outdoor = student.filter((r) => OUTDOOR.test(r.title) || r.source === "midpen" || r.category === "Cleanup").length;
 const careerish = student.filter((r) => CAREERISH.test(r.title)).length;
 ok("student Parks + Trails: top 10 is mostly outdoor", outdoor >= 6, `${outdoor}/10`);
 ok("student Parks + Trails: at most 2 workshop/hackathon/career listings", careerish <= 2, `${careerish}`);

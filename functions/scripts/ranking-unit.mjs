@@ -296,6 +296,11 @@ console.log("\n── CAC 2026: no false matches (1.1 cause 4) ──");
      statedInterestMatch(ev("cv", { title: "Open Lab Hours at AI Center for Civic and Social Good", category: "Workshop" }), { ...baseCtx, interests: ["Community"] }) === 0);
   const boardGames = ev("bg", { title: "Go: The Game", category: "Social", description: "Learn the ancient board game. All skill levels." });
   ok("a board-game afternoon (tagged 'sports' by the word game) is NOT a Sports match", statedInterestMatch(boardGames, { ...baseCtx, interests: ["Sports"] }) === 0);
+  ok("a listing from a discovered source classified Cleanup with nothing outdoor about it is a lift, not a Parks match (allcove's 'glitter jars'); a config source's Cleanup still is",
+     scoreEvent(ev("gj", { title: "senses and sensibility: glitter jars", category: "Cleanup", source: "wordpress-tec", organizer: "allcove" }), { ...baseCtx, interests: ["Parks"] }).parts.interestMatch === 0 &&
+     statedInterestMatch(ev("gj", { title: "senses and sensibility: glitter jars", category: "Cleanup", source: "wordpress-tec" }), { ...baseCtx, interests: ["Parks"] }) === 0.8 &&
+     statedInterestMatch(ev("cc", { title: "Saturday Shift", category: "Cleanup", source: "bibliocommons" }), { ...baseCtx, interests: ["Parks"] }) === 1 &&
+     statedInterestMatch(ev("sb", { title: "Native Planting at Palo Alto Baylands!", category: "Volunteer", source: "wordpress-tec", tags: [] }), { ...baseCtx, interests: ["Community"] }) === 1);
   ok("a 'Social' catch-all category is NOT a Community match by itself", statedInterestMatch(ev("s", { category: "Social", title: "Resume Review" }), { ...baseCtx, interests: ["Community"] }) === 0);
   ok("a ticketed tribute concert classified Festival is a lift (0.8) for Community, not a direct match; a parade or celebration in the title is",
      statedInterestMatch(ev("cl", { category: "Festival", title: "Candlelight - Queen vs ABBA" }), { ...baseCtx, interests: ["Community"] }) === 0.8 &&

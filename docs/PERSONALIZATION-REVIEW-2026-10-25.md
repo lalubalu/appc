@@ -1,20 +1,20 @@
 # For You manual review — 2026-10-25
 
-Top 10 per interest pick for a fresh account at the San José launch-area centre, produced by `functions/scripts/personalization-e2e.mjs` against the local emulator corpus (2053 active events in the next 14 days). ✓ = matches the pick, ◇ = the labelled exploration slot, ✗ = off-interest.
+Top 10 per interest pick for a fresh account at the San José launch-area centre, produced by `functions/scripts/personalization-e2e.mjs` against the local emulator corpus (2110 active events in the next 14 days). ✓ = matches the pick, ◇ = the labelled exploration slot, ✗ = off-interest.
 
 | Pick | corpus matches (14 d) | pool before → after | matches in pool before → after | top-10 matches |
 |---|---|---|---|---|
-| Parks | 28 | 270 → 365 | 11 → 24 | 9 |
-| Trails | 28 | 270 → 365 | 11 → 24 | 9 |
-| Gardens | 52 | 270 → 365 | 12 → 25 | 9 |
-| Playgrounds | 960 | 270 → 338 | 94 → 154 | 9 |
-| Waterfront | 30 | 270 → 365 | 11 → 24 | 9 |
-| Sports | 71 | 270 → 418 | 18 → 58 | 9 |
-| Scenic | 31 | 270 → 365 | 12 → 27 | 9 |
-| Community | 307 | 270 → 416 | 94 → 140 | 9 |
-| Parks + Trails | 28 | 270 → 365 | 11 → 24 | 9 |
-| Parks + Trails | 28 | 270 → 365 | 11 → 24 | 9 |
-| Community | 307 | 270 → 416 | 94 → 140 | 9 |
+| Parks | 30 | 276 → 382 | 11 → 26 | 9 |
+| Trails | 30 | 276 → 382 | 11 → 26 | 9 |
+| Gardens | 54 | 276 → 382 | 12 → 27 | 9 |
+| Playgrounds | 967 | 276 → 345 | 96 → 157 | 9 |
+| Waterfront | 32 | 276 → 382 | 11 → 26 | 9 |
+| Sports | 81 | 276 → 434 | 18 → 68 | 9 |
+| Scenic | 33 | 276 → 382 | 12 → 29 | 9 |
+| Community | 351 | 276 → 428 | 97 → 145 | 9 |
+| Parks + Trails | 30 | 276 → 382 | 11 → 26 | 9 |
+| Parks + Trails | 30 | 276 → 382 | 11 → 26 | 9 |
+| Community | 351 | 276 → 428 | 97 → 145 | 9 |
 
 ## Parks (`qa-personalization-parks`)
 
@@ -24,11 +24,11 @@ Top 10 per interest pick for a fresh account at the San José launch-area centre
 | 2 | ✓ | Trees & Friends | Sports · midpen | 2026-10-27T16:30 | Because you like Parks · Coming up this week · Something new from Midpeninsula Regional Open Space District | Parks:outdoors:tag |
 | 3 | ✓ | Siding Maintenance: Deer Hollow Farm (Pt. 1) | Volunteer · midpen | 2026-10-26T16:30 | Because you like Parks · Coming up this week · Something new from Midpeninsula Regional Open Space District | Parks:outdoors:tag |
 | 4 | ✓ | Lake Elizabeth Bird Walk | Workshop · bibliocommons | 2026-10-25T17:00 | Because you like Parks · Happening today or tomorrow · Free | Parks:outdoors:title |
-| 5 | ✓ | Full Moonrise from Borel Hill | Sports · midpen | 2026-10-26T23:00 | Because you like Parks · Coming up this week · Something new from Midpeninsula Regional Open Space District | Parks:outdoors:tag |
-| 6 | ✓ | Habitat Restoration: French Broom Removal | Volunteer · midpen | 2026-10-31T16:30 | Because you like Parks · Coming up this week · Something new from Midpeninsula Regional Open Space District | Parks:outdoors:title |
-| 7 | ✓ | Trail Trek Thursday | Sports · midpen | 2026-10-29T16:30 | Because you like Parks · Coming up this week · Something new from Midpeninsula Regional Open Space District | Parks:outdoors:title |
-| 8 | ✓ | Habitat Restoration: French Broom Removal | Volunteer · midpen | 2026-10-29T16:30 | Because you like Parks · Coming up this week · Something new from Midpeninsula Regional Open Space District | Parks:outdoors:title |
-| 9 | ✓ | Halloween & Hiking Hounds | Sports · midpen | 2026-10-31T17:30 | Because you like Parks · Coming up this week · Something new from Midpeninsula Regional Open Space District | Parks:outdoors:title |
+| 5 | ✓ | Native Planting at Mountain View A2W! | Social · wordpress-tec | 2026-11-07T18:00 | Because you like Parks · Something new from Save The Bay: Protecting and Restoring San Francisco Bay | Parks:outdoors:title |
+| 6 | ✓ | Full Moonrise from Borel Hill | Sports · midpen | 2026-10-26T23:00 | Because you like Parks · Coming up this week · Something new from Midpeninsula Regional Open Space District | Parks:outdoors:tag |
+| 7 | ✓ | Habitat Restoration: French Broom Removal | Volunteer · midpen | 2026-10-31T16:30 | Because you like Parks · Coming up this week · Something new from Midpeninsula Regional Open Space District | Parks:outdoors:title |
+| 8 | ✓ | Trail Trek Thursday | Sports · midpen | 2026-10-29T16:30 | Because you like Parks · Coming up this week · Something new from Midpeninsula Regional Open Space District | Parks:outdoors:title |
+| 9 | ✓ | Habitat Restoration: French Broom Removal | Volunteer · midpen | 2026-10-29T16:30 | Because you like Parks · Coming up this week · Something new from Midpeninsula Regional Open Space District | Parks:outdoors:title |
 | 10 | ◇ | CLA Presents: JJJJJerome Ellis & heidi andrea restrepo rhodes | Festival · localist | 2026-10-30T02:00 | Something different — outside your picks |  |
 
 ## Trails (`qa-personalization-trails`)
@@ -50,15 +50,15 @@ Top 10 per interest pick for a fresh account at the San José launch-area centre
 
 | # | | Title | Category · source | When | Reasons | Matched via |
 |---|---|---|---|---|---|---|
-| 1 | ✓ | Outdoor Storytime | Workshop · libcal | 2026-10-27T17:30 | Because you like Gardens · Coming up this week · Something new from Mountain View Public Library | Gardens:outdoors:title |
-| 2 | ✓ | Trees & Friends | Sports · midpen | 2026-10-27T16:30 | Because you like Gardens · Coming up this week · Something new from Midpeninsula Regional Open Space District | Gardens:outdoors:tag |
-| 3 | ✓ | Siding Maintenance: Deer Hollow Farm (Pt. 1) | Volunteer · midpen | 2026-10-26T16:30 | Because you like Gardens · Coming up this week · Something new from Midpeninsula Regional Open Space District | Gardens:outdoors:tag |
-| 4 | ✓ | Lake Elizabeth Bird Walk | Workshop · bibliocommons | 2026-10-25T17:00 | Because you like Gardens · Happening today or tomorrow · Free | Gardens:outdoors:title |
-| 5 | ✓ | Full Moonrise from Borel Hill | Sports · midpen | 2026-10-26T23:00 | Because you like Gardens · Coming up this week · Something new from Midpeninsula Regional Open Space District | Gardens:outdoors:tag |
-| 6 | ✓ | Habitat Restoration: French Broom Removal | Volunteer · midpen | 2026-10-31T16:30 | Because you like Gardens · Coming up this week · Something new from Midpeninsula Regional Open Space District | Gardens:outdoors:title |
-| 7 | ✓ | Trail Trek Thursday | Sports · midpen | 2026-10-29T16:30 | Because you like Gardens · Coming up this week · Something new from Midpeninsula Regional Open Space District | Gardens:outdoors:title |
-| 8 | ✓ | Habitat Restoration: French Broom Removal | Volunteer · midpen | 2026-10-29T16:30 | Because you like Gardens · Coming up this week · Something new from Midpeninsula Regional Open Space District | Gardens:outdoors:title |
-| 9 | ✓ | Halloween & Hiking Hounds | Sports · midpen | 2026-10-31T17:30 | Because you like Gardens · Coming up this week · Something new from Midpeninsula Regional Open Space District | Gardens:outdoors:title |
+| 1 | ✓ | Native Planting at Mountain View A2W! | Social · wordpress-tec | 2026-11-07T18:00 | Because you like Gardens · Something new from Save The Bay: Protecting and Restoring San Francisco Bay | Gardens:gardening:title, Gardens:outdoors:title |
+| 2 | ✓ | Outdoor Storytime | Workshop · libcal | 2026-10-27T17:30 | Because you like Gardens · Coming up this week · Something new from Mountain View Public Library | Gardens:outdoors:title |
+| 3 | ✓ | Trees & Friends | Sports · midpen | 2026-10-27T16:30 | Because you like Gardens · Coming up this week · Something new from Midpeninsula Regional Open Space District | Gardens:outdoors:tag |
+| 4 | ✓ | Siding Maintenance: Deer Hollow Farm (Pt. 1) | Volunteer · midpen | 2026-10-26T16:30 | Because you like Gardens · Coming up this week · Something new from Midpeninsula Regional Open Space District | Gardens:outdoors:tag |
+| 5 | ✓ | Lake Elizabeth Bird Walk | Workshop · bibliocommons | 2026-10-25T17:00 | Because you like Gardens · Happening today or tomorrow · Free | Gardens:outdoors:title |
+| 6 | ✓ | Full Moonrise from Borel Hill | Sports · midpen | 2026-10-26T23:00 | Because you like Gardens · Coming up this week · Something new from Midpeninsula Regional Open Space District | Gardens:outdoors:tag |
+| 7 | ✓ | Habitat Restoration: French Broom Removal | Volunteer · midpen | 2026-10-31T16:30 | Because you like Gardens · Coming up this week · Something new from Midpeninsula Regional Open Space District | Gardens:outdoors:title |
+| 8 | ✓ | Trail Trek Thursday | Sports · midpen | 2026-10-29T16:30 | Because you like Gardens · Coming up this week · Something new from Midpeninsula Regional Open Space District | Gardens:outdoors:title |
+| 9 | ✓ | Habitat Restoration: French Broom Removal | Volunteer · midpen | 2026-10-29T16:30 | Because you like Gardens · Coming up this week · Something new from Midpeninsula Regional Open Space District | Gardens:outdoors:title |
 | 10 | ◇ | CLA Presents: JJJJJerome Ellis & heidi andrea restrepo rhodes | Festival · localist | 2026-10-30T02:00 | Something different — outside your picks |  |
 
 ## Playgrounds (`qa-personalization-playgrounds`)
@@ -84,11 +84,11 @@ Top 10 per interest pick for a fresh account at the San José launch-area centre
 | 2 | ✓ | Trees & Friends | Sports · midpen | 2026-10-27T16:30 | Because you like Waterfront · Coming up this week · Something new from Midpeninsula Regional Open Space District | Waterfront:outdoors:tag |
 | 3 | ✓ | Outdoor Storytime | Workshop · libcal | 2026-10-27T17:30 | Because you like Waterfront · Coming up this week · Something new from Mountain View Public Library | Waterfront:outdoors:title |
 | 4 | ✓ | Siding Maintenance: Deer Hollow Farm (Pt. 1) | Volunteer · midpen | 2026-10-26T16:30 | Because you like Waterfront · Coming up this week · Something new from Midpeninsula Regional Open Space District | Waterfront:outdoors:tag |
-| 5 | ✓ | Full Moonrise from Borel Hill | Sports · midpen | 2026-10-26T23:00 | Because you like Waterfront · Coming up this week · Something new from Midpeninsula Regional Open Space District | Waterfront:outdoors:tag |
-| 6 | ✓ | Habitat Restoration: French Broom Removal | Volunteer · midpen | 2026-10-31T16:30 | Because you like Waterfront · Coming up this week · Something new from Midpeninsula Regional Open Space District | Waterfront:outdoors:title |
-| 7 | ✓ | Trail Trek Thursday | Sports · midpen | 2026-10-29T16:30 | Because you like Waterfront · Coming up this week · Something new from Midpeninsula Regional Open Space District | Waterfront:outdoors:title |
-| 8 | ✓ | Habitat Restoration: French Broom Removal | Volunteer · midpen | 2026-10-29T16:30 | Because you like Waterfront · Coming up this week · Something new from Midpeninsula Regional Open Space District | Waterfront:outdoors:title |
-| 9 | ✓ | Halloween & Hiking Hounds | Sports · midpen | 2026-10-31T17:30 | Because you like Waterfront · Coming up this week · Something new from Midpeninsula Regional Open Space District | Waterfront:outdoors:title |
+| 5 | ✓ | Native Planting at Mountain View A2W! | Social · wordpress-tec | 2026-11-07T18:00 | Because you like Waterfront · Something new from Save The Bay: Protecting and Restoring San Francisco Bay | Waterfront:outdoors:title, Waterfront:waterfront:description |
+| 6 | ✓ | Full Moonrise from Borel Hill | Sports · midpen | 2026-10-26T23:00 | Because you like Waterfront · Coming up this week · Something new from Midpeninsula Regional Open Space District | Waterfront:outdoors:tag |
+| 7 | ✓ | Habitat Restoration: French Broom Removal | Volunteer · midpen | 2026-10-31T16:30 | Because you like Waterfront · Coming up this week · Something new from Midpeninsula Regional Open Space District | Waterfront:outdoors:title |
+| 8 | ✓ | Trail Trek Thursday | Sports · midpen | 2026-10-29T16:30 | Because you like Waterfront · Coming up this week · Something new from Midpeninsula Regional Open Space District | Waterfront:outdoors:title |
+| 9 | ✓ | Habitat Restoration: French Broom Removal | Volunteer · midpen | 2026-10-29T16:30 | Because you like Waterfront · Coming up this week · Something new from Midpeninsula Regional Open Space District | Waterfront:outdoors:title |
 | 10 | ◇ | CLA Presents: JJJJJerome Ellis & heidi andrea restrepo rhodes | Festival · localist | 2026-10-30T02:00 | Something different — outside your picks |  |
 
 ## Sports (`qa-personalization-sports`)
@@ -97,11 +97,11 @@ Top 10 per interest pick for a fresh account at the San José launch-area centre
 |---|---|---|---|---|---|---|
 | 1 | ✓ | Gentle Yoga / Yoga Relajante | Sports · bibliocommons | 2026-10-27T00:00 | Because you like Sports · Coming up this week · Free | Sports:fitness:category |
 | 2 | ✓ | Tai Chi for Seniors | Social · bibliocommons | 2026-10-29T17:00 | Because you like Sports · Coming up this week · Free | Sports:fitness:title |
-| 3 | ✓ | Community Yoga and Heartfulness Meditation | Sports · bibliocommons | 2026-10-31T17:30 | Because you like Sports · Coming up this week · Free | Sports:fitness:category |
+| 3 | ✓ | Santa Clara University Men’s Soccer vs Denver - Senior Night | Sports · livewhale | 2026-11-01T02:00 | Because you like Sports · Coming up this week · Something new from Bronco Athletics | Sports:fitness:category |
 | 4 | ✓ | Adult Tai Chi | Workshop · bibliocommons | 2026-10-26T21:00 | Because you like Sports · Coming up this week · Free | Sports:fitness:title |
-| 5 | ✓ | Art of Living Meditation | Sports · bibliocommons | 2026-10-31T18:00 | Because you like Sports · Coming up this week · Free | Sports:fitness:category |
+| 5 | ✓ | Community Yoga and Heartfulness Meditation | Sports · bibliocommons | 2026-10-31T17:30 | Because you like Sports · Coming up this week · Free | Sports:fitness:category |
 | 6 | ✓ | Tai Chi | Workshop · bibliocommons | 2026-10-26T18:00 | Because you like Sports · Coming up this week · Something new from San Mateo County Libraries | Sports:fitness:title |
-| 7 | ✓ | Santa Clara University Women’s Volleyball vs Seattle | Sports · livewhale | 2026-11-06T03:00 | Because you like Sports · Complete listing · Something new from Bronco Athletics | Sports:fitness:category |
+| 7 | ✓ | Art of Living Meditation | Sports · bibliocommons | 2026-10-31T18:00 | Because you like Sports · Coming up this week · Free | Sports:fitness:category |
 | 8 | ✓ | Zumba at Morgan Hill Library | Social · bibliocommons | 2026-10-27T01:00 | Because you like Sports · Coming up this week · Free | Sports:fitness:title |
 | 9 | ✓ | Tai Chi with Nelson Ng | Workshop · bibliocommons | 2026-10-25T17:00 | Because you like Sports · Happening today or tomorrow · Free | Sports:fitness:title |
 | 10 | ◇ | CLA Presents: JJJJJerome Ellis & heidi andrea restrepo rhodes | Festival · localist | 2026-10-30T02:00 | Something different — outside your picks |  |
@@ -115,10 +115,10 @@ Top 10 per interest pick for a fresh account at the San José launch-area centre
 | 3 | ✓ | Outdoor Storytime | Workshop · libcal | 2026-10-27T17:30 | Because you like Scenic · Coming up this week · Something new from Mountain View Public Library | Scenic:outdoors:title |
 | 4 | ✓ | Siding Maintenance: Deer Hollow Farm (Pt. 1) | Volunteer · midpen | 2026-10-26T16:30 | Because you like Scenic · Coming up this week · Something new from Midpeninsula Regional Open Space District | Scenic:outdoors:tag |
 | 5 | ✓ | Trees & Friends | Sports · midpen | 2026-10-27T16:30 | Because you like Scenic · Coming up this week · Something new from Midpeninsula Regional Open Space District | Scenic:outdoors:tag |
-| 6 | ✓ | Habitat Restoration: French Broom Removal | Volunteer · midpen | 2026-10-31T16:30 | Because you like Scenic · Coming up this week · Something new from Midpeninsula Regional Open Space District | Scenic:outdoors:title |
-| 7 | ✓ | Lake Elizabeth Bird Walk | Workshop · bibliocommons | 2026-10-25T17:00 | Because you like Scenic · Happening today or tomorrow · Free | Scenic:outdoors:title |
-| 8 | ✓ | Full Moonrise from Borel Hill | Sports · midpen | 2026-10-26T23:00 | Because you like Scenic · Coming up this week · Something new from Midpeninsula Regional Open Space District | Scenic:outdoors:tag |
-| 9 | ✓ | Habitat Restoration: French Broom Removal | Volunteer · midpen | 2026-10-29T16:30 | Because you like Scenic · Coming up this week · Something new from Midpeninsula Regional Open Space District | Scenic:outdoors:title |
+| 6 | ✓ | Native Planting at Mountain View A2W! | Social · wordpress-tec | 2026-11-07T18:00 | Because you like Scenic · Something new from Save The Bay: Protecting and Restoring San Francisco Bay | Scenic:outdoors:title |
+| 7 | ✓ | Habitat Restoration: French Broom Removal | Volunteer · midpen | 2026-10-31T16:30 | Because you like Scenic · Coming up this week · Something new from Midpeninsula Regional Open Space District | Scenic:outdoors:title |
+| 8 | ✓ | Lake Elizabeth Bird Walk | Workshop · bibliocommons | 2026-10-25T17:00 | Because you like Scenic · Happening today or tomorrow · Free | Scenic:outdoors:title |
+| 9 | ✓ | Full Moonrise from Borel Hill | Sports · midpen | 2026-10-26T23:00 | Because you like Scenic · Coming up this week · Something new from Midpeninsula Regional Open Space District | Scenic:outdoors:tag |
 | 10 | ◇ | CLA Presents: JJJJJerome Ellis & heidi andrea restrepo rhodes | Festival · localist | 2026-10-30T02:00 | Something different — outside your picks |  |
 
 ## Community (`qa-personalization-community`)
@@ -127,10 +127,10 @@ Top 10 per interest pick for a fresh account at the San José launch-area centre
 |---|---|---|---|---|---|---|
 | 1 | ✓ | Halloween Program & Costume Parade | Festival · bibliocommons | 2026-10-28T23:00 | Because you like Community · Close by (0.2 mi) · Coming up this week | Community:community:title |
 | 2 | ✓ | SJSU CommUniverCity Community Event: Día de los Muertos Celebration | Meetup · localist | 2026-11-01T23:00 | Because you like Community · Close by (0.3 mi) · Complete listing | Community:community:title |
-| 3 | ✓ | Forge Volunteer Hours | Volunteer · livewhale | 2026-10-27T21:30 | Because you like Community · Coming up this week · Complete listing | Community:community:category, Community:volunteering:category |
+| 3 | ✓ | Joyce Ellington Teens Reach Orientation | Volunteer · bibliocommons | 2026-11-05T00:00 | Because you like Community · Close by (0.8 mi) · Free | Community:community:category, Community:volunteering:category |
 | 4 | ✓ | Friends of the Seven Trees Library Book Sale | Market · bibliocommons | 2026-10-27T23:00 | Because you like Community · Coming up this week · Free | Community:community:category |
 | 5 | ✓ | Halloween Week Scavenger Hunt | Social · bibliocommons | 2026-10-26T07:00 | Because you like Community · Coming up this week · Free | Community:community:tag |
-| 6 | ✓ | Volunteer Away Your Fines as a Branch Buddy | Volunteer · bibliocommons | 2026-10-31T18:00 | Because you like Community · Coming up this week · Complete listing | Community:community:category, Community:volunteering:category |
+| 6 | ✓ | Forge Volunteer Hours | Volunteer · livewhale | 2026-10-27T21:30 | Because you like Community · Coming up this week · Complete listing | Community:community:category, Community:volunteering:category |
 | 7 | ✓ | Global Connections: DIY Diyas for Diwali | Meetup · localist | 2026-11-09T22:00 | Because you like Community · Close by (0.4 mi) · Complete listing | Community:community:title |
 | 8 | ✓ | Friday Fun: Halloween Festival | Festival · bibliocommons | 2026-10-30T23:00 | Because you like Community · Coming up this week · Free | Community:community:title |
 | 9 | ✓ | Friends of Joyce Ellington Branch Library Book Sale | Market · bibliocommons | 2026-11-14T18:00 | Because you like Community · Close by (0.8 mi) · Free | Community:community:category |
@@ -144,11 +144,11 @@ Top 10 per interest pick for a fresh account at the San José launch-area centre
 | 2 | ✓ | Trees & Friends | Sports · midpen | 2026-10-27T16:30 | Because you like Parks · Coming up this week · Something new from Midpeninsula Regional Open Space District | Parks:outdoors:tag, Trails:hiking:tag |
 | 3 | ✓ | Siding Maintenance: Deer Hollow Farm (Pt. 1) | Volunteer · midpen | 2026-10-26T16:30 | Because you like Parks · Coming up this week · Something new from Midpeninsula Regional Open Space District | Parks:outdoors:tag |
 | 4 | ✓ | Lake Elizabeth Bird Walk | Workshop · bibliocommons | 2026-10-25T17:00 | Because you like Parks · Happening today or tomorrow · Free | Parks:outdoors:title |
-| 5 | ✓ | Full Moonrise from Borel Hill | Sports · midpen | 2026-10-26T23:00 | Because you like Parks · Coming up this week · Something new from Midpeninsula Regional Open Space District | Parks:outdoors:tag, Trails:hiking:tag |
-| 6 | ✓ | Habitat Restoration: French Broom Removal | Volunteer · midpen | 2026-10-31T16:30 | Because you like Parks · Coming up this week · Something new from Midpeninsula Regional Open Space District | Parks:outdoors:title |
-| 7 | ✓ | Trail Trek Thursday | Sports · midpen | 2026-10-29T16:30 | Because you like Parks · Coming up this week · Something new from Midpeninsula Regional Open Space District | Parks:outdoors:title, Trails:hiking:title |
-| 8 | ✓ | Habitat Restoration: French Broom Removal | Volunteer · midpen | 2026-10-29T16:30 | Because you like Parks · Coming up this week · Something new from Midpeninsula Regional Open Space District | Parks:outdoors:title |
-| 9 | ✓ | Halloween & Hiking Hounds | Sports · midpen | 2026-10-31T17:30 | Because you like Parks · Coming up this week · Something new from Midpeninsula Regional Open Space District | Parks:outdoors:title, Trails:hiking:title |
+| 5 | ✓ | Native Planting at Mountain View A2W! | Social · wordpress-tec | 2026-11-07T18:00 | Because you like Parks · Something new from Save The Bay: Protecting and Restoring San Francisco Bay | Parks:outdoors:title |
+| 6 | ✓ | Full Moonrise from Borel Hill | Sports · midpen | 2026-10-26T23:00 | Because you like Parks · Coming up this week · Something new from Midpeninsula Regional Open Space District | Parks:outdoors:tag, Trails:hiking:tag |
+| 7 | ✓ | Habitat Restoration: French Broom Removal | Volunteer · midpen | 2026-10-31T16:30 | Because you like Parks · Coming up this week · Something new from Midpeninsula Regional Open Space District | Parks:outdoors:title |
+| 8 | ✓ | Trail Trek Thursday | Sports · midpen | 2026-10-29T16:30 | Because you like Parks · Coming up this week · Something new from Midpeninsula Regional Open Space District | Parks:outdoors:title, Trails:hiking:title |
+| 9 | ✓ | Habitat Restoration: French Broom Removal | Volunteer · midpen | 2026-10-29T16:30 | Because you like Parks · Coming up this week · Something new from Midpeninsula Regional Open Space District | Parks:outdoors:title |
 | 10 | ◇ | Open Lab Hours at AI Center for Civic and Social Good | Workshop · localist | 2026-10-26T16:00 | Something different — outside your picks |  |
 
 ## Parks + Trails (`qa-personalization-demo-outdoors`)
@@ -159,11 +159,11 @@ Top 10 per interest pick for a fresh account at the San José launch-area centre
 | 2 | ✓ | Trees & Friends | Sports · midpen | 2026-10-27T16:30 | Because you like Parks · Coming up this week · Something new from Midpeninsula Regional Open Space District | Parks:outdoors:tag, Trails:hiking:tag |
 | 3 | ✓ | Siding Maintenance: Deer Hollow Farm (Pt. 1) | Volunteer · midpen | 2026-10-26T16:30 | Because you like Parks · Coming up this week · Something new from Midpeninsula Regional Open Space District | Parks:outdoors:tag |
 | 4 | ✓ | Lake Elizabeth Bird Walk | Workshop · bibliocommons | 2026-10-25T17:00 | Because you like Parks · Happening today or tomorrow · Free | Parks:outdoors:title |
-| 5 | ✓ | Full Moonrise from Borel Hill | Sports · midpen | 2026-10-26T23:00 | Because you like Parks · Coming up this week · Something new from Midpeninsula Regional Open Space District | Parks:outdoors:tag, Trails:hiking:tag |
-| 6 | ✓ | Habitat Restoration: French Broom Removal | Volunteer · midpen | 2026-10-31T16:30 | Because you like Parks · Coming up this week · Something new from Midpeninsula Regional Open Space District | Parks:outdoors:title |
-| 7 | ✓ | Trail Trek Thursday | Sports · midpen | 2026-10-29T16:30 | Because you like Parks · Coming up this week · Something new from Midpeninsula Regional Open Space District | Parks:outdoors:title, Trails:hiking:title |
-| 8 | ✓ | Habitat Restoration: French Broom Removal | Volunteer · midpen | 2026-10-29T16:30 | Because you like Parks · Coming up this week · Something new from Midpeninsula Regional Open Space District | Parks:outdoors:title |
-| 9 | ✓ | Halloween & Hiking Hounds | Sports · midpen | 2026-10-31T17:30 | Because you like Parks · Coming up this week · Something new from Midpeninsula Regional Open Space District | Parks:outdoors:title, Trails:hiking:title |
+| 5 | ✓ | Native Planting at Mountain View A2W! | Social · wordpress-tec | 2026-11-07T18:00 | Because you like Parks · Something new from Save The Bay: Protecting and Restoring San Francisco Bay | Parks:outdoors:title |
+| 6 | ✓ | Full Moonrise from Borel Hill | Sports · midpen | 2026-10-26T23:00 | Because you like Parks · Coming up this week · Something new from Midpeninsula Regional Open Space District | Parks:outdoors:tag, Trails:hiking:tag |
+| 7 | ✓ | Habitat Restoration: French Broom Removal | Volunteer · midpen | 2026-10-31T16:30 | Because you like Parks · Coming up this week · Something new from Midpeninsula Regional Open Space District | Parks:outdoors:title |
+| 8 | ✓ | Trail Trek Thursday | Sports · midpen | 2026-10-29T16:30 | Because you like Parks · Coming up this week · Something new from Midpeninsula Regional Open Space District | Parks:outdoors:title, Trails:hiking:title |
+| 9 | ✓ | Habitat Restoration: French Broom Removal | Volunteer · midpen | 2026-10-29T16:30 | Because you like Parks · Coming up this week · Something new from Midpeninsula Regional Open Space District | Parks:outdoors:title |
 | 10 | ◇ | CLA Presents: JJJJJerome Ellis & heidi andrea restrepo rhodes | Festival · localist | 2026-10-30T02:00 | Something different — outside your picks |  |
 
 ## Community (`qa-personalization-demo-community`)
@@ -172,10 +172,10 @@ Top 10 per interest pick for a fresh account at the San José launch-area centre
 |---|---|---|---|---|---|---|
 | 1 | ✓ | Halloween Program & Costume Parade | Festival · bibliocommons | 2026-10-28T23:00 | Because you like Community · Close by (0.2 mi) · Coming up this week | Community:community:title |
 | 2 | ✓ | SJSU CommUniverCity Community Event: Día de los Muertos Celebration | Meetup · localist | 2026-11-01T23:00 | Because you like Community · Close by (0.3 mi) · Complete listing | Community:community:title |
-| 3 | ✓ | Forge Volunteer Hours | Volunteer · livewhale | 2026-10-27T21:30 | Because you like Community · Coming up this week · Complete listing | Community:community:category, Community:volunteering:category |
+| 3 | ✓ | Joyce Ellington Teens Reach Orientation | Volunteer · bibliocommons | 2026-11-05T00:00 | Because you like Community · Close by (0.8 mi) · Free | Community:community:category, Community:volunteering:category |
 | 4 | ✓ | Friends of the Seven Trees Library Book Sale | Market · bibliocommons | 2026-10-27T23:00 | Because you like Community · Coming up this week · Free | Community:community:category |
 | 5 | ✓ | Halloween Week Scavenger Hunt | Social · bibliocommons | 2026-10-26T07:00 | Because you like Community · Coming up this week · Free | Community:community:tag |
-| 6 | ✓ | Volunteer Away Your Fines as a Branch Buddy | Volunteer · bibliocommons | 2026-10-31T18:00 | Because you like Community · Coming up this week · Complete listing | Community:community:category, Community:volunteering:category |
+| 6 | ✓ | Forge Volunteer Hours | Volunteer · livewhale | 2026-10-27T21:30 | Because you like Community · Coming up this week · Complete listing | Community:community:category, Community:volunteering:category |
 | 7 | ✓ | Global Connections: DIY Diyas for Diwali | Meetup · localist | 2026-11-09T22:00 | Because you like Community · Close by (0.4 mi) · Complete listing | Community:community:title |
 | 8 | ✓ | Friday Fun: Halloween Festival | Festival · bibliocommons | 2026-10-30T23:00 | Because you like Community · Coming up this week · Free | Community:community:title |
 | 9 | ✓ | Friends of Joyce Ellington Branch Library Book Sale | Market · bibliocommons | 2026-11-14T18:00 | Because you like Community · Close by (0.8 mi) · Free | Community:community:category |
@@ -183,15 +183,15 @@ Top 10 per interest pick for a fresh account at the San José launch-area centre
 
 ## Pairwise overlap of the top 10
 
-- Parks vs Trails: 5
+- Parks vs Trails: 4
 - Parks vs Playgrounds: 0
 - Parks vs Waterfront: 10
 - Parks vs Sports: 1
 - Parks vs Scenic: 8
 - Parks vs Parks+Trails: 9
-- Trails vs Waterfront: 5
+- Trails vs Waterfront: 4
 - Gardens vs Parks: 10
-- Gardens vs Trails: 5
+- Gardens vs Trails: 4
 - Gardens vs Playgrounds: 0
 - Gardens vs Waterfront: 10
 - Gardens vs Sports: 1
@@ -218,7 +218,7 @@ Top 10 per interest pick for a fresh account at the San José launch-area centre
 - Community vs Scenic: 0
 - Community vs Parks+Trails: 0
 - Community vs Community: 10
-- Parks+Trails vs Trails: 5
+- Parks+Trails vs Trails: 4
 - Parks+Trails vs Waterfront: 10
 - Parks+Trails vs Parks: 10
 - Parks+Trails vs Gardens: 10

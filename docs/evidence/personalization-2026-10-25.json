@@ -1,7 +1,7 @@
 {
-  "ranAt": "2026-10-25T00:00:23.005Z",
+  "ranAt": "2026-10-25T02:54:29.066Z",
   "emulator": "127.0.0.1:8899",
-  "corpus14d": 2053,
+  "corpus14d": 2110,
   "passed": 50,
   "failed": 0,
   "summary": {
@@ -9,12 +9,12 @@
       "interests": [
         "Parks"
       ],
-      "corpusMatches14d": 28,
-      "poolBefore": 270,
+      "corpusMatches14d": 30,
+      "poolBefore": 276,
       "poolBeforeMatches": 11,
-      "poolAfter": 365,
-      "poolAfterMatches": 24,
-      "interestRetrieved": 117,
+      "poolAfter": 382,
+      "poolAfterMatches": 26,
+      "interestRetrieved": 129,
       "ranked": 50,
       "matchesInTop10": 9,
       "explorationSlot": 9
@@ -23,12 +23,12 @@
       "interests": [
         "Trails"
       ],
-      "corpusMatches14d": 28,
-      "poolBefore": 270,
+      "corpusMatches14d": 30,
+      "poolBefore": 276,
       "poolBeforeMatches": 11,
-      "poolAfter": 365,
-      "poolAfterMatches": 24,
-      "interestRetrieved": 117,
+      "poolAfter": 382,
+      "poolAfterMatches": 26,
+      "interestRetrieved": 129,
       "ranked": 50,
       "matchesInTop10": 9,
       "explorationSlot": 9
@@ -37,12 +37,12 @@
       "interests": [
         "Gardens"
       ],
-      "corpusMatches14d": 52,
-      "poolBefore": 270,
+      "corpusMatches14d": 54,
+      "poolBefore": 276,
       "poolBeforeMatches": 12,
-      "poolAfter": 365,
-      "poolAfterMatches": 25,
-      "interestRetrieved": 117,
+      "poolAfter": 382,
+      "poolAfterMatches": 27,
+      "interestRetrieved": 129,
       "ranked": 50,
       "matchesInTop10": 9,
       "explorationSlot": 9
@@ -51,12 +51,12 @@
       "interests": [
         "Playgrounds"
       ],
-      "corpusMatches14d": 960,
-      "poolBefore": 270,
-      "poolBeforeMatches": 94,
-      "poolAfter": 338,
-      "poolAfterMatches": 154,
-      "interestRetrieved": 147,
+      "corpusMatches14d": 967,
+      "poolBefore": 276,
+      "poolBeforeMatches": 96,
+      "poolAfter": 345,
+      "poolAfterMatches": 157,
+      "interestRetrieved": 150,
       "ranked": 50,
       "matchesInTop10": 9,
       "explorationSlot": 9
@@ -65,12 +65,12 @@
       "interests": [
         "Waterfront"
       ],
-      "corpusMatches14d": 30,
-      "poolBefore": 270,
+      "corpusMatches14d": 32,
+      "poolBefore": 276,
       "poolBeforeMatches": 11,
-      "poolAfter": 365,
-      "poolAfterMatches": 24,
-      "interestRetrieved": 117,
+      "poolAfter": 382,
+      "poolAfterMatches": 26,
+      "interestRetrieved": 129,
       "ranked": 50,
       "matchesInTop10": 9,
       "explorationSlot": 9
@@ -79,12 +79,12 @@
       "interests": [
         "Sports"
       ],
-      "corpusMatches14d": 71,
-      "poolBefore": 270,
+      "corpusMatches14d": 81,
+      "poolBefore": 276,
       "poolBeforeMatches": 18,
-      "poolAfter": 418,
-      "poolAfterMatches": 58,
-      "interestRetrieved": 180,
+      "poolAfter": 434,
+      "poolAfterMatches": 68,
+      "interestRetrieved": 190,
       "ranked": 50,
       "matchesInTop10": 9,
       "explorationSlot": 9
@@ -93,12 +93,12 @@
       "interests": [
         "Scenic"
       ],
-      "corpusMatches14d": 31,
-      "poolBefore": 270,
+      "corpusMatches14d": 33,
+      "poolBefore": 276,
       "poolBeforeMatches": 12,
-      "poolAfter": 365,
-      "poolAfterMatches": 27,
-      "interestRetrieved": 117,
+      "poolAfter": 382,
+      "poolAfterMatches": 29,
+      "interestRetrieved": 129,
       "ranked": 50,
       "matchesInTop10": 9,
       "explorationSlot": 9
@@ -107,12 +107,12 @@
       "interests": [
         "Community"
       ],
-      "corpusMatches14d": 307,
-      "poolBefore": 270,
-      "poolBeforeMatches": 94,
-      "poolAfter": 416,
-      "poolAfterMatches": 140,
-      "interestRetrieved": 239,
+      "corpusMatches14d": 351,
+      "poolBefore": 276,
+      "poolBeforeMatches": 97,
+      "poolAfter": 428,
+      "poolAfterMatches": 145,
+      "interestRetrieved": 243,
       "ranked": 50,
       "matchesInTop10": 9,
       "explorationSlot": 9
@@ -122,12 +122,12 @@
         "Parks",
         "Trails"
       ],
-      "corpusMatches14d": 28,
-      "poolBefore": 270,
+      "corpusMatches14d": 30,
+      "poolBefore": 276,
       "poolBeforeMatches": 11,
-      "poolAfter": 365,
-      "poolAfterMatches": 24,
-      "interestRetrieved": 117,
+      "poolAfter": 382,
+      "poolAfterMatches": 26,
+      "interestRetrieved": 129,
       "ranked": 50,
       "matchesInTop10": 9,
       "explorationSlot": 9
@@ -137,12 +137,12 @@
         "Parks",
         "Trails"
       ],
-      "corpusMatches14d": 28,
-      "poolBefore": 270,
+      "corpusMatches14d": 30,
+      "poolBefore": 276,
       "poolBeforeMatches": 11,
-      "poolAfter": 365,
-      "poolAfterMatches": 24,
-      "interestRetrieved": 117,
+      "poolAfter": 382,
+      "poolAfterMatches": 26,
+      "interestRetrieved": 129,
       "ranked": 50,
       "matchesInTop10": 9,
       "explorationSlot": 9
@@ -151,27 +151,27 @@
       "interests": [
         "Community"
       ],
-      "corpusMatches14d": 307,
-      "poolBefore": 270,
-      "poolBeforeMatches": 94,
-      "poolAfter": 416,
-      "poolAfterMatches": 140,
-      "interestRetrieved": 239,
+      "corpusMatches14d": 351,
+      "poolBefore": 276,
+      "poolBeforeMatches": 97,
+      "poolAfter": 428,
+      "poolAfterMatches": 145,
+      "interestRetrieved": 243,
       "ranked": 50,
       "matchesInTop10": 9,
       "explorationSlot": 9
     }
   },
   "overlap": {
-    "Parks vs Trails": 5,
+    "Parks vs Trails": 4,
     "Parks vs Playgrounds": 0,
     "Parks vs Waterfront": 10,
     "Parks vs Sports": 1,
     "Parks vs Scenic": 8,
     "Parks vs Parks+Trails": 9,
-    "Trails vs Waterfront": 5,
+    "Trails vs Waterfront": 4,
     "Gardens vs Parks": 10,
-    "Gardens vs Trails": 5,
+    "Gardens vs Trails": 4,
     "Gardens vs Playgrounds": 0,
     "Gardens vs Waterfront": 10,
     "Gardens vs Sports": 1,
@@ -198,7 +198,7 @@
     "Community vs Scenic": 0,
     "Community vs Parks+Trails": 0,
     "Community vs Community": 10,
-    "Parks+Trails vs Trails": 5,
+    "Parks+Trails vs Trails": 4,
     "Parks+Trails vs Waterfront": 10,
     "Parks+Trails vs Parks": 10,
     "Parks+Trails vs Gardens": 10,
@@ -209,7 +209,7 @@
   },
   "results": [
     {
-      "name": "Parks: ≥ 10 matching events exist (28) → at least 8 of the top 10 match (9)",
+      "name": "Parks: ≥ 10 matching events exist (30) → at least 8 of the top 10 match (9)",
       "pass": true
     },
     {
@@ -225,7 +225,7 @@
       "pass": true
     },
     {
-      "name": "Trails: ≥ 10 matching events exist (28) → at least 8 of the top 10 match (9)",
+      "name": "Trails: ≥ 10 matching events exist (30) → at least 8 of the top 10 match (9)",
       "pass": true
     },
     {
@@ -241,7 +241,7 @@
       "pass": true
     },
     {
-      "name": "Gardens: ≥ 10 matching events exist (52) → at least 8 of the top 10 match (9)",
+      "name": "Gardens: ≥ 10 matching events exist (54) → at least 8 of the top 10 match (9)",
       "pass": true
     },
     {
@@ -257,7 +257,7 @@
       "pass": true
     },
     {
-      "name": "Playgrounds: ≥ 10 matching events exist (960) → at least 8 of the top 10 match (9)",
+      "name": "Playgrounds: ≥ 10 matching events exist (967) → at least 8 of the top 10 match (9)",
       "pass": true
     },
     {
@@ -273,7 +273,7 @@
       "pass": true
     },
     {
-      "name": "Waterfront: ≥ 10 matching events exist (30) → at least 8 of the top 10 match (9)",
+      "name": "Waterfront: ≥ 10 matching events exist (32) → at least 8 of the top 10 match (9)",
       "pass": true
     },
     {
@@ -289,7 +289,7 @@
       "pass": true
     },
     {
-      "name": "Sports: ≥ 10 matching events exist (71) → at least 8 of the top 10 match (9)",
+      "name": "Sports: ≥ 10 matching events exist (81) → at least 8 of the top 10 match (9)",
       "pass": true
     },
     {
@@ -305,7 +305,7 @@
       "pass": true
     },
     {
-      "name": "Scenic: ≥ 10 matching events exist (31) → at least 8 of the top 10 match (9)",
+      "name": "Scenic: ≥ 10 matching events exist (33) → at least 8 of the top 10 match (9)",
       "pass": true
     },
     {
@@ -321,7 +321,7 @@
       "pass": true
     },
     {
-      "name": "Community: ≥ 10 matching events exist (307) → at least 8 of the top 10 match (9)",
+      "name": "Community: ≥ 10 matching events exist (351) → at least 8 of the top 10 match (9)",
       "pass": true
     },
     {
@@ -341,7 +341,7 @@
       "pass": true
     },
     {
-      "name": "Parks+Trails: ≥ 10 matching events exist (28) → at least 8 of the top 10 match (9)",
+      "name": "Parks+Trails: ≥ 10 matching events exist (30) → at least 8 of the top 10 match (9)",
       "pass": true
     },
     {
@@ -361,7 +361,7 @@
       "pass": true
     },
     {
-      "name": "Parks+Trails: ≥ 10 matching events exist (28) → at least 8 of the top 10 match (9)",
+      "name": "Parks+Trails: ≥ 10 matching events exist (30) → at least 8 of the top 10 match (9)",
       "pass": true
     },
     {
@@ -377,7 +377,7 @@
       "pass": true
     },
     {
-      "name": "Community: ≥ 10 matching events exist (307) → at least 8 of the top 10 match (9)",
+      "name": "Community: ≥ 10 matching events exist (351) → at least 8 of the top 10 match (9)",
       "pass": true
     },
     {
@@ -486,6 +486,22 @@
         },
         {
           "rank": 5,
+          "id": "wordpress-tec-1405772",
+          "title": "Native Planting at Mountain View A2W!",
+          "category": "Social",
+          "source": "wordpress-tec",
+          "where": "Save The Bay: Protecting and Restoring San Francisco Bay",
+          "when": "2026-11-07T18:00",
+          "match": true,
+          "exploration": false,
+          "reasons": [
+            "Because you like Parks",
+            "Something new from Save The Bay: Protecting and Restoring San Francisco Bay"
+          ],
+          "via": "Parks:outdoors:title"
+        },
+        {
+          "rank": 6,
           "id": "midpen-full-moonrise-borel-hill-0",
           "title": "Full Moonrise from Borel Hill",
           "category": "Sports",
@@ -502,7 +518,7 @@
           "via": "Parks:outdoors:tag"
         },
         {
-          "rank": 6,
+          "rank": 7,
           "id": "midpen-habitat-restoration-french-broom-removal-157",
           "title": "Habitat Restoration: French Broom Removal",
           "category": "Volunteer",
@@ -519,7 +535,7 @@
           "via": "Parks:outdoors:title"
         },
         {
-          "rank": 7,
+          "rank": 8,
           "id": "midpen-trail-trek-thursday-12",
           "title": "Trail Trek Thursday",
           "category": "Sports",
@@ -536,30 +552,13 @@
           "via": "Parks:outdoors:title"
         },
         {
-          "rank": 8,
+          "rank": 9,
           "id": "midpen-habitat-restoration-french-broom-removal-156",
           "title": "Habitat Restoration: French Broom Removal",
           "category": "Volunteer",
           "source": "midpen",
           "where": "Teague Hill Preserve",
           "when": "2026-10-29T16:30",
-          "match": true,
-          "exploration": false,
-          "reasons": [
-            "Because you like Parks",
-            "Coming up this week",
-            "Something new from Midpeninsula Regional Open Space District"
-          ],
-          "via": "Parks:outdoors:title"
-        },
-        {
-          "rank": 9,
-          "id": "midpen-halloween-hiking-hounds",
-          "title": "Halloween & Hiking Hounds",
-          "category": "Sports",
-          "source": "midpen",
-          "where": "Pulgas Ridge Preserve",
-          "when": "2026-10-31T17:30",
           "match": true,
           "exploration": false,
           "reasons": [
@@ -768,6 +767,22 @@
       "rows": [
         {
           "rank": 1,
+          "id": "wordpress-tec-1405772",
+          "title": "Native Planting at Mountain View A2W!",
+          "category": "Social",
+          "source": "wordpress-tec",
+          "where": "Save The Bay: Protecting and Restoring San Francisco Bay",
+          "when": "2026-11-07T18:00",
+          "match": true,
+          "exploration": false,
+          "reasons": [
+            "Because you like Gardens",
+            "Something new from Save The Bay: Protecting and Restoring San Francisco Bay"
+          ],
+          "via": "Gardens:gardening:title, Gardens:outdoors:title"
+        },
+        {
+          "rank": 2,
           "id": "libcal-8800-17142489",
           "title": "Outdoor Storytime",
           "category": "Workshop",
@@ -784,7 +799,7 @@
           "via": "Gardens:outdoors:title"
         },
         {
-          "rank": 2,
+          "rank": 3,
           "id": "midpen-trees-friends-0",
           "title": "Trees & Friends",
           "category": "Sports",
@@ -801,7 +816,7 @@
           "via": "Gardens:outdoors:tag"
         },
         {
-          "rank": 3,
+          "rank": 4,
           "id": "midpen-siding-maintenance-deer-hollow-farm-pt-1",
           "title": "Siding Maintenance: Deer Hollow Farm (Pt. 1)",
           "category": "Volunteer",
@@ -818,7 +833,7 @@
           "via": "Gardens:outdoors:tag"
         },
         {
-          "rank": 4,
+          "rank": 5,
           "id": "bibliocommons-aclibrary-6a73c11288e9bf280035d1a3",
           "title": "Lake Elizabeth Bird Walk",
           "category": "Workshop",
@@ -835,7 +850,7 @@
           "via": "Gardens:outdoors:title"
         },
         {
-          "rank": 5,
+          "rank": 6,
           "id": "midpen-full-moonrise-borel-hill-0",
           "title": "Full Moonrise from Borel Hill",
           "category": "Sports",
@@ -852,7 +867,7 @@
           "via": "Gardens:outdoors:tag"
         },
         {
-          "rank": 6,
+          "rank": 7,
           "id": "midpen-habitat-restoration-french-broom-removal-157",
           "title": "Habitat Restoration: French Broom Removal",
           "category": "Volunteer",
@@ -869,7 +884,7 @@
           "via": "Gardens:outdoors:title"
         },
         {
-          "rank": 7,
+          "rank": 8,
           "id": "midpen-trail-trek-thursday-12",
           "title": "Trail Trek Thursday",
           "category": "Sports",
@@ -886,30 +901,13 @@
           "via": "Gardens:outdoors:title"
         },
         {
-          "rank": 8,
+          "rank": 9,
           "id": "midpen-habitat-restoration-french-broom-removal-156",
           "title": "Habitat Restoration: French Broom Removal",
           "category": "Volunteer",
           "source": "midpen",
           "where": "Teague Hill Preserve",
           "when": "2026-10-29T16:30",
-          "match": true,
-          "exploration": false,
-          "reasons": [
-            "Because you like Gardens",
-            "Coming up this week",
-            "Something new from Midpeninsula Regional Open Space District"
-          ],
-          "via": "Gardens:outdoors:title"
-        },
-        {
-          "rank": 9,
-          "id": "midpen-halloween-hiking-hounds",
-          "title": "Halloween & Hiking Hounds",
-          "category": "Sports",
-          "source": "midpen",
-          "where": "Pulgas Ridge Preserve",
-          "when": "2026-10-31T17:30",
           "match": true,
           "exploration": false,
           "reasons": [
@@ -1188,6 +1186,22 @@
         },
         {
           "rank": 5,
+          "id": "wordpress-tec-1405772",
+          "title": "Native Planting at Mountain View A2W!",
+          "category": "Social",
+          "source": "wordpress-tec",
+          "where": "Save The Bay: Protecting and Restoring San Francisco Bay",
+          "when": "2026-11-07T18:00",
+          "match": true,
+          "exploration": false,
+          "reasons": [
+            "Because you like Waterfront",
+            "Something new from Save The Bay: Protecting and Restoring San Francisco Bay"
+          ],
+          "via": "Waterfront:outdoors:title, Waterfront:waterfront:description"
+        },
+        {
+          "rank": 6,
           "id": "midpen-full-moonrise-borel-hill-0",
           "title": "Full Moonrise from Borel Hill",
           "category": "Sports",
@@ -1204,7 +1218,7 @@
           "via": "Waterfront:outdoors:tag"
         },
         {
-          "rank": 6,
+          "rank": 7,
           "id": "midpen-habitat-restoration-french-broom-removal-157",
           "title": "Habitat Restoration: French Broom Removal",
           "category": "Volunteer",
@@ -1221,7 +1235,7 @@
           "via": "Waterfront:outdoors:title"
         },
         {
-          "rank": 7,
+          "rank": 8,
           "id": "midpen-trail-trek-thursday-12",
           "title": "Trail Trek Thursday",
           "category": "Sports",
@@ -1238,30 +1252,13 @@
           "via": "Waterfront:outdoors:title"
         },
         {
-          "rank": 8,
+          "rank": 9,
           "id": "midpen-habitat-restoration-french-broom-removal-156",
           "title": "Habitat Restoration: French Broom Removal",
           "category": "Volunteer",
           "source": "midpen",
           "where": "Teague Hill Preserve",
           "when": "2026-10-29T16:30",
-          "match": true,
-          "exploration": false,
-          "reasons": [
-            "Because you like Waterfront",
-            "Coming up this week",
-            "Something new from Midpeninsula Regional Open Space District"
-          ],
-          "via": "Waterfront:outdoors:title"
-        },
-        {
-          "rank": 9,
-          "id": "midpen-halloween-hiking-hounds",
-          "title": "Halloween & Hiking Hounds",
-          "category": "Sports",
-          "source": "midpen",
-          "where": "Pulgas Ridge Preserve",
-          "when": "2026-10-31T17:30",
           "match": true,
           "exploration": false,
           "reasons": [
@@ -1330,18 +1327,18 @@
         },
         {
           "rank": 3,
-          "id": "bibliocommons-sjpl-69f53d6c24bd39b0b5e92c33",
-          "title": "Community Yoga and Heartfulness Meditation",
+          "id": "livewhale-events-scu-edu-482880-2026-10-31T19-00-00-07-00",
+          "title": "Santa Clara University Men’s Soccer vs Denver - Senior Night",
           "category": "Sports",
-          "source": "bibliocommons",
-          "where": "Cambrian · Community Room",
-          "when": "2026-10-31T17:30",
+          "source": "livewhale",
+          "where": "Stevens Stadium",
+          "when": "2026-11-01T02:00",
           "match": true,
           "exploration": false,
           "reasons": [
             "Because you like Sports",
             "Coming up this week",
-            "Free"
+            "Something new from Bronco Athletics"
           ],
           "via": "Sports:fitness:category"
         },
@@ -1364,12 +1361,12 @@
         },
         {
           "rank": 5,
-          "id": "bibliocommons-sjpl-69332ed176261f28005da2b8",
-          "title": "Art of Living Meditation",
+          "id": "bibliocommons-sjpl-69f53d6c24bd39b0b5e92c33",
+          "title": "Community Yoga and Heartfulness Meditation",
           "category": "Sports",
           "source": "bibliocommons",
-          "where": "West Valley · Group Study Room B",
-          "when": "2026-10-31T18:00",
+          "where": "Cambrian · Community Room",
+          "when": "2026-10-31T17:30",
           "match": true,
           "exploration": false,
           "reasons": [
@@ -1398,18 +1395,18 @@
         },
         {
           "rank": 7,
-          "id": "livewhale-events-scu-edu-486908-2026-11-05T19-00-00-08-00",
-          "title": "Santa Clara University Women’s Volleyball vs Seattle",
+          "id": "bibliocommons-sjpl-69332ed176261f28005da2b8",
+          "title": "Art of Living Meditation",
           "category": "Sports",
-          "source": "livewhale",
-          "where": "Leavey Event Center",
-          "when": "2026-11-06T03:00",
+          "source": "bibliocommons",
+          "where": "West Valley · Group Study Room B",
+          "when": "2026-10-31T18:00",
           "match": true,
           "exploration": false,
           "reasons": [
             "Because you like Sports",
-            "Complete listing",
-            "Something new from Bronco Athletics"
+            "Coming up this week",
+            "Free"
           ],
           "via": "Sports:fitness:category"
         },
@@ -1557,6 +1554,22 @@
         },
         {
           "rank": 6,
+          "id": "wordpress-tec-1405772",
+          "title": "Native Planting at Mountain View A2W!",
+          "category": "Social",
+          "source": "wordpress-tec",
+          "where": "Save The Bay: Protecting and Restoring San Francisco Bay",
+          "when": "2026-11-07T18:00",
+          "match": true,
+          "exploration": false,
+          "reasons": [
+            "Because you like Scenic",
+            "Something new from Save The Bay: Protecting and Restoring San Francisco Bay"
+          ],
+          "via": "Scenic:outdoors:title"
+        },
+        {
+          "rank": 7,
           "id": "midpen-habitat-restoration-french-broom-removal-157",
           "title": "Habitat Restoration: French Broom Removal",
           "category": "Volunteer",
@@ -1573,7 +1586,7 @@
           "via": "Scenic:outdoors:title"
         },
         {
-          "rank": 7,
+          "rank": 8,
           "id": "bibliocommons-aclibrary-6a73c11288e9bf280035d1a3",
           "title": "Lake Elizabeth Bird Walk",
           "category": "Workshop",
@@ -1590,7 +1603,7 @@
           "via": "Scenic:outdoors:title"
         },
         {
-          "rank": 8,
+          "rank": 9,
           "id": "midpen-full-moonrise-borel-hill-0",
           "title": "Full Moonrise from Borel Hill",
           "category": "Sports",
@@ -1605,23 +1618,6 @@
             "Something new from Midpeninsula Regional Open Space District"
           ],
           "via": "Scenic:outdoors:tag"
-        },
-        {
-          "rank": 9,
-          "id": "midpen-habitat-restoration-french-broom-removal-156",
-          "title": "Habitat Restoration: French Broom Removal",
-          "category": "Volunteer",
-          "source": "midpen",
-          "where": "Teague Hill Preserve",
-          "when": "2026-10-29T16:30",
-          "match": true,
-          "exploration": false,
-          "reasons": [
-            "Because you like Scenic",
-            "Coming up this week",
-            "Something new from Midpeninsula Regional Open Space District"
-          ],
-          "via": "Scenic:outdoors:title"
         },
         {
           "rank": 10,
@@ -1682,18 +1678,18 @@
         },
         {
           "rank": 3,
-          "id": "livewhale-events-scu-edu-517358-2026-10-27T14-30-00-07-00",
-          "title": "Forge Volunteer Hours",
+          "id": "bibliocommons-sjpl-69c48bc55a2d780f42c4c4ea",
+          "title": "Joyce Ellington Teens Reach Orientation",
           "category": "Volunteer",
-          "source": "livewhale",
-          "where": "The Forge Garden",
-          "when": "2026-10-27T21:30",
+          "source": "bibliocommons",
+          "where": "Joyce Ellington · Community Room",
+          "when": "2026-11-05T00:00",
           "match": true,
           "exploration": false,
           "reasons": [
             "Because you like Community",
-            "Coming up this week",
-            "Complete listing"
+            "Close by (0.8 mi)",
+            "Free"
           ],
           "via": "Community:community:category, Community:volunteering:category"
         },
@@ -1733,12 +1729,12 @@
         },
         {
           "rank": 6,
-          "id": "bibliocommons-sjpl-693df98794297d36009fd506",
-          "title": "Volunteer Away Your Fines as a Branch Buddy",
+          "id": "livewhale-events-scu-edu-517358-2026-10-27T14-30-00-07-00",
+          "title": "Forge Volunteer Hours",
           "category": "Volunteer",
-          "source": "bibliocommons",
-          "where": "Tully · Children's Area",
-          "when": "2026-10-31T18:00",
+          "source": "livewhale",
+          "where": "The Forge Garden",
+          "when": "2026-10-27T21:30",
           "match": true,
           "exploration": false,
           "reasons": [
@@ -1893,6 +1889,22 @@
         },
         {
           "rank": 5,
+          "id": "wordpress-tec-1405772",
+          "title": "Native Planting at Mountain View A2W!",
+          "category": "Social",
+          "source": "wordpress-tec",
+          "where": "Save The Bay: Protecting and Restoring San Francisco Bay",
+          "when": "2026-11-07T18:00",
+          "match": true,
+          "exploration": false,
+          "reasons": [
+            "Because you like Parks",
+            "Something new from Save The Bay: Protecting and Restoring San Francisco Bay"
+          ],
+          "via": "Parks:outdoors:title"
+        },
+        {
+          "rank": 6,
           "id": "midpen-full-moonrise-borel-hill-0",
           "title": "Full Moonrise from Borel Hill",
           "category": "Sports",
@@ -1909,7 +1921,7 @@
           "via": "Parks:outdoors:tag, Trails:hiking:tag"
         },
         {
-          "rank": 6,
+          "rank": 7,
           "id": "midpen-habitat-restoration-french-broom-removal-157",
           "title": "Habitat Restoration: French Broom Removal",
           "category": "Volunteer",
@@ -1926,7 +1938,7 @@
           "via": "Parks:outdoors:title"
         },
         {
-          "rank": 7,
+          "rank": 8,
           "id": "midpen-trail-trek-thursday-12",
           "title": "Trail Trek Thursday",
           "category": "Sports",
@@ -1943,7 +1955,7 @@
           "via": "Parks:outdoors:title, Trails:hiking:title"
         },
         {
-          "rank": 8,
+          "rank": 9,
           "id": "midpen-habitat-restoration-french-broom-removal-156",
           "title": "Habitat Restoration: French Broom Removal",
           "category": "Volunteer",
@@ -1958,23 +1970,6 @@
             "Something new from Midpeninsula Regional Open Space District"
           ],
           "via": "Parks:outdoors:title"
-        },
-        {
-          "rank": 9,
-          "id": "midpen-halloween-hiking-hounds",
-          "title": "Halloween & Hiking Hounds",
-          "category": "Sports",
-          "source": "midpen",
-          "where": "Pulgas Ridge Preserve",
-          "when": "2026-10-31T17:30",
-          "match": true,
-          "exploration": false,
-          "reasons": [
-            "Because you like Parks",
-            "Coming up this week",
-            "Something new from Midpeninsula Regional Open Space District"
-          ],
-          "via": "Parks:outdoors:title, Trails:hiking:title"
         },
         {
           "rank": 10,
@@ -2070,6 +2065,22 @@
         },
         {
           "rank": 5,
+          "id": "wordpress-tec-1405772",
+          "title": "Native Planting at Mountain View A2W!",
+          "category": "Social",
+          "source": "wordpress-tec",
+          "where": "Save The Bay: Protecting and Restoring San Francisco Bay",
+          "when": "2026-11-07T18:00",
+          "match": true,
+          "exploration": false,
+          "reasons": [
+            "Because you like Parks",
+            "Something new from Save The Bay: Protecting and Restoring San Francisco Bay"
+          ],
+          "via": "Parks:outdoors:title"
+        },
+        {
+          "rank": 6,
           "id": "midpen-full-moonrise-borel-hill-0",
           "title": "Full Moonrise from Borel Hill",
           "category": "Sports",
@@ -2086,7 +2097,7 @@
           "via": "Parks:outdoors:tag, Trails:hiking:tag"
         },
         {
-          "rank": 6,
+          "rank": 7,
           "id": "midpen-habitat-restoration-french-broom-removal-157",
           "title": "Habitat Restoration: French Broom Removal",
           "category": "Volunteer",
@@ -2103,7 +2114,7 @@
           "via": "Parks:outdoors:title"
         },
         {
-          "rank": 7,
+          "rank": 8,
           "id": "midpen-trail-trek-thursday-12",
           "title": "Trail Trek Thursday",
           "category": "Sports",
@@ -2120,7 +2131,7 @@
           "via": "Parks:outdoors:title, Trails:hiking:title"
         },
         {
-          "rank": 8,
+          "rank": 9,
           "id": "midpen-habitat-restoration-french-broom-removal-156",
           "title": "Habitat Restoration: French Broom Removal",
           "category": "Volunteer",
@@ -2135,23 +2146,6 @@
             "Something new from Midpeninsula Regional Open Space District"
           ],
           "via": "Parks:outdoors:title"
-        },
-        {
-          "rank": 9,
-          "id": "midpen-halloween-hiking-hounds",
-          "title": "Halloween & Hiking Hounds",
-          "category": "Sports",
-          "source": "midpen",
-          "where": "Pulgas Ridge Preserve",
-          "when": "2026-10-31T17:30",
-          "match": true,
-          "exploration": false,
-          "reasons": [
-            "Because you like Parks",
-            "Coming up this week",
-            "Something new from Midpeninsula Regional Open Space District"
-          ],
-          "via": "Parks:outdoors:title, Trails:hiking:title"
         },
         {
           "rank": 10,
@@ -2212,18 +2206,18 @@
         },
         {
           "rank": 3,
-          "id": "livewhale-events-scu-edu-517358-2026-10-27T14-30-00-07-00",
-          "title": "Forge Volunteer Hours",
+          "id": "bibliocommons-sjpl-69c48bc55a2d780f42c4c4ea",
+          "title": "Joyce Ellington Teens Reach Orientation",
           "category": "Volunteer",
-          "source": "livewhale",
-          "where": "The Forge Garden",
-          "when": "2026-10-27T21:30",
+          "source": "bibliocommons",
+          "where": "Joyce Ellington · Community Room",
+          "when": "2026-11-05T00:00",
           "match": true,
           "exploration": false,
           "reasons": [
             "Because you like Community",
-            "Coming up this week",
-            "Complete listing"
+            "Close by (0.8 mi)",
+            "Free"
           ],
           "via": "Community:community:category, Community:volunteering:category"
         },
@@ -2263,12 +2257,12 @@
         },
         {
           "rank": 6,
-          "id": "bibliocommons-sjpl-693df98794297d36009fd506",
-          "title": "Volunteer Away Your Fines as a Branch Buddy",
+          "id": "livewhale-events-scu-edu-517358-2026-10-27T14-30-00-07-00",
+          "title": "Forge Volunteer Hours",
           "category": "Volunteer",
-          "source": "bibliocommons",
-          "where": "Tully · Children's Area",
-          "when": "2026-10-31T18:00",
+          "source": "livewhale",
+          "where": "The Forge Garden",
+          "when": "2026-10-27T21:30",
           "match": true,
           "exploration": false,
           "reasons": [

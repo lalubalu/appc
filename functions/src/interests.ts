@@ -133,7 +133,7 @@ const OUTDOOR_TITLE = [
   "state park", "county park", "regional park", "city park", "park cleanup", "park clean-up", "nature preserve", "habitat",
   "trail (?:work|day|run|crew)", "night hikes?", "full moon (?:hike|walk)", "moonlight (?:hike|walk)", "sunset (?:hike|walk)",
   "sunrise (?:hike|walk)", "fall colou?rs?", "mushroom (?:walk|hunt|foray)", "geocach(?:e|ing)", "orienteering", "stewardship",
-  "restoration", "tree planting", "plant(?:ing)? (?:day|party)", "pollinators?", "butterfl(?:y|ies)", "owls?", "monarch butterfl(?:y|ies)",
+  "restoration", "tree planting", "plantings?", "plant(?:ing)? (?:day|party)", "pollinators?", "butterfl(?:y|ies)", "owls?", "monarch butterfl(?:y|ies)",
   "tidepooling", "bioblitz", "wildflower walks?", "bike (?:ride|tour)s?", "group rides?", "picnics?", "camp(?:ing|out)",
 ];
 const OUTDOOR_DESC = [
@@ -199,7 +199,7 @@ const LEXICON: Record<string, Lexicon> = {
       "cleanups?", "clean-ups?", "clean ups?", "tree planting", "food banks?", "food drives?", "donation drives?", "community service", "work ?days?",
       "give back", "docent training", "coastal cleanup", "beach cleanup", "creek cleanup", "park cleanup", "litter pick ?up", "weeding", "invasive removal",
       "plant(?:ing)? (?:day|party)", "mentors? (?:needed|wanted|orientation)", "tutors? (?:needed|wanted|orientation)", "blood drives?", "toy drives?",
-      "coat drives?", "book drives?", "meal (?:packing|prep)", "sandwich making", "care packages?", "letter writing", "friends of the (?:library|park)s?",
+      "coat drives?", "book drives?", "plantings?", "native plantings?", "meal (?:packing|prep)", "sandwich making", "care packages?", "letter writing", "friends of the (?:library|park)s?",
       "adopt[- ]a[- ](?:park|trail|creek|block|street|spot)", "day of service", "mlk day of service", "earth day", "arbor day", "coastal clean ?up day",
       "make a difference day", "teen advisory (?:group|board)"],
     description: ["volunteers? (?:are )?(?:needed|wanted|welcome)", "volunteer opportunit(?:y|ies)", "sign up to volunteer", "looking for volunteers",
@@ -352,6 +352,15 @@ const ACADEMIC_TALK = /(?<![\p{L}\p{N}_])(?:lectures?|seminars?|colloquium|collo
 /** Terms where the activity itself is what the user wants, so a talk about it does not count. */
 const ACTIVITY_TERMS: ReadonlySet<string> = new Set(["outdoors", "hiking", "gardening", "waterfront", "scenic", "fitness", "volunteering", "community", "family"]);
 
+/**
+ * Sources discovery activates automatically (no human looked at a single listing). The frozen
+ * classifier's category is trusted on its own for the reviewed config sources, but on these a
+ * category match must be corroborated by the title, an allow-listed tag or the description:
+ * allcove's "glitter jars" craft session came through classified Cleanup and would otherwise
+ * have read "Because you like Parks".
+ */
+export const DISCOVERED_SOURCES: ReadonlySet<string> = new Set(["wordpress-tec", "jsonld", "rss-ics", "ics"]);
+
 /** One match per interest term, strongest first; empty when nothing matches. Pure. */
 export function matchInterests(ev: RankableEvent, rawInterests: readonly unknown[] | undefined): InterestMatch[] {
   const normalized = normalizeInterests(rawInterests);
@@ -373,8 +382,14 @@ export function matchInterests(ev: RankableEvent, rawInterests: readonly unknown
       const lex = LEXICON[term];
       if (!lex) return;
       const primary = index === 0;
-      if (lex.categories.includes(cat)) { out.push({ label: n.label, term, strength: 1, via: "category", primary }); return; }
       const talk = ACTIVITY_TERMS.has(term) && ACADEMIC_TALK.test(title);
+      if (lex.categories.includes(cat)) {
+        const corroborated = !DISCOVERED_SOURCES.has(String(ev.source ?? "")) ||
+          (!talk && TITLE_RX[term]?.test(titleClean)) || tagsLower.some((t) => STRONG_TAGS[term]?.has(t)) || (DESC_RX[term]?.test(descClean) ?? false);
+        if (corroborated) { out.push({ label: n.label, term, strength: 1, via: "category", primary }); return; }
+        // Uncorroborated category on a discovered source: a lift only, never the pick's reason.
+        out.push({ label: n.label, term, strength: 0.8, via: "category", primary }); return;
+      }
       if (!talk && TITLE_RX[term]?.test(titleClean)) { out.push({ label: n.label, term, strength: 1, via: "title", primary }); return; }
       if (tagsLower.some((t) => STRONG_TAGS[term]?.has(t))) { out.push({ label: n.label, term, strength: 1, via: "tag", primary }); return; }
       // A lift-only category, a phrase inside a feed's umbrella label ("Health & Fitness") or in the description lifts the score; none is evidence enough to claim the pick.
