@@ -329,8 +329,12 @@ Captured at Apple's required 6.9" size (1320 × 2868) in `screenshots/6.9-inch/`
       fresh, and ownership is bound via a uid-derived `appAccountToken`.
       **Still needs**: an In-App Purchase key (.p8) from App Store Connect and
       the ASSN V2 URL pointed at the deployed `appStoreNotifications` endpoint.
-- [ ] **AI Adventure Planner**: set `ANTHROPIC_API_KEY` as a function secret.
-      Until then the planner tile is visible but returns "isn't switched on yet".
+- [x] **Adventure Planner**: works with no AI key. The server builds the
+      itinerary with its own rules engine (`functions/src/adventure-engine.ts`:
+      real nearby places only, posted hours, weather, sunset). Optional: set
+      `ANTHROPIC_API_KEY` as a function secret to have a language model write
+      it instead; the same real-place allowlist applies either way, and the
+      store copy must not call the planner "AI" unless that key is configured.
 - [ ] **Push notifications**: upload an APNs Auth Key (.p8) to Firebase → Cloud
       Messaging and add the Push Notifications capability to the App ID.
       Without both, permission is granted but nothing is ever delivered.

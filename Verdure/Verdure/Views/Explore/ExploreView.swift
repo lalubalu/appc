@@ -213,7 +213,7 @@ struct ExploreView: View {
 
     // MARK: - Daily Gem (wide immersive — today's fun fact)
 
-    /// Entry point to the AI planner. Hidden until there are at least two places
+    /// Entry point to the Adventure Planner. Hidden until there are at least two places
     /// with real coordinates to plan around — offering to build an itinerary and
     /// then failing for lack of input is a worse experience than not offering.
     @ViewBuilder
