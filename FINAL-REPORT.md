@@ -233,7 +233,29 @@ header. **Not run here.** `../emulator-data` holds the export it imports.
 
 ## Discovery recording run and outdoor/volunteer sources (1.1 cause 5, 1.6)
 
-DISCOVERY_SECTION
+`npm run e2e:discovery:record` ran live for 1 h 52 min (2026-10-25 00:50–02:41 UTC): **2,357 responses from 149 hosts**, 120 inspections against the daily budget of 300, candidates from four origins (corpus links 10, OpenStreetMap organisations 1,119, organizer URLs 0, the model URL list 28 — the 27 South Bay outdoor/parks/volunteer hosts added in `functions/discovery/model-urls.json` plus the career centre). Stanford's Localist API sample, the Children's Discovery Museum and evols.org were recorded afterwards so the replay can decide them. Fixtures: `functions/test-fixtures/discovery/live-2026-10-25` (43 MB, `MANIFEST.json` label).
+
+| Outcome | Hosts | Detail |
+|---|---|---|
+| **Activated** | 5 | `savesfbay.org` (wordpress-tec, 6 volunteer plantings), `careercenter.sjsu.edu` (rss-ics, 23), `allcove.org` (wordpress-tec, 127), `abilitypath.org` (ics, 1 → 0 in area), `bayvp.org` (wordpress-tec, 1) |
+| Rejected | 115 | 101 "no feed, API or schema.org Event data found"; 9 RSS present but not a feed this sprint can read; 2 restrictive terms (ACTIVE Network, Atria); the City legistar feed "9 upcoming but none inside the radius (0 with coordinates)"; 2 "no upcoming event in 0 sampled" — every one with evidence in `docs/evidence/discovery-cycle-2026-10-25.md` |
+| Unknown | 1 | `evols.org`: sitemap lists no event pages; re-inspect monthly (removed from the model list so the replay has zero unknowns) |
+| Refused before inspection | 4 + 9 | deny-listed or malformed hosts; `sccgov.org` still answers nothing at all (robots.txt unreadable → never active) |
+
+Of the 27 outdoor hosts proposed, **one** publishes something the pipeline can read (Save The Bay, WordPress + The Events Calendar). scvas.org, valleywater.org, sanjoseparks.org, ourcityforest.org, keepcoyotecreekbeautiful.org, happyhollow.org, yosemite.org and the rest publish no feed, API or schema.org Event data — a parser cannot fix that; a human has to ask them for a calendar feed (the same conclusion as `docs/FEED-SURVEY-SAN-JOSE.md`).
+
+`functions/scripts/activate-discovered-local.mjs` replayed the recorded cycle on the data emulator: **active sources 14 → 19, +157 events** (`docs/evidence/discovery-live-2026-10-25.json`).
+
+**Outdoor supply before → after** (`outdoor-supply.mjs`: Midpen, Cleanup, or a non-library title naming a hike/trail/walk/preserve/cleanup…, events with coordinates):
+
+| Radius / window | Before | After | Why unchanged |
+|---|---|---|---|
+| 15 mi / 14 d | 9 (all Midpen) | 9 | Save The Bay's listings carry **no coordinates** (the wordpress-tec adapter has no venue geocoding), so a distance-based count cannot see them |
+| 25 mi / 14 d | 20 (all Midpen) | 20 | same |
+
+Where the new events do show: For You. A Parks + Trails account's top 10 now includes "Native Planting at Mountain View A2W!" (Save The Bay) at position 5 — `personalization-e2e` 50/50 and the Mac's `foryou-interests-e2e` 4/4 after the reload; per-pick matching events over 14 days moved Parks 28 → 30, Gardens 52 → 54, Waterfront 30 → 32, Scenic 31 → 33, Sports 71 → 81, Community 306 → 350 (`docs/PERSONALIZATION-REVIEW-2026-10-25.md`).
+
+One thing the new sources exposed and this branch fixed: allcove's "senses and sensibility: glitter jars" arrived classified **Cleanup** by the frozen classifier and read "Because you like Parks" for a Parks account. On auto-discovered sources a category match now needs corroboration (title phrase, allow-listed tag or description); config sources keep trusting the classifier. Test in `ranking-unit`.
 
 ## What is not perfect, and exactly why
 
