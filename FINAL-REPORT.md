@@ -36,7 +36,8 @@ the zip's tree on the shared base; merge commit `ada4950`):
 | `a9030d6` | 1.6 | planner picks follow the ranking, Google Maps intake, acceptance reasons check, E2E planner checks |
 | `6d54d15` `ada4950` | merge | the Mac tree and its three-way merge |
 | `8edea91` `9c463d9` | 1.6 | museum terms fixture (discovery-unit 160/160), CLAUDE.md |
-| (final commit) | 1.6 / 1.1 cause 5 | final suite numbers, discovery recording, data reload |
+| `6f1734a` `3a36929` `0e42149` | 1.6 / 1.1 cause 5 | live discovery recording, five sources, corroboration rule, fresh corpus, www fallback, same-time alternatives |
+| (this commit) | — | final suite numbers |
 
 ---
 
@@ -215,7 +216,22 @@ mirrors), so no fresh capture was possible here; the Mac's capture stands.
 
 ## 1.6 Tests
 
-SUITE_TABLE
+All backend numbers below are from the final code on this branch, run 2026-10-25 03:09–03:17 UTC on the local emulators (Windows, Java 21). Every suite rebuilt first.
+
+| Suite | Result | Command |
+|---|---|---|
+| Backend units | **16 suites green**: fulfillment 15 · subscription 8 · ingest 240 · ranking 100 · ranking-v2 69 · notifications 31 · partners 38 · event-planner 26 · adventure-engine 62 · parks 81 · offline 24 · programs 34 · place-stories 34 · rank-eval 42 · discovery 162; classifier freeze ✓, secret scan ✓ (5,426 tracked files), indexes ✓ (49 checks) | `cd functions && npm run test:units` |
+| Backend E2E | **363 / 363** (was 356/357 before the merge fixes) | `npm run e2e` |
+| Red team | **96 attacks blocked, 0 vulnerable** (was 95/1: the Google Maps intake gap) | `npm run redteam` |
+| Acceptance | **64 / 64**, all eight steps (was 55/61 at the start of this work) | `npm run acceptance` |
+| Discovery E2E (replay of the 2026-10-25 recording) | **58 / 58** | `npm run e2e:discovery` |
+| Live discovery recording | 2,357 responses · 149 hosts · 120 inspections · 5 activated | `npm run e2e:discovery:record` (1 h 52 min) |
+| Personalization acceptance | **50 / 50** on the loaded corpus (after the new sources) | `node scripts/personalization-e2e.mjs` |
+| For You demo accounts (the Mac's check) | **4 / 4** | `node scripts/foryou-interests-e2e.mjs --keep` |
+| Planner review | **11 / 11** scenarios, hand-reviewed | `node scripts/planner-review.mjs` |
+| iOS unit (`VerdureTests`) | **not run** (no Xcode here) | see `docs/MAC-HANDOFF-2026-10-25.md` § 1 |
+| iOS UI, each class alone | **not run** | idem |
+| Fresh-install walkthrough + screenshots | **not done** | `DemoWalkthroughUITests` on the Mac |
 
 The intermittent UI tests (Curated Program, partner consent, partner map): the Mac's
 `QAHelpers` rewrite (reveal/settle/type helpers, per-launch simulated location, the location
