@@ -22,11 +22,11 @@ deliberately not written in this document or in any script.)
 - `Verdure/Secrets.xcconfig`, `Verdure/Verdure/GoogleService-Info.plist`,
   `functions/.secret.local` and `functions/.env.local` are ignored and no longer tracked
   (`.gitignore`). The `.template` files stay tracked so a fresh clone knows what to fill in.
-- `functions/.env` **stays tracked on purpose**: it holds only non-secret defaults
-  (sandbox endpoints, empty ids, the model name) that keep the emulators non-interactive.
-  The secret scan runs over it on every `npm run test:units`, so a key placed there fails the
-  build. This is the one deliberate deviation from the handoff's list, and the reason is
-  that ignoring it would make `npm run e2e` hang on a fresh clone waiting for console input.
+- `functions/.env` is ignored too (the Mac tree's rule). The tracked, non-secret
+  `functions/.env.example` is copied to `.env` by `functions/scripts/ensure-env.mjs` at the start of
+  every `npm run build`, so a fresh clone's emulators stay non-interactive (`defineString` params
+  prompt on stdin otherwise) while no config file that could hold a key is ever tracked. The secret
+  scan fails the build if `.env` is ever tracked again.
 - The new keys live only in the two ignored files. The backend reads them from
   `functions/.secret.local` on the emulators and from `firebase functions:secrets:set` in
   production; the app reads them from `Secrets.xcconfig` → `Info.plist`.
