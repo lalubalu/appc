@@ -418,8 +418,18 @@ final class CoreLogicTests: XCTestCase {
         }
     }
 
-    func testCommunityInterestCoversSocialEvents() {
-        XCTAssertTrue(PlaceCategory.community.relatedEventCategories.contains(.social))
+    /// CAC 2026: the offline fallback map must not reach for the catch-all
+    /// categories — Meetup, Social, Workshop and Hackathon are how career and
+    /// developer events reached a Parks + Trails user when the server was down.
+    func testFallbackMappingAvoidsCatchAllCategories() {
+        let catchAlls: Set<EventCategory> = [.meetup, .social, .workshop, .hackathon, .program]
+        for interest in PlaceCategory.allCases {
+            XCTAssertTrue(Set(interest.relatedEventCategories).isDisjoint(with: catchAlls),
+                          "(interest.rawValue) must not map to a catch-all category")
+        }
+        XCTAssertTrue(PlaceCategory.community.relatedEventCategories.contains(.volunteer))
+        XCTAssertFalse(PlaceCategory.trails.relatedEventCategories.contains(.sports),
+                       "Trails → Sports was the bug the brief describes")
     }
 }
 

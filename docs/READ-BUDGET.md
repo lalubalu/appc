@@ -71,3 +71,18 @@ radius set in one query. Before enabling the feed on a populated live index,
 rerun this report with actual document and index-entry reads, user-context
 reads, a measured cache hit rate and typical session frequency. Keep the C1
 launch gate closed until then.
+
+## CAC 2026 addendum — interest-based retrieval (2026-10-25)
+
+`recommendFor` now merges a second, interest-keyed candidate pool into the
+shared area snapshot before ranking (`functions/src/ranking.ts`,
+`interestCandidates`). Per DISTINCT interest set it reads at most 150 events
+whose `topicTags` speak to the user's picks plus at most 100 events in the
+picks' specific categories, both over the next 14 days, ordered by date. The
+result is cached five minutes in `feedCaches/{areaId}__topics__…` and shared by
+every user with the same picks; a user with no interests reads nothing extra.
+Measured on the populated local emulator (2,048 events in the next 14 days):
+the shared pool held 270–272 candidates and 11–96 matches per pick; with
+retrieval, 340–420 candidates and 24–154 matches (see
+`docs/PERSONALIZATION-REVIEW-2026-10-25.md`). The new composite index is
+`events: areaId, active, topicTags (CONTAINS), date`.

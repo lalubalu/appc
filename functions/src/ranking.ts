@@ -16,8 +16,10 @@
  *     anything. Hard-filtering on them means someone who tapped "Sports" can
  *     never discover the cleanup two blocks away, and nothing in the product
  *     would ever tell them it existed.
- *   - Distance is the strongest term here, but a genuinely special event 20
- *     miles out should still be reachable — it just has to be better to win.
+ *   - Interest and distance are the two strongest terms (0.20 each since the
+ *     CAC 2026 fix; distance alone led before). A direct interest match orders
+ *     above a non-match (see rankEvents), but a genuinely special event 20
+ *     miles out is still in the list — it just has to be better to win its group.
  *   - A cold-start user (no interests, no follows, no history) gets every
  *     signal at its neutral value and falls back to "soon and nearby", which is
  *     a defensible default, not an empty screen.
@@ -38,12 +40,22 @@ import { friendIds } from "./friendships.js";
 import { createFeedSession } from "./feedTelemetry.js";
 import { rankEventsV2, reasonsForV1, constraintsFromFilters, applyFeedback, coerceRankingConfig, EXCLUDING_ACTIONS, ACTION_WEIGHTS,
   type V2Constraints, type AffinityState, type RankingVersion, type RankingConfig, type ClientFilterInput } from "./ranking-v2.js";
+import { matchInterests, directMatch, interestTerms, retrievalTopics, retrievalCategories, DIRECT_MATCH_MIN, INTEREST_TO_CATEGORY } from "./interests.js";
 
+/**
+ * CAC 2026 (1.1 cause 3) — before → after.
+ *   interest 0.16 → 0.20, distance 0.24 → 0.20; the other five terms unchanged.
+ * Before this change a direct interest match was worth 0.16 of a point while a
+ * two-mile difference in distance was worth about 0.09, so a stated interest
+ * could be outvoted by proximity plus a complete listing. Distance still
+ * decides the order among events that match (see rankEvents: a direct match
+ * always ranks above a non-match, then the full score orders each group).
+ */
 export const WEIGHTS = {
   /** Does it match what they said they liked, or what they've actually attended? */
-  interest: 0.16,
+  interest: 0.20,
   /** Can they get there? The single best predictor of whether someone goes. */
-  distance: 0.24,
+  distance: 0.20,
   /** A friend is going. The one signal no search engine can produce. */
   social: 0.16,
   /** Soon enough to act on, far enough away to plan. */
@@ -59,33 +71,37 @@ export const WEIGHTS = {
 /** Sanity: the weights must sum to 1. A typo here silently reweights the feed. */
 export const WEIGHT_SUM = Object.values(WEIGHTS).reduce((a, b) => a + b, 0);
 
-/** The app's interest labels map onto ingest categories. */
-export const INTEREST_TO_CATEGORY: Record<string, string[]> = {
-  outdoors: ["Cleanup", "Sports", "Market", "Festival"],
-  fitness: ["Sports", "Cleanup"],
-  volunteering: ["Volunteer", "Cleanup"],
-  arts: ["Workshop", "Festival", "Market"],
-  music: ["Festival", "Social"],
-  food: ["Market", "Festival", "Social"],
-  tech: ["Hackathon", "Workshop", "Meetup"],
-  learning: ["Workshop", "Meetup", "Hackathon"],
-  community: ["Meetup", "Social", "Volunteer"],
-  family: ["Festival", "Market", "Workshop"],
-};
+/**
+ * Interest term → the frozen classifier's SPECIFIC categories that are a direct
+ * match on their own. Defined in interests.ts next to the phrase lexicon so the
+ * two cannot drift; re-exported here because ranking v2 and the tests import
+ * it from this module. Catch-all categories (Workshop, Social, Meetup) are
+ * deliberately absent: "Social" at a library is a board-game afternoon.
+ */
+export { INTEREST_TO_CATEGORY };
 
-/** Deterministic semantic aliases for common interest language. Kept small
- * enough to audit against real listings before considering embeddings. */
+/**
+ * Word-level aliases kept ONLY for ranking v2's port of John's engine
+ * (matchedInterests). v1 no longer uses them: it matches through
+ * interests.ts, which strips venue names and uses multi-word phrases. The
+ * bare words that produced false matches ("park" → Mitchell Park Library,
+ * "garden" → Greenhouse Community Room, "walk" → walk-in, "social",
+ * "community", "volunteer" in a description) are gone from this table too.
+ */
 export const INTEREST_SYNONYMS: Record<string, string[]> = {
-  outdoors: ["trail", "nature walk", "birding", "wildflower", "hike", "hiking", "park", "garden"],
+  outdoors: ["trail", "nature walk", "birding", "wildflower", "hike", "hiking", "open space", "nature preserve"],
   hiking: ["trail", "nature walk", "birding", "wildflower", "ramble", "guided walk", "hike"],
-  fitness: ["run", "running", "yoga", "bike", "cycling", "dance fitness", "walk"],
-  volunteering: ["volunteer", "service day", "stewardship", "restore", "restoration", "cleanup", "tree planting"],
+  gardening: ["community garden", "garden tour", "gardening", "native plant", "plant sale", "composting"],
+  waterfront: ["creek", "shoreline", "kayak", "paddle", "tide pool", "wetland", "marsh", "baylands"],
+  scenic: ["sunset", "stargazing", "viewpoint", "full moon", "astronomy", "photography walk"],
+  fitness: ["running club", "fun run", "yoga", "bike ride", "cycling", "dance fitness", "walking group", "tai chi", "pickleball"],
+  volunteering: ["volunteers needed", "service day", "stewardship", "habitat restoration", "cleanup", "tree planting"],
   arts: ["art", "painting", "drawing", "gallery", "exhibition", "craft", "ceramics"],
   music: ["music", "concert", "jazz", "choir", "orchestra", "live band"],
   food: ["food", "cooking", "farmers market", "tasting", "baking"],
   tech: ["coding", "robotics", "computer", "maker", "hackathon", "technology"],
   learning: ["workshop", "class", "lecture", "lesson", "clinic", "lab", "learn"],
-  community: ["community", "neighborhood", "meetup", "social", "volunteer"],
+  community: ["community meeting", "neighborhood", "town hall", "block party", "potluck", "meetup", "mixer"],
   family: ["family", "kids", "children", "storytime", "all ages"],
 };
 
@@ -180,6 +196,20 @@ export function haversineMiles(aLat: number, aLng: number, bLat: number, bLng: n
  * event below the midpoint for a brand-new user and make the whole feed look
  * like a rejection.
  */
+/**
+ * The stated-interest match, 0..1, from the user's own picks (app labels or
+ * server terms — interests.ts normalises both). 1 for a title phrase or a
+ * specific category, 0.9 for a stricter description phrase, 0 otherwise. A
+ * Verdure+ profile's explicit category list counts as a direct match too.
+ * Exported so the tiering in rankEvents, the reasons and the exploration slot
+ * all read the same number.
+ */
+export function statedInterestMatch(ev: RankableEvent, ctx: RankingContext): number {
+  if (!ctx.interests.length && !(ctx.preferredCategories ?? []).length) return 0;
+  if ((ctx.preferredCategories ?? []).includes(ev.category ?? "")) return 1;
+  return matchInterests(ev, ctx.interests)[0]?.strength ?? 0;
+}
+
 export function interestScore(ev: RankableEvent, ctx: RankingContext): number {
   const cat = ev.category ?? "";
   const opportunity = cat === "Workshop" || cat === "Volunteer" || (ev.tags ?? []).includes("Opportunity");
@@ -196,15 +226,7 @@ export function interestScore(ev: RankableEvent, ctx: RankingContext): number {
   const attendedTotal = Object.values(ctx.attendedCategories).reduce((a, b) => a + b, 0);
   if (!hasStated && attendedTotal === 0) return Math.max(0.5, studentFloor, familyFloor, accessibilityFloor);
 
-  let stated = 0;
-  if (hasStated) {
-    const wanted = new Set([...ctx.interests.flatMap((i) => INTEREST_TO_CATEGORY[i.toLowerCase()] ?? []),
-      ...(ctx.preferredCategories ?? [])]);
-    const text = ` ${[ev.title, ev.description, ...(ev.tags ?? [])].filter(Boolean).join(" ").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()} `;
-    const semantic = ctx.interests.some((interest) =>
-      (INTEREST_SYNONYMS[interest.toLowerCase()] ?? []).some((term) => text.includes(` ${term} `)));
-    stated = wanted.has(cat) ? 1 : semantic ? 0.9 : 0;
-  }
+  const stated = hasStated ? statedInterestMatch(ev, ctx) : 0;
 
   let behavioural = 0;
   if (attendedTotal > 0) {
@@ -314,7 +336,7 @@ export interface ScoredEvent {
 
 /** Score one event. Exported so tests can assert a single term in isolation. */
 export function scoreEvent(ev: RankableEvent, ctx: RankingContext): ScoredEvent {
-  const parts = {
+  const parts: Record<string, number> = {
     interest: interestScore(ev, ctx),
     distance: distanceScore(ev, ctx),
     social: socialScore(ev, ctx),
@@ -322,6 +344,12 @@ export function scoreEvent(ev: RankableEvent, ctx: RankingContext): ScoredEvent 
     novelty: noveltyScore(ev, ctx),
     quality: qualityScore(ev),
     feedback: feedbackScore(ev, ctx),
+    // 1 when the user's STATED picks match this listing directly (not a floor,
+    // not behaviour). rankEvents tiers on it; reasons and the exploration slot read it.
+    interestMatch: ctx.interests.length && statedInterestMatch(ev, ctx) >= DIRECT_MATCH_MIN ? 1 : 0,
+    // 1 when the direct match is the pick's PRIMARY meaning (hiking for Trails,
+    // waterfront for Waterfront): those lead the outdoors matches every outdoor pick shares.
+    interestPrimary: ctx.interests.length && (directMatch(ev, ctx.interests)?.primary || (ctx.preferredCategories ?? []).includes(ev.category ?? "")) ? 1 : 0,
   };
   const score =
     parts.interest * WEIGHTS.interest +
@@ -344,9 +372,80 @@ export function scoreEvent(ev: RankableEvent, ctx: RankingContext): ScoredEvent 
  *
  * Output length always equals input length. This function cannot drop an event.
  */
+/** The exploration card's reason. The client shows it on the card, so the one off-interest pick is labelled as such. */
+export const EXPLORATION_REASON = "Something different — outside your picks";
+
+/**
+ * A direct interest match ranks above every non-match (CAC 2026, 1.1).
+ *
+ * This is an ORDER, not a filter: the comparator sorts matches first and the
+ * full score second, so every event is still returned, distance still decides
+ * the order inside each group, and a user with three matching events sees
+ * them first and then the ordinary soon-and-nearby feed. Without this rule no
+ * weight setting could keep "a direct match always beats the student floor"
+ * true for every household: the student floor alone is worth 0.75 of the
+ * interest term, and distance + timing + quality can add up to more than the
+ * whole term. A user with no stated interests has interestMatch 0 everywhere
+ * and the order is the pure score, as before.
+ */
+const byMatchThenScore = (a: ScoredEvent, b: ScoredEvent) =>
+  (b.parts.interestMatch ?? 0) - (a.parts.interestMatch ?? 0) || (b.parts.interestPrimary ?? 0) - (a.parts.interestPrimary ?? 0) ||
+  b.score - a.score || a.id.localeCompare(b.id);
+
+/** How many later dates of a series ride along on the kept card (the client shows "Repeats — N more dates"). */
+export const MAX_MORE_DATES_V1 = 5;
+
+/** The series a listing belongs to: same source, title and venue (the fields v2's seriesKey uses). */
+function seriesKeyV1(ev: RankableEvent | undefined, fallback: string): string {
+  const title = (ev?.titleKey ?? ev?.title ?? "").trim().toLowerCase();
+  const venue = (ev?.venueKey ?? ev?.locationName ?? "").trim().toLowerCase();
+  // A listing with no title or no venue is nobody's series: it keeps its own place.
+  if (!ev || !title || !venue) return fallback;
+  return `${ev.source ?? ""}|${title}|${venue}`;
+}
+
+/**
+ * Series collapse for v1 (the same contract v2 ships and the client already
+ * renders): the next occurrence of a recurring listing takes the series' best
+ * position and carries the later dates in `moreDates`; the later occurrences
+ * move to the END of the list rather than disappearing, so output length still
+ * equals input length and a card is never a third copy of the one above it.
+ */
+export function collapseSeriesV1(ranked: ScoredEvent[], byId: Map<string, RankableEvent>): ScoredEvent[] {
+  const groups = new Map<string, ScoredEvent[]>();
+  const keyOf = new Map<string, string>();
+  for (const r of ranked) {
+    const key = seriesKeyV1(byId.get(r.id), r.id);
+    keyOf.set(r.id, key);
+    const list = groups.get(key) ?? [];
+    list.push(r);
+    groups.set(key, list);
+  }
+  if ([...groups.values()].every((items) => items.length < 2)) return ranked;
+  const startOf = (id: string) => byId.get(id)?.startMs ?? 0;
+  const keptFor = new Map<string, ScoredEvent>();   // series key → the row that represents it
+  for (const [key, items] of groups) {
+    if (items.length < 2) continue;
+    const soonest = [...items].sort((a, b) => startOf(a.id) - startOf(b.id) || a.id.localeCompare(b.id))[0];
+    const later = items.filter((r) => r !== soonest);
+    keptFor.set(key, { ...soonest, moreDates: later.map((r) => new Date(startOf(r.id)).toISOString()).sort().slice(0, MAX_MORE_DATES_V1) });
+  }
+  const head: ScoredEvent[] = [];
+  const tail: ScoredEvent[] = [];
+  const placedSeries = new Set<string>();
+  for (const r of ranked) {
+    const key = keyOf.get(r.id)!;
+    const kept = keptFor.get(key);
+    if (!kept) { head.push(r); continue; }
+    if (!placedSeries.has(key)) { placedSeries.add(key); head.push(kept); }
+    if (r.id !== kept.id) tail.push(r);
+  }
+  return [...head, ...tail];
+}
+
 export function rankEvents(events: RankableEvent[], ctx: RankingContext): ScoredEvent[] {
   const scored = events.map((e) => scoreEvent(e, ctx));
-  scored.sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
+  scored.sort(byMatchThenScore);
 
   const byId = new Map(events.map((e) => [e.id, e]));
   const usedCategory: Record<string, number> = {};
@@ -358,23 +457,24 @@ export function rankEvents(events: RankableEvent[], ctx: RankingContext): Scored
     const damp = Math.max(0.7, 1 - seen * 0.07);
     return { ...s, score: s.score * damp, parts: { ...s.parts, diversity: damp } };
   });
-  diversified.sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
-  // One quality-led exploration pick in a full ten-card page. The pick must
-  // be outside declared categories; the slot is labelled for instrumentation.
-  if (diversified.length >= 10 && ctx.interests.length > 0) {
-    const wanted = new Set([...ctx.interests.flatMap((i) => INTEREST_TO_CATEGORY[i.toLowerCase()] ?? []),
-      ...(ctx.preferredCategories ?? [])]);
-    const pick = diversified.slice(9).filter((s) => {
+  diversified.sort(byMatchThenScore);
+  const collapsed = collapseSeriesV1(diversified, byId);
+  // One quality-led exploration pick in a full ten-card page: slot 10 is the
+  // ONLY off-interest card by design. The pick must not match the user's
+  // picks; it is labelled in `parts` for instrumentation and carries its own
+  // reason so the card says what it is.
+  if (collapsed.length >= 10 && ctx.interests.length > 0) {
+    const pick = collapsed.slice(9).filter((s) => {
       const ev = byId.get(s.id);
-      return !!ev && !wanted.has(ev.category ?? "") && qualityScore(ev) >= 0.7;
-    }).sort((a, b) => (qualityScore(byId.get(b.id)!) - qualityScore(byId.get(a.id)!)) || a.id.localeCompare(b.id))[0];
+      return !!ev && (s.parts.interestMatch ?? 0) === 0 && qualityScore(ev) >= 0.7;
+    }).sort((a, b) => (qualityScore(byId.get(b.id)!) - qualityScore(byId.get(a.id)!)) || b.score - a.score || a.id.localeCompare(b.id))[0];
     if (pick) {
-      const from = diversified.findIndex((s) => s.id === pick.id);
-      diversified.splice(from, 1);
-      diversified.splice(9, 0, { ...pick, parts: { ...pick.parts, exploration: 1 } });
+      const from = collapsed.findIndex((s) => s.id === pick.id);
+      collapsed.splice(from, 1);
+      collapsed.splice(9, 0, { ...pick, parts: { ...pick.parts, exploration: 1 }, reasons: [EXPLORATION_REASON] });
     }
   }
-  return diversified;
+  return collapsed;
 }
 
 // ---------------------------------------------------------------------------
@@ -425,7 +525,7 @@ export function minorSafe<T extends { adultOnly?: boolean }>(events: T[], viewer
 
 /** One five-minute area snapshot serves many users. It merges soon, quality
  * and category sweeps, rather than taking an arbitrary first 400 records. */
-async function areaCandidates(areaId: string, nowMs: number): Promise<RankableEvent[]> {
+export async function areaCandidates(areaId: string, nowMs: number): Promise<RankableEvent[]> {
   const cacheRef = db.collection("feedCaches").doc(areaId);
   const cached = await cacheRef.get();
   const saved = cached.data();
@@ -457,6 +557,68 @@ async function areaCandidates(areaId: string, nowMs: number): Promise<RankableEv
     readTelemetry: {
       candidateDocuments: FieldValue.increment(queryDocuments),
       candidateRefreshes: FieldValue.increment(1),
+    },
+  }, { merge: true });
+  return events;
+}
+
+/**
+ * Interest-based retrieval (CAC 2026, 1.1 cause 2). The shared area snapshot is
+ * soon-and-nearby: 180 by date, 70 by quality, 15 per category — mostly the
+ * next day or two, so a user who picked Parks could be ranked over a pool that
+ * held seven outdoor events. This adds, per DISTINCT interest set, the next
+ * fourteen days of events whose topic tags or specific categories speak to
+ * those interests. The matcher in interests.ts still decides what counts: the
+ * tags are a superset used only to find candidates, never a match by themselves.
+ *
+ * Reads are bounded and shared: at most INTEREST_POOL_LIMIT + INTEREST_CATEGORY_LIMIT
+ * documents per cache refresh, cached five minutes under a key made of the
+ * sorted topics (so every "Parks" user and every "Trails" user shares one
+ * refresh), and nothing at all for a user with no interests.
+ */
+const INTEREST_POOL_LIMIT = 150;
+const INTEREST_CATEGORY_LIMIT = 100;
+const INTEREST_HORIZON_MS = 14 * 86_400_000;
+
+export async function interestCandidates(areaId: string, interests: readonly unknown[], nowMs: number): Promise<RankableEvent[]> {
+  const terms = interestTerms(interests);
+  const topics = retrievalTopics(terms);
+  const categories = retrievalCategories(terms);
+  if (!topics.length && !categories.length) return [];
+  const key = `${areaId}__topics__${[...topics, ...categories.map((c) => `cat-${c.toLowerCase()}`)].join("_")}`.slice(0, 1400);
+  const cacheRef = db.collection("feedCaches").doc(key);
+  const cached = await cacheRef.get();
+  const saved = cached.data();
+  if (Number(saved?.cachedAtMs) > nowMs - CACHE_MS && Array.isArray(saved?.events)) {
+    return saved.events as RankableEvent[];
+  }
+  const base = db.collection("events").where("areaId", "==", areaId).where("active", "==", true);
+  const from = Timestamp.fromMillis(nowMs - 3_600_000);
+  const to = Timestamp.fromMillis(nowMs + INTEREST_HORIZON_MS);
+  const snapshots = await Promise.all([
+    topics.length
+      ? base.where("topicTags", "array-contains-any", topics).where("date", ">=", from).where("date", "<=", to).orderBy("date").limit(INTEREST_POOL_LIMIT).get()
+      : null,
+    categories.length
+      ? base.where("category", "in", categories.slice(0, 10)).where("date", ">=", from).where("date", "<=", to).orderBy("date").limit(INTEREST_CATEGORY_LIMIT).get()
+      : null,
+  ]);
+  const byId = new Map<string, RankableEvent>();
+  let queryDocuments = 0;
+  for (const snap of snapshots) {
+    if (!snap) continue;
+    queryDocuments += snap.size;
+    for (const doc of snap.docs) {
+      const ev = rankableFromDoc(doc);
+      if (ev && ev.startMs >= nowMs) byId.set(ev.id, ev);
+    }
+  }
+  const events = Array.from(byId.values());
+  await cacheRef.set({ cachedAtMs: nowMs, areaId, topics, categories, events });
+  await db.collection("treasury").doc(utcMonthKey()).set({
+    readTelemetry: {
+      interestCandidateDocuments: FieldValue.increment(queryDocuments),
+      interestCandidateRefreshes: FieldValue.increment(1),
     },
   }, { merge: true });
   return events;
@@ -634,6 +796,11 @@ export async function recommendFor(
   ]);
   const version: RankingVersion = options.version ?? config.version;
   const candidates = new Map(shared.filter((ev) => ev.startMs >= nowMs).map((ev) => [ev.id, ev]));
+  // Interest-based retrieval joins the pool BEFORE ranking, so "For You" ranks
+  // the user's kind of event over the next fortnight, not just whatever is soonest.
+  for (const ev of await interestCandidates(areaId, ctx.interests, nowMs)) {
+    if (ev.startMs >= nowMs && !candidates.has(ev.id)) candidates.set(ev.id, ev);
+  }
   // Social candidates bypass the area and category sweeps; a friend going is
   // useful even when the event is far away or outside stated interests.
   const socialIds = Object.keys(ctx.friendsGoing).slice(0, 60);
@@ -648,9 +815,12 @@ export async function recommendFor(
     .filter((ev) => !excluded.has(ev.category ?? "") && !hidden.has(ev.id));
   if (version === "v2") return rankEventsV2(eligible, ctx, { limit });
   const byId = new Map(eligible.map((e) => [e.id, e]));
-  return rankEvents(eligible, ctx).slice(0, limit).map((s) => ({
-    ...s, version: "v1" as const, reasons: reasonsForV1(byId.get(s.id)!, ctx, s.parts),
-  }));
+  return rankEvents(eligible, ctx).slice(0, limit).map((s) => {
+    // The exploration slot keeps its own label; every other row explains itself from its parts, plus the series note.
+    const more = s.moreDates?.length ?? 0;
+    const reasons = s.reasons ?? [...reasonsForV1(byId.get(s.id)!, ctx, s.parts), ...(more ? [`Repeats — ${more} more date${more > 1 ? "s" : ""}`] : [])].slice(0, 3);
+    return { ...s, version: "v1" as const, reasons };
+  });
 }
 
 export const recommendedEvents = onCall(async (req) => {
