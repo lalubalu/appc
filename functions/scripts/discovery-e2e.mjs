@@ -135,7 +135,10 @@ const recheck = await recheckSources(area, { fetchImpl, throttle, now: NOW });
 console.log(`  rechecked ${recheck.checked} paused ${JSON.stringify(recheck.paused)} errors ${JSON.stringify(recheck.errors)}`);
 ok("the weekly re-check pauses nothing that is active today (no source tightened)", recheck.paused.length === 0 && recheck.errors.length === 0, JSON.stringify(recheck));
 const audit = await auditActiveSources(area.id);
-ok("AUDIT: no active source fails any rule", audit.length === 0, JSON.stringify(audit));
+ok("AUDIT: no active source fails any rule", audit.length === 0, JSON.stringify(await Promise.all(audit.map(async (a) => {
+  const rules = (await db.doc(`sources/${a.id}`).get()).data()?.decision?.rules ?? {};
+  return { ...a, evidence: Object.fromEntries(a.failing.map((r) => [r, String(rules[r]?.evidence ?? "").slice(0, 300)])) };
+}))));
 const sjpl = (await db.doc("sources/san-jose-ca_bibliocommons_sjpl").get()).data();
 ok("a BiblioCommons feed passes (public institution; the platform clause is recorded as evidence)", sjpl?.decision?.verdict === "active" && sjpl.decision.rules.termsAllow.pass === true, JSON.stringify(sjpl?.decision?.rules?.termsAllow));
 const sjsu = (await db.doc("sources/san-jose-ca_localist_events.sjsu.edu").get()).data();
@@ -175,9 +178,12 @@ const sweep = await applyRemovals(area, NOW);
 ok("…its events are hidden on the next cycle", sweep.sources === 1 && sweep.hidden >= 1 && (await db.collection("events").where("areaId", "==", area.id).where("active", "==", true).count().get()).data().count === eventsAfter - sweep.hidden, JSON.stringify(sweep));
 // Make the host due again (as a later OSM run would) and prove discovery refuses it without a single request.
 await enqueueCandidates([{ host: small.host, areaId: area.id, origin: "osm", note: "again", inArea: true }], NOW);
-await db.doc(`sourceCandidates/${area.id}_${small.host}`).set({ status: "pending", nextInspectAt: Timestamp.fromDate(NOW) }, { merge: true });
-const again = await runDiscovery(area, { fetchImpl: async () => { throw new Error("a removed host must not be requested"); }, throttle, now: NOW, maxInspections: 50, origins: [] });
-ok("…and a removed host is never rediscovered", again.skipped.some((s) => s === `${small.host}: removed on request`) && again.inspected === 0 && (await db.doc(`sources/${smallId}`).get()).data().status === "removed", JSON.stringify(again.skipped));
+// Due first: the queue still holds dozens of pending OSM hosts and the run inspects at most 50.
+await db.doc(`sourceCandidates/${area.id}_${small.host}`).set({ status: "pending", nextInspectAt: Timestamp.fromMillis(0) }, { merge: true });
+// Other queued hosts may be attempted in the same run (all offline here); the removed one must get zero requests.
+let removedHostRequests = 0;
+const again = await runDiscovery(area, { fetchImpl: async (input) => { if (String(input instanceof Request ? input.url : input).includes(small.host)) removedHostRequests++; throw new Error("offline: no live requests in this check"); }, throttle, now: NOW, maxInspections: 50, origins: [] });
+ok("…and a removed host is never rediscovered", again.skipped.some((s) => s === `${small.host}: removed on request`) && removedHostRequests === 0 && (await db.doc(`sources/${smallId}`).get()).data().status === "removed", JSON.stringify({ skipped: again.skipped, inspected: again.inspected, budget: again.budget, cand: (await db.doc(`sourceCandidates/${area.id}_${small.host}`).get()).data() }).slice(0, 600));
 const bigHost = "sjpl.bibliocommons.com";
 const r2 = await processRemoval(bigHost, "e2e-requester-2", {}, fetchImpl);
 ok(`a host with > ${LARGE_SOURCE_EVENTS} active events is NOT removed without its published token`, r2.removed === false && r2.requiresToken === true && r2.token === removalTokenFor(bigHost) && (await db.doc("sources/san-jose-ca_bibliocommons_sjpl").get()).data().status === "active", JSON.stringify(r2));
@@ -214,11 +220,13 @@ const good = await fetchSourcesIsolated("ics", area, {}, await loadActiveSources
 await runSource("ics", area, {}, good.records);
 const victimEvents = async () => (await db.collection("events").where("areaId", "==", area.id).where("active", "==", true).where("organizer", "==", "victim.example.org calendar").count().get()).data().count;
 ok("a healthy run records lastEventCount on both synthetic sources and stores their events", good.failures.length === 0 && (await db.doc(`sources/${victimId}`).get()).data().lastEventCount === 1 && await victimEvents() === 1);
+// Other real "ics" sources activated earlier in this run are also read; count only the healthy synthetic feed.
+const healthyRecords = (out) => out.records.filter((r) => /healthy\.example\.org/.test(JSON.stringify([r.organizer, r.sourceUrl, r.url, r.website, r.sourceName]))).length;
 victimDown = true;
 for (let i = 1; i <= FAILURE_STREAK_TO_PAUSE; i++) {
   const out = await fetchSourcesIsolated("ics", area, {}, await loadActiveSources(area.id, "ics"), stub);
   const doc = (await db.doc(`sources/${victimId}`).get()).data();
-  if (i < FAILURE_STREAK_TO_PAUSE) ok(`failure ${i}: the source stays active (streak ${doc.failureStreak}) and the OTHER feed of the type still ingested (${out.records.length} record)`, doc.status === "active" && doc.failureStreak === i && out.records.length === 1 && out.failures.length === 1 && out.failures[0].paused === false);
+  if (i < FAILURE_STREAK_TO_PAUSE) ok(`failure ${i}: the source stays active (streak ${doc.failureStreak}) and the OTHER feed of the type still ingested (${healthyRecords(out)} record)`, doc.status === "active" && doc.failureStreak === i && healthyRecords(out) === 1 && out.failures.length === 1 && out.failures[0].paused === false, JSON.stringify(out.failures));
   else ok(`failure ${i}: the source is PAUSED automatically`, doc.status === "paused" && doc.pausedBy === "self-healing" && out.failures[0].paused === true, JSON.stringify(doc.statusReason));
 }
 ok("…its events are kept (normal staleness removes them later)", await victimEvents() === 1);
@@ -243,7 +251,8 @@ const stored = (await db.doc("sources/e2e_ics").get()).data();
 ok("the first fetch stores the feed's validators on the source", first.records.length === 1 && stored.etag === "\"v1\"" && stored.lastEventCount === 1, JSON.stringify(stored));
 const second = await fetchSourcesIsolated("ics", area, {}, [{ ...icsDoc, etag: stored.etag }], etagFetch);
 const stored2 = (await db.doc("sources/e2e_ics").get()).data();
-ok("a 304 to the conditional request is a successful run: no parsing, no event writes, no failure streak", second.notModified === 1 && second.succeeded === 1 && second.records.length === 0 && stored2.failureStreak === 0 && stored2.lastEventCount === 1);
+ok("a 304 to the conditional request is a successful run: no parsing, no event writes, no failure streak", second.notModified === 1 && second.succeeded === 1 && second.records.length === 0 && stored2.failureStreak === 0 && stored2.lastEventCount === 1,
+  JSON.stringify({ notModified: second.notModified, succeeded: second.succeeded, records: second.records.length, failures: second.failures, streak: stored2.failureStreak, last: stored2.lastEventCount }));
 let nm = false; try { await conditionalFetchFor({ etag: "\"v1\"", lastModified: null }, etagFetch).fetchImpl("https://cond.example.org/events.ics"); } catch (e) { nm = e instanceof NotModified; }
 ok("conditionalFetchFor signals NotModified instead of handing the adapter an empty body", nm);
 

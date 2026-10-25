@@ -91,7 +91,9 @@ struct OnboardingView: View {
                     if currentPage < pages.count {
                         welcomePage(pages[currentPage], index: currentPage)
                     } else if currentPage == pages.count {
-                        interestsPage
+                        // Eight tiles + radius picker are taller than a 6.3" screen; unscrolled, the
+                        // stack overflowed and squeezed the title to one line and Back into the status bar.
+                        ScrollView(.vertical, showsIndicators: false) { interestsPage }
                     }
                 }
                 .transition(.asymmetric(
@@ -110,8 +112,16 @@ struct OnboardingView: View {
                                 .animation(.spring(response: 0.4), value: currentPage)
                         }
                     }
+                    .accessibilityHidden(true)   // the 8 pt capsules themselves stay out of the tree
+                    // One 44 pt element over the row (an overlay, so layout is untouched). Its
+                    // identifier carries which dots are lit, from the same comparison as the fill.
+                    .overlay {
+                        Color.clear.frame(width: 120, height: 44)
+                            .accessibilityElement()
+                            .accessibilityLabel("Page \(currentPage + 1) of \(totalPages)")
+                            .accessibilityIdentifier("onboardingDots-" + (0..<totalPages).filter { $0 == currentPage }.map(String.init).joined(separator: ","))
+                    }
                     .padding(.bottom, Spacing.sm)
-                    .accessibilityHidden(true)   // decorative dots — step info lives on the CTA hint
 
                     ClayButton(buttonTitle,
                                systemImage: currentPage == totalPages - 1 ? "arrow.right" : nil,
@@ -236,6 +246,9 @@ struct OnboardingView: View {
     }
 
     private func advance() {
+        // The pager stays tappable while it animates out to sign-in, so a second Continue
+        // tap can arrive after the last step; never move past it (index > last = blank pager).
+        guard currentPage < totalPages - 1 else { return }
         authService.clearError()
         withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) { currentPage += 1 }
     }

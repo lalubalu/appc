@@ -178,7 +178,9 @@ final class EconomyService {
         let account = Auth.auth().currentUser?.uid
         connect(account)
         if QAData.offline { hasLoaded = true; return }
-        guard let account else { hasLoaded = true; return }
+        // Signed out: keep the state connect(nil) set. Marking it loaded here made the
+        // Rewards screen depend on whether the expiry timer or the auth listener ran first.
+        guard let account else { return }
         let request = UUID(); requestID = request
         isLoading = true
         defer { if requestID == request { isLoading = false; hasLoaded = true } }

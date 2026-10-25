@@ -123,6 +123,22 @@ struct Event: Identifiable, Hashable {
     var moreDates: [Date] = []
 
     var isProgram: Bool { category == .program || opportunitySubtype == "program" }
+    /// A listing that runs the whole local day. BiblioCommons sends these as a midnight
+    /// start labelled "12:00 AM" with a 23:59:59 end; showing that time is false.
+    var isAllDay: Bool {
+        if time.trimmingCharacters(in: .whitespaces).caseInsensitiveCompare("All day") == .orderedSame { return true }
+        let calendar = Calendar.current
+        guard calendar.component(.hour, from: date) == 0, calendar.component(.minute, from: date) == 0,
+              let endDate else { return false }
+        return endDate.timeIntervalSince(date) >= 20 * 3600
+    }
+    /// The time line for display: "All day" for a day-long listing, otherwise the listed time.
+    var displayTime: String { isAllDay ? "All day" : time }
+    /// Date and time for display, e.g. "Oct 24, 2026 at 3:00 PM" or "Oct 24, 2026 · All day".
+    var whenText: String {
+        isAllDay ? "\(date.formatted(date: .abbreviated, time: .omitted)) · All day"
+            : date.formatted(date: .abbreviated, time: .shortened)
+    }
 
     /// The card's one-line summary of the top two server reasons, or nil.
     var whyLine: String? { RankedFeedEvent.topReasonsLine(feedReasons) }

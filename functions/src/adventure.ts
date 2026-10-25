@@ -22,10 +22,12 @@
  *   firebase functions:secrets:set ANTHROPIC_API_KEY
  */
 
+import { modelKey } from "./model-key.js";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret, defineString } from "firebase-functions/params";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { plusActiveFrom } from "./common.js";
+import { planOuting, EngineError, describeCode, type Conditions } from "./adventure-engine.js";
 
 const db = () => getFirestore();
 
@@ -66,6 +68,7 @@ interface Candidate {
   latitude?: number;
   longitude?: number;
   hours?: string;
+  hasPhoto?: boolean;
 }
 
 interface Stop {
@@ -102,6 +105,50 @@ async function fetchWeather(lat: number, lng: number): Promise<{
       precipitation: Number(c.precipitation ?? 0),
       code,
       summary: describeWeather(code),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Open-Meteo conditions for the deterministic planner: now, the next 48 hours (rain
+ * chance, temperature, wind), today's sunrise and sunset, and the local UTC offset. */
+export async function fetchConditions(lat: number, lng: number): Promise<Conditions | null> {
+  const q = new URLSearchParams({
+    latitude: String(lat), longitude: String(lng),
+    current: "temperature_2m,precipitation,weather_code,wind_speed_10m",
+    hourly: "precipitation_probability,temperature_2m,wind_speed_10m,weather_code",
+    daily: "sunrise,sunset", timezone: "auto", forecast_days: "2",
+    temperature_unit: "fahrenheit", wind_speed_unit: "kmh",
+  });
+  try {
+    const res = await fetch(`https://api.open-meteo.com/v1/forecast?${q}`, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) return null;
+    const b = await res.json() as {
+      utc_offset_seconds?: number;
+      current?: { temperature_2m?: number; precipitation?: number; weather_code?: number; wind_speed_10m?: number };
+      hourly?: { time?: string[]; precipitation_probability?: Array<number | null>; temperature_2m?: number[];
+        wind_speed_10m?: number[]; weather_code?: number[] };
+      daily?: { sunrise?: string[]; sunset?: string[] };
+    };
+    const off = Number(b.utc_offset_seconds);
+    const sunrise = b.daily?.sunrise?.[0], sunset = b.daily?.sunset?.[0];
+    if (!Number.isFinite(off) || !b.current || !sunrise || !sunset) return null;
+    // Open-Meteo returns local wall-clock times ("2026-10-23T18:19"); convert with the offset.
+    const local = (t: string) => Date.parse(`${t}:00Z`) - off * 1000;
+    const h = b.hourly ?? {};
+    return {
+      utcOffsetSeconds: off,
+      sunriseMs: local(sunrise),
+      sunsetMs: local(sunset),
+      current: {
+        tempF: Number(b.current.temperature_2m ?? 0), code: Number(b.current.weather_code ?? 0),
+        windKmh: Number(b.current.wind_speed_10m ?? 0), precipMm: Number(b.current.precipitation ?? 0),
+      },
+      hourly: (h.time ?? []).map((t, i) => ({
+        ms: local(t), precipProb: Number(h.precipitation_probability?.[i] ?? 0), tempF: Number(h.temperature_2m?.[i] ?? 0),
+        windKmh: Number(h.wind_speed_10m?.[i] ?? 0), code: Number(h.weather_code?.[i] ?? 0),
+      })),
     };
   } catch {
     return null;
@@ -320,6 +367,7 @@ export const planAdventure = onCall(
         latitude: Number.isFinite(Number(c.latitude)) ? Number(c.latitude) : undefined,
         longitude: Number.isFinite(Number(c.longitude)) ? Number(c.longitude) : undefined,
         hours: typeof c.hours === "string" ? c.hours.slice(0, 120) : undefined,
+        hasPhoto: c.hasPhoto === true,
       }))
       .filter((c: Candidate) => c.id && c.name)
       .slice(0, 40);
@@ -329,51 +377,98 @@ export const planAdventure = onCall(
         "Not enough nearby places to plan an outing yet.");
     }
 
-    const apiKey = ANTHROPIC_API_KEY.value();
-    if (!apiKey) throw new HttpsError("failed-precondition", "The planner isn't configured yet.");
+    // The model path is used only when a key is configured; without one, or if the call
+    // fails, the deterministic engine plans from the same candidates (adventure-engine.ts).
+    const apiKey = modelKey();
+    let plan: { title: string; intro: string; stops: Array<{
+      placeId: string; name: string; category: string | null; latitude: number | null; longitude: number | null;
+      order: number; minutes: number; why: string; }> } | null = null;
+    let weather: { temperatureF: number; summary: string } | null = null;
+    let source: "model" | "engine" = "engine";
 
-    const weather = await fetchWeather(lat, lng);
-    const prompt = buildPrompt({ interests, timeOfDay, durationMinutes, weather, candidates });
-    const plan = await callClaude(prompt, apiKey, ADVENTURE_MODEL.value());
+    if (apiKey) {
+      try {
+        const current = await fetchWeather(lat, lng);
+        const prompt = buildPrompt({ interests, timeOfDay, durationMinutes, weather: current, candidates });
+        const modelPlan = await callClaude(prompt, apiKey, ADVENTURE_MODEL.value());
 
-    // THE GUARANTEE. Drop any stop that isn't a candidate we supplied, and
-    // re-attach OUR name and coordinates rather than the model's — so even a
-    // correct id can't come back with a subtly rewritten name.
-    const byId = new Map(candidates.map((c) => [c.id, c]));
-    const stops = plan.stops
-      .filter((s) => s && typeof s.placeId === "string" && byId.has(s.placeId))
-      .slice(0, 6)
-      .map((s, i) => {
-        const c = byId.get(s.placeId)!;
-        return {
-          placeId: c.id,
-          name: c.name,
-          category: c.category ?? null,
-          latitude: c.latitude ?? null,
-          longitude: c.longitude ?? null,
-          order: i + 1,
-          minutes: Math.min(300, Math.max(5, Math.floor(Number(s.minutes)) || 30)),
-          why: String(s.why ?? "").slice(0, 300),
+        // THE GUARANTEE. Drop any stop that isn't a candidate we supplied, and
+        // re-attach OUR name and coordinates rather than the model's — so even a
+        // correct id can't come back with a subtly rewritten name.
+        const byId = new Map(candidates.map((c) => [c.id, c]));
+        const stops = modelPlan.stops
+          .filter((s) => s && typeof s.placeId === "string" && byId.has(s.placeId))
+          .slice(0, 6)
+          .map((s, i) => {
+            const c = byId.get(s.placeId)!;
+            return {
+              placeId: c.id,
+              name: c.name,
+              category: c.category ?? null,
+              latitude: c.latitude ?? null,
+              longitude: c.longitude ?? null,
+              order: i + 1,
+              minutes: Math.min(300, Math.max(5, Math.floor(Number(s.minutes)) || 30)),
+              why: String(s.why ?? "").slice(0, 300),
+            };
+          });
+
+        const dropped = modelPlan.stops.length - stops.length;
+        if (dropped > 0) {
+          // Worth a log line: a model that keeps inventing places is a prompt
+          // regression, and this is the only place it would ever show up.
+          console.warn(`[planAdventure] dropped ${dropped} hallucinated stop(s)`);
+        }
+        if (stops.length > 0) {
+          plan = { title: modelPlan.title, intro: modelPlan.intro, stops };
+          weather = current ? { temperatureF: Math.round(current.temperatureF), summary: current.summary } : null;
+          source = "model";
+        }
+      } catch (e) {
+        console.warn("[planAdventure] model unavailable; deterministic planner used", e);
+      }
+    }
+
+    if (!plan) {
+      const conditions = await fetchConditions(lat, lng);
+      // Regenerate: each plan this month gets a new seed, and the previous plan's stops
+      // are avoided when an equally good option exists.
+      const last = await db().collection("users").doc(uid).collection("adventurePlans")
+        .orderBy("generatedAtMs", "desc").limit(1).get();
+      const previousStopIds = (last.docs[0]?.data()?.stops ?? [])
+        .map((x: { placeId?: unknown }) => String(x?.placeId ?? "")).filter(Boolean);
+      try {
+        const engine = planOuting({
+          lat, lng, nowMs: Date.now(), durationMinutes, interests, candidates, conditions,
+          seed: usedAfter, previousStopIds,
+        });
+        plan = {
+          title: engine.title,
+          intro: engine.intro,
+          stops: engine.stops.map((s) => ({
+            placeId: s.placeId, name: s.name, category: s.category, latitude: s.latitude, longitude: s.longitude,
+            order: s.order, minutes: s.minutes, why: s.why,
+          })),
         };
-      });
-
-    const dropped = plan.stops.length - stops.length;
-    if (dropped > 0) {
-      // Worth a log line: a model that keeps inventing places is a prompt
-      // regression, and this is the only place it would ever show up.
-      console.warn(`[planAdventure] dropped ${dropped} hallucinated stop(s)`);
+        weather = conditions
+          ? { temperatureF: Math.round(conditions.current.tempF), summary: describeCode(conditions.current.code) }
+          : null;
+      } catch (e) {
+        if (e instanceof EngineError) {
+          throw e.code === "not-enough-places"
+            ? new HttpsError("failed-precondition", "Not enough nearby places to plan an outing yet.")
+            : new HttpsError("out-of-range", e.message);
+        }
+        throw e;
+      }
     }
 
-    if (stops.length === 0) {
-      throw new HttpsError("internal", "Couldn't build a plan from nearby places. Try again.");
-    }
-
-    // Vendor spend, recorded only once the plan actually succeeded — a failed
-    // Claude call bills nothing and must not show up as burn. Best-effort: a
-    // bookkeeping write must never fail a plan the user already paid a quota
-    // slot for. Same /treasury/{yyyy-mm} bucket the cash ledger uses, under a
+    // Vendor spend, recorded only once a model plan actually succeeded — a failed
+    // Claude call (or a deterministic plan) bills nothing and must not show up as burn.
+    // Best-effort: a bookkeeping write must never fail a plan the user already paid a
+    // quota slot for. Same /treasury/{yyyy-mm} bucket the cash ledger uses, under a
     // separate key so gift-card liability and API spend stay distinguishable.
-    try {
+    if (source === "model") try {
       await db().collection("treasury").doc(mk).set({
         plannerCalls: FieldValue.increment(1),
         plannerCostCents: FieldValue.increment(PLAN_VENDOR_COST_CENTS),
@@ -387,10 +482,9 @@ export const planAdventure = onCall(
     const result = {
       title: plan.title,
       intro: plan.intro,
-      stops,
-      weather: weather
-        ? { temperatureF: Math.round(weather.temperatureF), summary: weather.summary }
-        : null,
+      stops: plan.stops,
+      weather,
+      source,
       plansRemaining: isPlus ? null : Math.max(0, FREE_PLANS_PER_MONTH - usedAfter),
       isPlus,
       generatedAtMs: Date.now(),

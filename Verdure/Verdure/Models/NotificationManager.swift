@@ -133,7 +133,7 @@ final class NotificationManager {
 
         let content = UNMutableNotificationContent()
         content.title = "Upcoming: \(event.title)"
-        content.body = "\(event.time) · \(event.locationName)"
+        content.body = "\(event.displayTime) · \(event.locationName)"
         content.sound = .default
 
         let cal = Calendar.current

@@ -16,6 +16,12 @@ struct VerdureApp: App {
 
     init() {
         #if DEBUG
+        // UI tests: start from the app's stored defaults as a reinstall would leave them,
+        // so onboarding can complete for real (a `-hasCompletedOnboarding` launch argument
+        // would pin the value and swallow the write that ends onboarding).
+        if UserDefaults.standard.bool(forKey: "QAFreshInstall"), let bundleID = Bundle.main.bundleIdentifier {
+            UserDefaults.standard.removePersistentDomain(forName: bundleID)
+        }
         unitTestHost = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil ||
             NSClassFromString("XCTestCase") != nil
         #else
@@ -126,6 +132,10 @@ struct RootView: View {
                             socialService.clearLocal()
                         }
                     }
+                    .onChange(of: authService.signupProfileSavedAt) { _, saved in
+                        guard saved != nil else { return }
+                        Task { await eventsService.refresh(around: locationManager.userCoordinate) }
+                    }
                     .onChange(of: authService.currentUser?.uid) { _, uid in
                         if authService.isAuthStateResolved { offlinePacks.connect(uid); economyService.connect(uid); LivePartnerAlerts.shared.connect(uid); refreshOfflinePacks() }
                     }
@@ -179,11 +189,9 @@ struct RootView: View {
             gameState.connectCloud(firestore: firestoreService, functions: functionsService, userID: user.uid)
             Task { await moderationService.refreshBlocks() }
             Task { await socialService.refreshAll() }
-            Task {
-                let center = locationManager.userCoordinate
-                await placesService.fetchNearbyPlaces(around: center)
-                await eventsService.fetchNearbyEvents(around: center)
-            }
+            InitialLoad.start(around: locationManager.userCoordinate,
+                              places: { await placesService.fetchNearbyPlaces(around: $0) },
+                              events: { await eventsService.fetchNearbyEvents(around: $0) })
         }
     }
 

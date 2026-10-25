@@ -79,7 +79,7 @@ ok("interest_match also honours v1's category map ('tech' covers Workshop) so no
 console.log("\n── every reason corresponds to a real component value (W5) ──");
 {
   const check = (r) => r.reasons.every((text) => {
-    if (text.startsWith("Matches your interest")) return r.components.interest === 1;
+    if (text.startsWith("Matches your interest") || text.startsWith("Because you like")) return r.components.interest === 1;
     if (text.startsWith("Close by") || text.startsWith("Near your selected area")) return r.components.distance > 0.5;
     if (text.startsWith("Online")) return r.components.distance === 0.7;
     if (text === "Happening today" || text === "This weekend") return r.components.soonness > 0;

@@ -649,7 +649,7 @@ private struct PlanTabView: View {
                     Text(String(format: "STOP %02d", number))
                         .font(VType.num(10, .bold)).foregroundStyle(Palette.spruce.base)
                     Text(event.title).font(VType.display(20, .semibold)).foregroundStyle(Palette.ink)
-                    Text("\(event.date.formatted(date: .abbreviated, time: .shortened)) · \(event.locationName)")
+                    Text("\(event.whenText) · \(event.locationName)")
                         .font(VType.body(12)).foregroundStyle(Palette.inkSoft)
                     Text(event.priceLabel ?? "Price not listed")
                         .font(VType.body(12, .semibold)).foregroundStyle(Palette.spruce.base)
@@ -835,7 +835,7 @@ private struct GroupPlansSheet: View {
                 if let event = eventsService.events.first(where: { $0.id == id }) {
                     VStack(alignment: .leading, spacing: 10) {
                         Text(event.title).font(VType.display(19, .semibold)).foregroundStyle(Palette.ink)
-                        Text("\(event.date.formatted(date: .abbreviated, time: .shortened)) · \(event.locationName)")
+                        Text("\(event.whenText) · \(event.locationName)")
                             .font(VType.body(12)).foregroundStyle(Palette.inkSoft)
                         HStack {
                             Button(plan.myVotes.contains(id) ? "Shortlisted · \(plan.votes[id] ?? 0)" : "Shortlist · \(plan.votes[id] ?? 0)") {

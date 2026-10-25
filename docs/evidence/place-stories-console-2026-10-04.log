@@ -1,9 +1,0 @@
-[agent-browser] launched browser
-PASS authenticated staff form exposes ownership confirmation and reason
-PASS browser validation refuses missing ownership confirmation
-PASS browser saves canonical approved organizer ownership
-PASS verification record is visible to staff
-PASS browser revocation immediately removes ownership availability
-PASS both browser mutations retain staff before/after audits
-PASS existing moderation filters offer Place story
-7 actual staff story ownership browser checks passed

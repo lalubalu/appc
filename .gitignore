@@ -16,8 +16,13 @@ build/
 # XcodeGen
 # Keep project.yml, ignore generated xcodeproj internals managed by user
 
-# Secrets — API keys injected via xcconfig
-# NOTE: Verdure/Secrets.xcconfig IS committed (private repo) so partners can build.
+# Secrets — API keys injected via xcconfig. Never committed: copy
+# Verdure/Secrets.xcconfig.template to Verdure/Secrets.xcconfig and fill it in.
+Verdure/Secrets.xcconfig
+Verdure/Verdure/GoogleService-Info.plist
+functions/.env
+functions/.secret.local
+.secret.local
 Connectify/Secrets.xcconfig
 Connectify/Connectify/GoogleService-Info.plist
 Connectify/Connectify/Info.plist

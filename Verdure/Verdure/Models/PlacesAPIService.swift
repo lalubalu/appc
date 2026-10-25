@@ -14,6 +14,9 @@ final class PlacesAPIService {
     var collectiblePlaces: [CollectiblePlace] = []
     var isLoading = false
     var lastError: String? = nil
+    /// When the OpenStreetMap data on screen was fetched (live, area cache or bundled
+    /// snapshot); shown next to the "© OpenStreetMap contributors" credit.
+    private(set) var osmDataDate: Date?
 
     // MARK: - Private
 
@@ -23,11 +26,29 @@ final class PlacesAPIService {
     private let cacheKey = "cachedPlacesJSON"
     private let cacheCenterKey = "cachedPlacesCenter"
     private let cacheTimestampKey = "cachedPlacesTimestamp"
+    private let cacheOSMDateKey = "cachedPlacesOSMDataDate"
     private let cacheTTL: TimeInterval = 3600 // 1 hour
+    private let overpass: OverpassClient
+    private let areaCache: OSMAreaCache
+    private let snapshot: OSMDataSet?
+    private let defaults: UserDefaults
+    private let keyedProviders: Bool
+    /// After every mirror fails, wait this long before asking them again.
+    private let liveRetryInterval: TimeInterval = 300
+    private var lastLiveFailure: Date?
 
     // MARK: - Init
 
-    init() {
+    /// Tests inject the Overpass transport, cache, snapshot and defaults, and turn the
+    /// key-based providers (Recreation.gov, NPS) off so nothing reaches the network.
+    init(overpass: OverpassClient = OverpassClient(), areaCache: OSMAreaCache = .shared,
+         snapshot: OSMDataSet? = OSMSnapshot.bundled, defaults: UserDefaults = .standard,
+         keyedProviders: Bool = true) {
+        self.overpass = overpass
+        self.areaCache = areaCache
+        self.snapshot = snapshot
+        self.defaults = defaults
+        self.keyedProviders = keyedProviders
         loadCachedPlaces()
         if places.isEmpty {
             useSampleFallback()
@@ -36,8 +57,9 @@ final class PlacesAPIService {
 
     // MARK: - Public API
 
-    /// Fetch nearby places from Overpass API around a coordinate.
-    /// Falls back to SampleData on failure.
+    /// Fetch nearby places from OpenStreetMap around a coordinate. While the mirrors are
+    /// asked, the last good answer for this area (or the bundled snapshot) is shown; a live
+    /// answer replaces it. With no mirror answering, the cached/snapshot data stays.
     func fetchNearbyPlaces(around center: CLLocationCoordinate2D) async {
         if QAData.offline { return }   // QA: cached/sample data only
         // Skip if we already fetched for a nearby coordinate recently
@@ -48,22 +70,48 @@ final class PlacesAPIService {
 
         isLoading = true
         lastError = nil
+        if places.isEmpty, let stored = storedOSM(around: center) {
+            show(mapToPlaces(stored.elements, center: center), dataDate: stored.date, center: center)
+        }
 
         // Unstructured task so a cancelled SwiftUI .task can't kill the fetch.
         await Task { @MainActor in
-            // Primary source: OpenStreetMap / Overpass (free, no key, global).
+            // Primary source: OpenStreetMap (free, no key, global).
             var merged: [Place] = []
-            do {
-                let osmElements = try await self.queryOverpass(center: center)
-                merged = self.mapToPlaces(osmElements, center: center)
-            } catch {
-                self.lastError = error.localizedDescription
+            var dataDate: Date?
+            var live = false
+            if let failed = self.lastLiveFailure, Date().timeIntervalSince(failed) < self.liveRetryInterval {
+                // Mirrors failed moments ago; keep the stored data rather than wait on them again.
+            } else {
+                do {
+                    let elements = try await self.overpass.fetch(query: self.overpassQuery(center: center))
+                    let set = OSMDataSet(fetchedAt: Date(), center: OSMCenter(lat: center.latitude, lon: center.longitude),
+                                         radiusMeters: Double(self.radiusMeters), elements: elements)
+                    self.areaCache.save(set)
+                    merged = self.mapToPlaces(set.elements(near: center, within: Double(self.radiusMeters)), center: center)
+                    dataDate = set.fetchedAt
+                    live = true
+                    self.lastLiveFailure = nil
+                } catch {
+                    self.lastLiveFailure = Date()
+                }
+            }
+            if !live {
+                if let stored = self.storedOSM(around: center) {
+                    merged = self.mapToPlaces(stored.elements, center: center)
+                    dataDate = stored.date
+                } else {
+                    self.lastError = PlacesAPIError.serverError.localizedDescription
+                }
             }
 
             // Additional free sources — no-ops unless their keys are configured.
-            async let recreation = self.fetchRecreationFacilities(center: center)
-            async let nationalParks = self.fetchNPSParks(center: center)
-            let extra = await recreation + (await nationalParks)
+            var extra: [Place] = []
+            if self.keyedProviders {
+                async let recreation = self.fetchRecreationFacilities(center: center)
+                async let nationalParks = self.fetchNPSParks(center: center)
+                extra = await recreation + (await nationalParks)
+            }
 
             var seen = Set(merged.map { $0.name.lowercased() })
             for place in extra where !seen.contains(place.name.lowercased()) {
@@ -75,13 +123,34 @@ final class PlacesAPIService {
             if merged.isEmpty {
                 if self.places.isEmpty { self.useSampleFallback() }
             } else {
-                self.places = Array(merged.prefix(self.maxPlaces + 15))
-                self.collectiblePlaces = Self.buildCollectibles(from: self.places, center: center)
-                self.cachedCenter = center
-                self.persistCache(center: center)
+                self.show(merged, dataDate: dataDate, center: center)
+                // Only a live answer starts the one-hour "fresh" window; stored data is retried.
+                if live {
+                    self.cachedCenter = center
+                    self.persistCache(center: center)
+                }
             }
             self.isLoading = false
         }.value
+    }
+
+    private func show(_ list: [Place], dataDate: Date?, center: CLLocationCoordinate2D) {
+        places = Array(list.prefix(maxPlaces + 15))
+        collectiblePlaces = Self.buildCollectibles(from: places, center: center)
+        osmDataDate = places.contains { $0.id.hasPrefix("osm-") } ? dataDate : nil
+    }
+
+    /// The last good answer for this area, else the bundled snapshot when it covers the search.
+    private func storedOSM(around center: CLLocationCoordinate2D) -> (elements: [OSMElement], date: Date)? {
+        let radius = Double(radiusMeters)
+        if let cached = areaCache.load(center) {
+            let near = cached.elements(near: center, within: radius)
+            if !near.isEmpty { return (near, cached.fetchedAt) }
+        }
+        if let snapshot, snapshot.covers(center, searchRadius: radius) {
+            return (snapshot.elements(near: center, within: radius), snapshot.fetchedAt)
+        }
+        return nil
     }
 
     /// Find the CollectiblePlace wrapper for a given Place
@@ -91,13 +160,14 @@ final class PlacesAPIService {
 
     // MARK: - Overpass Query
 
-    private func queryOverpass(center: CLLocationCoordinate2D) async throws -> [OSMElement] {
+    /// The app's feature query: parks, trails, gardens, playgrounds, waterfront, sports,
+    /// scenic and community spaces within the search radius.
+    func overpassQuery(center: CLLocationCoordinate2D) -> String {
         let lat = center.latitude
         let lon = center.longitude
         let r = radiusMeters
 
-        // Query parks, trails, gardens, playgrounds, waterfront, sports, scenic, community spaces
-        let query = """
+        return """
         [out:json][timeout:15];
         (
           node["leisure"="park"](around:\(r),\(lat),\(lon));
@@ -118,29 +188,6 @@ final class PlacesAPIService {
         );
         out center body qt \(maxPlaces * 2);
         """
-
-        let urlString = "https://overpass-api.de/api/interpreter"
-        guard let url = URL(string: urlString) else {
-            throw PlacesAPIError.invalidURL
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.httpBody = "data=\(query)".data(using: .utf8)
-        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        // Overpass answers 406 to generic agents (seen 2026-10-22); identify the app.
-        request.setValue("Verdure/1.0 (+https://verdure-app.com)", forHTTPHeaderField: "User-Agent")
-        request.timeoutInterval = 20
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw PlacesAPIError.serverError
-        }
-
-        let decoded = try JSONDecoder().decode(OverpassResponse.self, from: data)
-        return decoded.elements
     }
 
     // MARK: - Mapping OSM -> Place
@@ -417,16 +464,18 @@ final class PlacesAPIService {
     private func persistCache(center: CLLocationCoordinate2D) {
         let encodable = places.map { CachedPlace(from: $0) }
         if let data = try? JSONEncoder().encode(encodable) {
-            UserDefaults.standard.set(data, forKey: cacheKey)
+            defaults.set(data, forKey: cacheKey)
         }
-        UserDefaults.standard.set([center.latitude, center.longitude], forKey: cacheCenterKey)
-        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: cacheTimestampKey)
+        defaults.set([center.latitude, center.longitude], forKey: cacheCenterKey)
+        defaults.set(Date().timeIntervalSince1970, forKey: cacheTimestampKey)
+        if let osmDataDate { defaults.set(osmDataDate.timeIntervalSince1970, forKey: cacheOSMDateKey) }
+        else { defaults.removeObject(forKey: cacheOSMDateKey) }
     }
 
     private func loadCachedPlaces() {
-        guard let data = UserDefaults.standard.data(forKey: cacheKey),
+        guard let data = defaults.data(forKey: cacheKey),
               let cached = try? JSONDecoder().decode([CachedPlace].self, from: data),
-              let centerArr = UserDefaults.standard.array(forKey: cacheCenterKey) as? [Double],
+              let centerArr = defaults.array(forKey: cacheCenterKey) as? [Double],
               centerArr.count == 2,
               isCacheValid() else { return }
 
@@ -434,10 +483,12 @@ final class PlacesAPIService {
         cachedCenter = center
         places = cached.map { $0.toPlace() }
         collectiblePlaces = Self.buildCollectibles(from: places, center: center)
+        let osmDate = defaults.double(forKey: cacheOSMDateKey)
+        osmDataDate = osmDate > 0 && places.contains { $0.id.hasPrefix("osm-") } ? Date(timeIntervalSince1970: osmDate) : nil
     }
 
     private func isCacheValid() -> Bool {
-        let ts = UserDefaults.standard.double(forKey: cacheTimestampKey)
+        let ts = defaults.double(forKey: cacheTimestampKey)
         guard ts > 0 else { return false }
         return Date().timeIntervalSince1970 - ts < cacheTTL
     }
@@ -468,26 +519,6 @@ final class PlacesAPIService {
         let c = 2 * atan2(sqrt(a), sqrt(1-a))
         return R * c
     }
-}
-
-// MARK: - Overpass API Models
-
-private struct OverpassResponse: Decodable {
-    let elements: [OSMElement]
-}
-
-private struct OSMElement: Decodable {
-    let type: String
-    let id: Int
-    let lat: Double?
-    let lon: Double?
-    let center: OSMCenter?
-    let tags: [String: String]?
-}
-
-private struct OSMCenter: Decodable {
-    let lat: Double
-    let lon: Double
 }
 
 // MARK: - Cache Model

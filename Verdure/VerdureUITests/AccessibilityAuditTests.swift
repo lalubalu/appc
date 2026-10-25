@@ -38,7 +38,9 @@ final class AccessibilityAuditTests: XCTestCase {
 
     func testAuditPaywall() throws {
         let app = QA.launch(tab: "profile")
-        QA.waitFor(app.staticTexts["Verdure+"].firstMatch, "Verdure+ settings row").tap()
+        let plus = QA.waitFor(app.staticTexts["Verdure+"].firstMatch, "Verdure+ settings row")
+        QA.reveal(plus, in: app, maxSwipes: 4)   // the row sits under the floating tab bar
+        plus.tap()
         QA.waitFor(app.buttons["Start Verdure Plus"], "paywall CTA")
         try QA.audit(app, screen: "paywall")
     }
@@ -53,6 +55,10 @@ final class AccessibilityAuditTests: XCTestCase {
         addTeardownBlock { app.terminate() }
         let entry = QA.waitFor(app.buttons["Plan my adventure"].firstMatch,
                                "adventure planner entry tile")
+        // The tile sits below the fold when few sample places are in range (simulator
+        // location); bring it above the floating tab bar so the tap reaches it.
+        for _ in 0..<6 where !(entry.isHittable && entry.frame.maxY < app.frame.height - 140) { app.swipeUp() }
+        QA.settle(entry)
         entry.tap()
         QA.waitFor(app.staticTexts["How long have you got?"], "planner sheet")
         try QA.audit(app, screen: "adventure-planner")
@@ -116,7 +122,7 @@ final class AccessibilityAuditTests: XCTestCase {
         QA.waitFor(app.staticTexts["Events"], "events anchor")
         let card = forYouCard(app, titled: "Spring Community Hackathon")
         QA.waitFor(card, "For You card with reasons", timeout: 20)
-        for _ in 0..<4 where !card.isHittable { app.swipeUp() }
+        QA.reveal(card, in: app, maxSwipes: 4)
         // Tap the upper part of the card, clear of the in-card series button.
         card.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).tap()
 
@@ -126,7 +132,7 @@ final class AccessibilityAuditTests: XCTestCase {
         XCTAssertTrue(why.label.contains("Close by (0.8 mi)"), why.label)
         XCTAssertTrue(why.label.contains("Repeats — 2 more dates"), why.label)
         let hide = app.buttons["hideEvent"]
-        for _ in 0..<4 where !hide.isHittable { app.swipeUp() }
+        QA.reveal(hide, in: app, maxSwipes: 4)
         QA.waitFor(hide, "Hide this event control")
         XCTAssertTrue(app.buttons["feedbackLess"].exists, "Show less like this control")
         XCTAssertTrue(app.buttons["feedbackMore"].exists)
@@ -139,7 +145,7 @@ final class AccessibilityAuditTests: XCTestCase {
         app.buttons["seriesDatesDone"].tap()
 
         // Hide removes the card from the feed immediately (offline: local only).
-        for _ in 0..<4 where !hide.isHittable { app.swipeUp() }
+        QA.reveal(hide, in: app, maxSwipes: 4)
         hide.tap()
         let stillThere = forYouCard(app, titled: "Spring Community Hackathon")
         XCTAssertFalse(stillThere.waitForExistence(timeout: 3), "hidden event must leave the For You feed at once")

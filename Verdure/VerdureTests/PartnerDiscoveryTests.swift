@@ -107,12 +107,20 @@ import CoreLocation
                     ["update": ["name": "\(root)/\(status)/\(id)", "fields": fields(["available": false, "revision": revision])]]
                 ]])
             }
+            // A withdrawal written while the listeners are still attaching can be missed by the
+            // emulator (initial "no document" snapshot, change never delivered); the scenario
+            // under test is a withdrawal of a displayed offer the app is already watching.
+            try await until("watching for withdrawals") { service.isWatchingForWithdrawals }
             try await deactivate("partnerPerks", id: perkID, revision: "fixture-deactivated")
             try await until("perk withdrawal") { service.offers.isEmpty && service.nearYou == nil }
             try await set("partnerPerks/\(perkID)", perk)
             try await set("perkStatus/\(perkID)", ["available": true, "revision": original.perkRevision!, "expiresAtMs": original.expiresAt!.timeIntervalSince1970 * 1000])
             service.beginSession(); await service.refresh(around: origin)
             XCTAssertEqual(service.nearYou?.id, perkID)
+            // A withdrawal written while the listeners are still attaching can be missed by the
+            // emulator (initial "no document" snapshot, change never delivered); the scenario
+            // under test is a withdrawal of a displayed offer the app is already watching.
+            try await until("watching for withdrawals") { service.isWatchingForWithdrawals }
             try await deactivate("partners", id: partnerID, revision: "fixture-partner-deactivated")
             try await until("partner withdrawal") { service.offers.isEmpty && service.nearYou == nil }
             try await set("partners/\(partnerID)", partner)

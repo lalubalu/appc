@@ -1,4 +1,5 @@
 import XCTest
+import CoreLocation
 
 @MainActor final class PartnerSurfaceTests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
@@ -15,19 +16,22 @@ import XCTest
         return result
     }
 
+    /// The fixture partners sit here (the old CLI-set simulator location).
+    private let partnerOrigin = CLLocation(latitude: 33.2, longitude: -114.1)
+
     private func signInToFixture() -> XCUIApplication {
-        let app = QA.launch(tab: "profile", extraArguments: ["-QAOfflineData", "NO", "-QAUseFirestoreEmulator", "YES", "-QAResetAuth", "YES"])
+        let app = QA.launch(tab: "profile", extraArguments: ["-QAOfflineData", "NO", "-QAUseFirestoreEmulator", "YES", "-QAResetAuth", "YES"], location: partnerOrigin)
         let signIn = app.buttons["profileSignIn"]
-        for _ in 0..<20 where !signIn.isHittable { app.swipeUp() }
+        QA.reveal(signIn, in: app, maxSwipes: 20)
         QA.waitFor(signIn, "guest sign-in").tap()
         let email = QA.waitFor(app.textFields["Email address"], "email")
-        email.tap(); email.typeText("qa-rewards-native-staff@example.test")
+        QA.type("qa-rewards-native-staff@example.test", into: email)
         let password = app.secureTextFields["Password"]
-        password.tap(); password.typeText("local-rewards-native-only")
+        QA.type("local-rewards-native-only\n", into: password)   // Return closes the keyboard that covers submit
         let submit = app.buttons["authSubmit"]
-        for _ in 0..<4 where !submit.isHittable { app.swipeUp() }
+        QA.reveal(submit, in: app, maxSwipes: 4)
         QA.waitFor(submit, "sign-in submit").tap()
-        QA.waitFor(app.buttons["openOfflinePacks"], "signed-in profile", timeout: 30)
+        QA.waitForSignedIn(app)
         return app
     }
 
@@ -52,7 +56,7 @@ import XCTest
             "codes": ["LOCAL-MAP-UI-\(UUID().uuidString)"], "reason": "Local map UI fixture"])
         var app = signInToFixture()
         app.terminate()
-        app = QA.launch(tab: "map", extraArguments: ["-QAOfflineData", "NO", "-QAUseFirestoreEmulator", "YES"])
+        app = QA.launch(tab: "map", extraArguments: ["-QAOfflineData", "NO", "-QAUseFirestoreEmulator", "YES"], location: partnerOrigin)
         let pin = app.buttons["partner-pin:\(perkID)"]
         QA.waitFor(pin, "real callable-backed partner pin", timeout: 40)
         XCTAssertTrue(app.frame.contains(pin.frame), "The actual map annotation must be on screen.")
@@ -89,7 +93,11 @@ import XCTest
         QA.waitFor(app.staticTexts["AVAILABLE POINTS"], "Rewards")
         let nearby = QA.waitFor(app.buttons["Nearby"], "Nearby rewards sort")
         nearby.tap()
-        XCTAssertTrue(app.staticTexts["Location unavailable · using the default order"].waitForExistence(timeout: 5))
+        // Without a location fix the store says so and keeps the default order; with one
+        // (QA.launch answers the permission prompt) Nearby itself is the active order.
+        if !app.staticTexts["Location unavailable · using the default order"].waitForExistence(timeout: 5) {
+            XCTAssertTrue(nearby.isSelected, "Nearby order should be active when location is available")
+        }
         QA.waitFor(app.buttons["Default"], "default rewards order").tap()
     }
 
@@ -117,7 +125,7 @@ import XCTest
             "codes": ["LOCAL-UI-\(UUID().uuidString)"], "reason": "Local UI fixture"])
         var app = signInToFixture()
         app.terminate()
-        app = QA.launch(tab: "rewards", extraArguments: ["-QAOfflineData", "NO", "-QAUseFirestoreEmulator", "YES"])
+        app = QA.launch(tab: "rewards", extraArguments: ["-QAOfflineData", "NO", "-QAUseFirestoreEmulator", "YES"], location: partnerOrigin)
         let redeem = app.buttons["redeem-perk:\(perkID)"]
         QA.waitFor(redeem, "actual stocked reward", timeout: 30)
         for _ in 0..<8 where redeem.frame.midY >= app.frame.height - 160 { app.swipeUp() }

@@ -35,6 +35,7 @@ import { Timestamp, FieldValue } from "firebase-admin/firestore";
 import { db, requireUid, enforceRateLimit, safeText, blockedSetFor, utcMonthKey, plusActiveFrom } from "./common.js";
 import type { InterestProfile } from "./profiles.js";
 import { friendIds } from "./friendships.js";
+import { TOPIC_TO_INTEREST } from "./ingest/annotate.js";
 import { createFeedSession } from "./feedTelemetry.js";
 import { rankEventsV2, reasonsForV1, constraintsFromFilters, applyFeedback, coerceRankingConfig, EXCLUDING_ACTIONS, ACTION_WEIGHTS,
   type V2Constraints, type AffinityState, type RankingVersion, type RankingConfig, type ClientFilterInput } from "./ranking-v2.js";
@@ -61,7 +62,10 @@ export const WEIGHT_SUM = Object.values(WEIGHTS).reduce((a, b) => a + b, 0);
 
 /** The app's interest labels map onto ingest categories. */
 export const INTEREST_TO_CATEGORY: Record<string, string[]> = {
-  outdoors: ["Cleanup", "Sports", "Market", "Festival"],
+  // Market/Festival made concerts and book sales "match Parks" once the app's labels reached
+  // this map (nothing sent "outdoors" before), and Sports made indoor yoga match it. Hikes ingest
+  // as Sports, so they match through INTEREST_SYNONYMS (hike, trail, …) instead.
+  outdoors: ["Cleanup"],
   fitness: ["Sports", "Cleanup"],
   volunteering: ["Volunteer", "Cleanup"],
   arts: ["Workshop", "Festival", "Market"],
@@ -76,7 +80,11 @@ export const INTEREST_TO_CATEGORY: Record<string, string[]> = {
 /** Deterministic semantic aliases for common interest language. Kept small
  * enough to audit against real listings before considering embeddings. */
 export const INTEREST_SYNONYMS: Record<string, string[]> = {
-  outdoors: ["trail", "nature walk", "birding", "wildflower", "hike", "hiking", "park", "garden"],
+  // Nouns in a place context only: bare "park" matched "please park strollers" and "park at the
+  // 4th Street garage"; bare "garden" matched home-gardening talks indoors.
+  outdoors: ["trail", "nature walk", "birding", "bird walk", "wildflower", "hike", "hiking", "the park", "in the park",
+    "parks", "park ranger", "park cleanup", "state park", "county park", "regional park", "open space", "preserve",
+    "creek", "community garden", "botanical garden", "garden tour", "garden walk", "garden workday"],
   hiking: ["trail", "nature walk", "birding", "wildflower", "ramble", "guided walk", "hike"],
   fitness: ["run", "running", "yoga", "bike", "cycling", "dance fitness", "walk"],
   volunteering: ["volunteer", "service day", "stewardship", "restore", "restoration", "cleanup", "tree planting"],
@@ -88,6 +96,53 @@ export const INTEREST_SYNONYMS: Record<string, string[]> = {
   community: ["community", "neighborhood", "meetup", "social", "volunteer"],
   family: ["family", "kids", "children", "storytime", "all ages"],
 };
+
+/**
+ * The words interest matching reads. A library branch named for its neighbourhood
+ * ("Rose Garden branch", "Educational Park branch") is a venue, not a topic: left in,
+ * an English class there matched "park"/"garden" and was labelled "Because you like Parks".
+ */
+const LIBRARY_SOURCES = new Set(["bibliocommons", "libcal"]);
+const plain = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+export function interestText(ev: Pick<RankableEvent, "title" | "description" | "tags"> &
+  Partial<Pick<RankableEvent, "source" | "locationName">>): string {
+  let text = ` ${plain([ev.title, ev.description, ...(ev.tags ?? [])].filter(Boolean).join(" "))} `;
+  // A library listing's branch is its venue, not its topic: "OneinMath at Educational Park",
+  // "Mitchell Park Library", "Rose Garden" were matching Parks/Gardens.
+  if (ev.source && LIBRARY_SOURCES.has(ev.source) && ev.locationName) {
+    const branch = plain(ev.locationName.split("·")[0]).replace(/\b(branch|library|biblioteca)\b/g, " ").replace(/\s+/g, " ").trim();
+    if (branch) text = text.split(` ${branch} `).join(" ");
+  }
+  // SJPL listings are bilingual, so the Spanish form ("biblioteca Rose Garden") goes too.
+  return text.replace(/ (?:[a-z]+ (?:park|garden) branch|biblioteca [a-z]+ (?:park|garden))(?= )/g, " ");
+}
+
+/**
+ * The app saves onboarding picks as its place-category labels ("Parks", "Trails", …),
+ * not the interest words above. Without this map only "Community" matched anything,
+ * so stated interests barely moved the feed. Unknown labels pass through lowercased.
+ */
+export const APP_INTEREST_LABELS: Record<string, string[]> = {
+  parks: ["outdoors"], trails: ["outdoors", "hiking"], gardens: ["outdoors"], scenic: ["outdoors"],
+  waterfront: ["outdoors"], playgrounds: ["family"], sports: ["fitness"], community: ["community"],
+};
+
+/** App labels → ranking interests, plus which picked label produced each one (for reasons). */
+export function normalizeInterests(raw: readonly string[]): { interests: string[]; labels: Record<string, string[]> } {
+  const interests: string[] = [];
+  const labels: Record<string, string[]> = {};
+  for (const label of raw) {
+    const key = String(label).trim().toLowerCase();
+    if (!key) continue;
+    const mapped = APP_INTEREST_LABELS[key];
+    for (const interest of mapped ?? [key]) {
+      if (!interests.includes(interest)) interests.push(interest);
+      if (mapped) (labels[interest] ??= []).includes(label) || labels[interest].push(String(label).trim());
+    }
+  }
+  return { interests, labels };
+}
 
 export interface RankableEvent {
   id: string;
@@ -120,7 +175,10 @@ export interface RankableEvent {
 }
 
 export interface RankingContext {
+  /** Normalized ranking interests (see normalizeInterests). */
   interests: string[];
+  /** Ranking interest → the app labels the user picked that produced it ("hiking" → ["Trails"]). */
+  interestLabels?: Record<string, string[]>;
   studentStatus?: boolean;
   school?: string;
   householdYoungestAge?: number;
@@ -200,7 +258,7 @@ export function interestScore(ev: RankableEvent, ctx: RankingContext): number {
   if (hasStated) {
     const wanted = new Set([...ctx.interests.flatMap((i) => INTEREST_TO_CATEGORY[i.toLowerCase()] ?? []),
       ...(ctx.preferredCategories ?? [])]);
-    const text = ` ${[ev.title, ev.description, ...(ev.tags ?? [])].filter(Boolean).join(" ").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()} `;
+    const text = interestText(ev);
     const semantic = ctx.interests.some((interest) =>
       (INTEREST_SYNONYMS[interest.toLowerCase()] ?? []).some((term) => text.includes(` ${term} `)));
     stated = wanted.has(cat) ? 1 : semantic ? 0.9 : 0;
@@ -211,9 +269,12 @@ export function interestScore(ev: RankableEvent, ctx: RankingContext): number {
     behavioural = Math.min(1, (ctx.attendedCategories[cat] ?? 0) / Math.max(1, attendedTotal / 2));
   }
 
+  // A stated interest the event matches must outrank the student opportunity floor, so
+  // once interests are stated the floor only lifts opportunities that match one of them.
+  const student = hasStated && stated === 0 ? 0 : studentFloor;
   if (!hasStated) return Math.max(behavioural, studentFloor, familyFloor, accessibilityFloor);
-  if (attendedTotal === 0) return Math.max(stated, studentFloor, familyFloor, accessibilityFloor);
-  return Math.max(0.4 * stated + 0.6 * behavioural, studentFloor, familyFloor, accessibilityFloor);
+  if (attendedTotal === 0) return Math.max(stated, student, familyFloor, accessibilityFloor);
+  return Math.max(0.4 * stated + 0.6 * behavioural, student, familyFloor, accessibilityFloor);
 }
 
 /**
@@ -418,6 +479,55 @@ export function rankableFromDoc(d: FirebaseFirestore.DocumentSnapshot): Rankable
   };
 }
 
+/** How far ahead, and how far away, the interest pool looks (the onboarding default radius). */
+export const INTEREST_WINDOW_DAYS = 14;
+export const DEFAULT_RETRIEVAL_RADIUS_MILES = 15;
+const INTEREST_POOL_LIMIT = 120;
+
+/** The topic tags annotate.ts assigns, for a set of ranking interests (inverse of TOPIC_TO_INTEREST;
+ * "hiking" rides on the outdoors tag). Firestore's array-contains-any takes at most 10. */
+export function topicsForInterests(interests: readonly string[]): string[] {
+  const topics = new Set<string>();
+  for (const interest of interests) {
+    const want = interest === "hiking" ? "outdoors" : interest;
+    for (const [tag, list] of Object.entries(TOPIC_TO_INTEREST)) if (list.includes(want)) topics.add(tag);
+  }
+  return Array.from(topics).sort().slice(0, 10);
+}
+
+/** Interest pool events within the user's radius (events with no coordinates can't be shown to be). */
+export function withinRadius(events: RankableEvent[], ctx: Pick<RankingContext, "lat" | "lng" | "radiusMiles">): RankableEvent[] {
+  if (ctx.lat === undefined || ctx.lng === undefined) return events;
+  const radius = ctx.radiusMiles ?? DEFAULT_RETRIEVAL_RADIUS_MILES;
+  return events.filter((ev) => ev.latitude !== undefined && ev.longitude !== undefined &&
+    haversineMiles(ctx.lat!, ctx.lng!, ev.latitude, ev.longitude) <= radius);
+}
+
+/**
+ * Upcoming events (next 14 days) tagged with the user's interests. The area snapshot is
+ * interest-blind — the soonest 180, the best 70 and 15 per category — so with 8,000+
+ * listings a hiker's hikes rarely reached ranking at all. One bounded query per topic set,
+ * cached five minutes and shared by everyone with the same picks.
+ */
+async function interestCandidates(areaId: string, interests: readonly string[], nowMs: number): Promise<RankableEvent[]> {
+  const topics = topicsForInterests(interests);
+  if (!topics.length) return [];
+  const cacheRef = db.collection("feedCaches").doc(`${areaId}__interest__${topics.join("+")}`);
+  const saved = (await cacheRef.get()).data();
+  if (Number(saved?.cachedAtMs) > nowMs - CACHE_MS && Array.isArray(saved?.events)) return saved.events as RankableEvent[];
+  const snap = await db.collection("events").where("areaId", "==", areaId).where("active", "==", true)
+    .where("topicTags", "array-contains-any", topics)
+    .where("date", ">=", Timestamp.fromMillis(nowMs - 3_600_000))
+    .where("date", "<=", Timestamp.fromMillis(nowMs + INTEREST_WINDOW_DAYS * 86_400_000))
+    .orderBy("date").limit(INTEREST_POOL_LIMIT).get();
+  const events = snap.docs.map(rankableFromDoc).filter((ev): ev is RankableEvent => ev !== null && ev.startMs >= nowMs);
+  await cacheRef.set({ cachedAtMs: nowMs, events });
+  await db.collection("treasury").doc(utcMonthKey()).set({
+    readTelemetry: { candidateDocuments: FieldValue.increment(snap.size) },
+  }, { merge: true });
+  return events;
+}
+
 /** Minor protection (W2): an adult-only listing never reaches a viewer who is not a recorded adult. */
 export function minorSafe<T extends { adultOnly?: boolean }>(events: T[], viewerIsAdult: boolean | undefined): T[] {
   return viewerIsAdult ? events : events.filter((ev) => ev.adultOnly !== true);
@@ -476,7 +586,8 @@ export async function loadContext(uid: string, lat?: number, lng?: number, nowMs
   const plus = plusActiveFrom(u, nowMs);
   const active = plus && typeof u.interestProfiles === "object" && u.interestProfiles !== null
     ? u.interestProfiles[safeText(u.activeProfileId, 64)] as InterestProfile | undefined : undefined;
-  const interests = active && Array.isArray(active.interests) ? active.interests : defaultInterests;
+  const picked = active && Array.isArray(active.interests) ? active.interests : defaultInterests;
+  const { interests, labels: interestLabels } = normalizeInterests(picked);
 
   // Behaviour: categories of events already attended.
   const attendedCategories: Record<string, number> = {};
@@ -523,7 +634,7 @@ export async function loadContext(uid: string, lat?: number, lng?: number, nowMs
   const childAges: number[] = Array.isArray(u.householdChildAges)
     ? u.householdChildAges.filter((v: unknown): v is number => typeof v === "number" &&
       Number.isInteger(v) && v >= 0 && v <= 17) : [];
-  return { interests, studentStatus: u.studentStatus === true, school: safeText(u.school, 100),
+  return { interests, interestLabels, studentStatus: u.studentStatus === true, school: safeText(u.school, 100),
     householdYoungestAge: childAges.length > 0
       ? Math.min(...childAges)
       : Number.isInteger(u.householdYoungestAge) && u.householdYoungestAge >= 0 &&
@@ -634,6 +745,10 @@ export async function recommendFor(
   ]);
   const version: RankingVersion = options.version ?? config.version;
   const candidates = new Map(shared.filter((ev) => ev.startMs >= nowMs).map((ev) => [ev.id, ev]));
+  // The user's interests reach ranking even when the shared snapshot holds none of them.
+  for (const ev of withinRadius(await interestCandidates(areaId, ctx.interests, nowMs), ctx)) {
+    if (ev.startMs >= nowMs) candidates.set(ev.id, ev);
+  }
   // Social candidates bypass the area and category sweeps; a friend going is
   // useful even when the event is far away or outside stated interests.
   const socialIds = Object.keys(ctx.friendsGoing).slice(0, 60);

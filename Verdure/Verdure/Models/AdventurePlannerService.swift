@@ -96,6 +96,7 @@ final class AdventurePlannerService: Sendable {
                 if let lat = p.latitude { dict["latitude"] = lat }
                 if let lon = p.longitude { dict["longitude"] = lon }
                 if let hours = p.openHoursReal { dict["hours"] = hours }
+                if p.photoURL != nil { dict["hasPhoto"] = true }
                 return dict
             }
 

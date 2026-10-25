@@ -201,8 +201,10 @@ export function mapMidpenItem(i: MidpenItem, area: LaunchArea, feed: MidpenFeed)
   };
 }
 
-/** Listing pages to walk. 15 rows per page; 4 covers the published horizon. */
-const MAX_PAGES = 4;
+/** Listing pages are walked until one comes back empty. The site publishes about four
+ * months ahead (116 rows over 8 pages on 2026-10-23); a fixed 4-page walk dropped half of
+ * them. The cap only stops a runaway loop if the site ever ignores ?page=. */
+export const MIDPEN_PAGE_CAP = 20;
 
 export async function fetchMidpen(
   area: LaunchArea,
@@ -212,7 +214,7 @@ export async function fetchMidpen(
   const out: NormalizedEvent[] = [];
   let rowsSeen = 0;
 
-  for (let page = 0; page < MAX_PAGES; page++) {
+  for (let page = 0; page < MIDPEN_PAGE_CAP; page++) {
     const res = await fetchImpl(`https://www.openspace.org/events?page=${page}`, {
       headers: { "user-agent": "Verdure/1.0 (events ingest; support@verdure-app.com)" },
     });
