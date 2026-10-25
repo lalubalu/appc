@@ -1,4 +1,5 @@
 import XCTest
+import CoreLocation
 
 // MARK: - Shared UI-test launch plumbing
 //
@@ -14,9 +15,21 @@ enum QA {
         return f.string(from: Date())
     }
 
+    /// SampleData.defaultCenter: the offline fixtures (places, events, plans) sit around it.
+    static let sampleCenter = CLLocation(latitude: 44.98, longitude: -93.265)
+    /// The launch area the local emulators are seeded for.
+    static let sanJose = CLLocation(latitude: 37.3352, longitude: -121.8811)
+
     /// Launch the app straight into a tab with onboarding done, the Daily Gem
     /// splash already shown today, and interests pre-picked.
-    static func launch(tab: String = "events", extraArguments: [String] = []) -> XCUIApplication {
+    ///
+    /// The simulated location is set per launch. Once location is allowed, offline sample
+    /// events are filtered by distance from GPS, so a simulator left in San José showed
+    /// "No events match" for the Minneapolis fixtures, depending on earlier runs.
+    static func launch(tab: String = "events", extraArguments: [String] = [],
+                       location: CLLocation? = nil) -> XCUIApplication {
+        let offline = !zip(extraArguments, extraArguments.dropFirst()).contains { $0 == "-QAOfflineData" && $1 == "NO" }
+        XCUIDevice.shared.location = XCUILocation(location: location ?? (offline ? sampleCenter : sanJose))
         let app = XCUIApplication()
         app.launchArguments += [
             "-hasCompletedOnboarding", "YES",
@@ -29,7 +42,17 @@ enum QA {
         ]
         app.launchArguments += extraArguments
         app.launch()
+        allowLocationIfAsked()
         return app
+    }
+
+    /// Each test run reinstalls the app, which resets its location permission, so the
+    /// system prompt can sit over the first screen and leave the app without GPS
+    /// (it then browses the launch-area centre). Answer it the way a user would.
+    static func allowLocationIfAsked() {
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let allow = springboard.alerts.buttons["Allow While Using App"]
+        if allow.waitForExistence(timeout: 3) { allow.tap() }
     }
 
     /// Run Apple's accessibility audit on the current screen.
@@ -42,32 +65,11 @@ enum QA {
     /// screenshot matrix reviewed in QA.md instead.
     static func audit(_ app: XCUIApplication, screen: String,
                       file: StaticString = #filePath, line: UInt = #line) throws {
-        // The audit service occasionally fails to attach to the app process with
-        // `com.apple.accessibilityAudit` code -902 ("Invalid target app <pid>").
-        // That's infrastructure, not a finding — on CI it hit the first few tests
-        // in the class and cleared up once the service warmed up. The structural
-        // engine can also time out (-56) without producing a result. Retry only
-        // those infrastructure errors; real findings fail immediately. Exhausted
-        // retries still throw, and each attempt is recorded in the result bundle.
-        var lastError: Error?
-        for attempt in 1...3 {
-            do {
-                // The audit service will only inspect the frontmost app; on a
-                // headless CI simulator the app isn't reliably activated.
-                app.activate()
-                _ = app.wait(for: .runningForeground, timeout: 5)
-                try runAudit(app, screen: screen, file: file, line: line)
-                return
-            } catch let error as NSError where
-                (error.domain == "com.apple.accessibilityAudit" && error.code == -902) ||
-                (error.domain == "com.apple.xcode.xctest.accessibilityAudit" && error.code == -56) {
-                lastError = error
-                XCTContext.runActivity(named: "AUDIT-RETRY [\(screen)] attempt \(attempt): \(error.localizedDescription)") { _ in }
-                Thread.sleep(forTimeInterval: 2)
-            }
-        }
-        throw lastError ?? NSError(domain: "QA", code: -1,
-                                   userInfo: [NSLocalizedDescriptionKey: "audit failed to run for \(screen)"])
+        // The audit service only inspects the frontmost app; make sure it is, then audit
+        // once. Any error — a finding or the audit service failing — fails the test.
+        app.activate()
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10), "app not frontmost for the audit", file: file, line: line)
+        try runAudit(app, screen: screen, file: file, line: line)
     }
 
     private static func runAudit(_ app: XCUIApplication, screen: String,
@@ -104,6 +106,99 @@ enum QA {
                 }
             }
         }
+    }
+
+    /// Scroll until `element` is hittable AND clear of the floating tab bar. XCUITest
+    /// reports a row under the bar as hittable, and the tap then lands on a tab.
+    /// An element already on screen is dragged just far enough (held, so no momentum); a full
+    /// swipe would fling a row that sits just under the bar up beneath the pinned search field.
+    static func reveal(_ element: XCUIElement, in app: XCUIApplication, maxSwipes: Int = 20) {
+        var swiped = false
+        let height = app.frame.height
+        for _ in 0..<maxSwipes where !(element.exists && element.isHittable && element.frame.maxY < height - 140) {
+            let frame = element.exists ? element.frame : .zero
+            if frame.minY > 0, frame.minY < height {
+                let lift = min(frame.maxY - (height - 180), height * 0.5)
+                let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.8))
+                start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: -max(lift, 60))),
+                            withVelocity: .slow, thenHoldForDuration: 0.3)
+            } else {
+                app.swipeUp()
+            }
+            swiped = true
+        }
+        if swiped { settle(element) }
+    }
+
+    /// A swipe keeps the list coasting for a few seconds, and a tap during deceleration
+    /// only stops the scroll (standard UIKit). Wait until the element stops moving.
+    static func settle(_ element: XCUIElement, timeout: TimeInterval = 5) {
+        var last = element.exists ? element.frame : .zero
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.4))
+            let now = element.exists ? element.frame : .zero
+            if now == last { return }
+            last = now
+        }
+    }
+
+    /// Waits until `element` exists and its label and frame have not changed for `quiet`
+    /// seconds: data that lands after the first render (a ranked slate, friends-going counts)
+    /// rebuilds the row, and a tap during that rebuild is lost.
+    @discardableResult
+    static func waitUntilStable(_ element: XCUIElement, quiet: TimeInterval = 1.0, timeout: TimeInterval = 20) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        guard element.waitForExistence(timeout: timeout) else { return false }
+        var last = (element.label, element.frame), since = Date()
+        while Date() < deadline {
+            let now = element.exists ? (element.label, element.frame) : ("", CGRect.zero)
+            if now != last { last = now; since = Date() }
+            else if Date().timeIntervalSince(since) >= quiet { return true }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        }
+        return false
+    }
+
+    /// Onboarding: Continue through the pages until `target` appears. Each tap waits for the
+    /// button to settle (the pager animates between pages) and must advance the page — the
+    /// dots' identifier changes — or reveal the target; a tap that does neither fails.
+    static func continueUntil(_ target: XCUIElement, in app: XCUIApplication, maxPages: Int = 8,
+                              file: StaticString = #filePath, line: UInt = #line) {
+        let cta = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Continue'")).firstMatch
+        let dots = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'onboardingDots-'")).firstMatch
+        for _ in 0..<maxPages where !target.exists {
+            XCTAssertTrue(waitUntilStable(cta), "Continue never settled", file: file, line: line)
+            let page = dots.exists ? dots.identifier : ""
+            cta.tap()
+            let advanced = NSPredicate { _, _ in target.exists || (dots.exists ? dots.identifier : "") != page }
+            XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: advanced, object: nil)], timeout: 8), .completed,
+                           "Continue did not advance onboarding from \(page)", file: file, line: line)
+        }
+        XCTAssertTrue(target.waitForExistence(timeout: 8), "onboarding never reached \(target)", file: file, line: line)
+    }
+
+    /// Signed in = the auth sheet is gone and Profile no longer offers "Sign in". The
+    /// "openOfflinePacks" row is on the signed-out Profile too, so waiting on it returned at
+    /// once and a test that terminated next killed the sign-in still in flight.
+    static func waitForSignedIn(_ app: XCUIApplication, timeout: TimeInterval = 30,
+                                file: StaticString = #filePath, line: UInt = #line) {
+        let signedIn = NSPredicate { _, _ in
+            !app.buttons["authSubmit"].exists && !app.buttons["profileSignIn"].exists && app.buttons["openOfflinePacks"].exists
+        }
+        let result = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: signedIn, object: nil)], timeout: timeout)
+        XCTAssertEqual(result, .completed, "sign-in did not complete", file: file, line: line)
+    }
+
+    /// Types into a field once it has settled (a sheet or keyboard may still be moving it) and
+    /// owns the keyboard after a single tap; a tap that doesn't focus the field fails.
+    static func type(_ text: String, into field: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertTrue(waitUntilStable(field), "\(field) never settled", file: file, line: line)
+        field.tap()
+        let focused = NSPredicate { _, _ in (field.value(forKey: "hasKeyboardFocus") as? Bool) == true }
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: focused, object: nil)], timeout: 5), .completed,
+                       "\(field) did not take keyboard focus", file: file, line: line)
+        field.typeText(text)
     }
 
     /// Wait helper with a clear failure message.

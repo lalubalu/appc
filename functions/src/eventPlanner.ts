@@ -1,6 +1,7 @@
 /** Event planner: a model sequences verified event IDs from Verdure's own
  * ranker. Every model ID is checked against candidate documents before return.
  * Refinements stay in Firestore and do not spend another model call. */
+import { modelKey } from "./model-key.js";
 import { randomBytes } from "node:crypto";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret, defineString } from "firebase-functions/params";
@@ -18,6 +19,16 @@ export interface EventPlanCandidate {
   startMs: number; locationName: string; isFree: boolean; priceMin?: number;
   latitude?: number; longitude?: number; ageSuitability?: string;
   social: number; description?: string;
+  /** Runs the whole local day (BiblioCommons: midnight start, 23:59:59 end, "12:00 AM"). */
+  allDay?: boolean;
+}
+
+/** A day-long listing: labelled "All day", or a local-midnight start that ends 20+ hours later. */
+export function isAllDayListing(startMs: number, endMs: number | undefined, time: string | undefined): boolean {
+  if ((time ?? "").trim().toLowerCase() === "all day") return true;
+  const hm = new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+    .format(startMs);
+  return hm === "00:00" && endMs !== undefined && endMs - startMs >= 20 * 3_600_000;
 }
 
 export interface EventPlanRequest {
@@ -171,50 +182,110 @@ async function sequenceWithModel(candidates: EventPlanCandidate[], key: string):
   return { title: safeText(raw.title, 80) || "Your plan", intro: safeText(raw.intro, 300), stops };
 }
 
+function capitalize(text: string): string {
+  return text ? text[0].toUpperCase() + text.slice(1) : text;
+}
+
+/** Event length when the listing gives none: long enough to attend, short enough to chain. */
+export const ASSUMED_EVENT_MINUTES = 90;
+
+function clockLA(ms: number): string {
+  return new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", hour: "numeric", minute: "2-digit" })
+    .format(ms).replace(" AM", " am").replace(" PM", " pm");
+}
+
+function legMinutes(a: EventPlanCandidate, b: EventPlanCandidate): { minutes: number; text: string } | null {
+  if (a.latitude === undefined || a.longitude === undefined || b.latitude === undefined || b.longitude === undefined) return null;
+  const km = haversineMiles(a.latitude, a.longitude, b.latitude, b.longitude) * 1.609344;
+  if (km < 0.05) return { minutes: 0, text: "same venue" };
+  if (km < 1.2) { const m = Math.max(1, Math.round((km * 1.3) / 5 * 60)); return { minutes: m, text: `${m}-min walk` }; }
+  const m = Math.round((km * 1.3) / 35 * 60) + 2;
+  return { minutes: m, text: `${m}-min drive` };
+}
+
 /**
- * The deterministic event plan (CAC 2026, 1.2): the path that runs with no
- * model key, so it has to read like a plan. Two or three real events in START
- * ORDER that do not overlap, nearest-first among same-hour choices, each with a
- * concrete reason (time, place, price, friends) and no phrase used twice.
+ * The plan without a model: Verdure's own ranking picks the first event, then later
+ * events on the same day that can actually be reached after it (assumed length plus
+ * travel), up to three, in time order. Every phrase comes from a listing field.
  */
-export function deterministicEventPlan(rows: EventPlanCandidate[], lat?: number, lng?: number): {
+export function sequenceEventsFallback(rows: EventPlanCandidate[]): {
   title: string; intro: string; stops: Array<{ eventId: string; why: string }>;
 } {
-  // Rows arrive in the user's RANKED order (interests, distance, friends), so the
-  // picks follow the person; the picked events are then put in start order and
-  // may not overlap (two hours per event incl. getting to the next one).
-  const picked: EventPlanCandidate[] = [];
-  for (const e of rows) {
-    if (picked.length >= 3) break;
-    if (picked.some((p) => Math.abs(p.startMs - e.startMs) < 120 * 60_000)) continue;
-    picked.push(e);
+  if (!rows.length) return { title: "A plan nearby", intro: "", stops: [] };
+  const first = rows[0];
+  const day = localISODate(first.startMs);
+  const sameDay = rows.filter((e) => localISODate(e.startMs) === day);
+  // Day-long listings have no real start time: at most one, as "any time that day".
+  const flexible = sameDay.find((e) => e.allDay);
+  const chain: EventPlanCandidate[] = [];
+  for (const e of sameDay.filter((x) => !x.allDay)) {
+    if (chain.length + (flexible ? 1 : 0) >= 3) break;
+    const timeline = [...chain, e].sort((a, b) => a.startMs - b.startMs);
+    const fits = timeline.every((x, i) => {
+      if (i === 0) return true;
+      const prev = timeline[i - 1];
+      const leg = legMinutes(prev, x);
+      return x.startMs >= prev.startMs + (ASSUMED_EVENT_MINUTES + (leg?.minutes ?? 20)) * 60_000;
+    });
+    if (fits && !chain.some((c) => c.title === e.title) && e.title !== flexible?.title) chain.push(e);
   }
-  if (picked.length < 2) { picked.length = 0; picked.push(...rows.slice(0, Math.min(3, rows.length))); }
-  const chosen = [...picked].sort((a, b) => a.startMs - b.startMs || a.id.localeCompare(b.id));
-  const clock = (ms: number) => new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", weekday: "short", hour: "numeric", minute: "2-digit" }).format(ms);
-  const used = new Set<string>();
-  const take = (pool: string[], seed: number) => { const fresh = pool.filter((p) => !used.has(p)); const v = (fresh.length ? fresh : pool)[seed % (fresh.length ? fresh : pool).length]; used.add(v); return v; };
-  const stops = chosen.map((e, i) => {
-    const facts: string[] = [];
-    facts.push(i === 0 ? take([`starts ${clock(e.startMs)}`, `kicks off ${clock(e.startMs)}`], i) : take([`then ${clock(e.startMs)}`, `next up at ${clock(e.startMs)}`, `follows at ${clock(e.startMs)}`], i));
-    if (e.locationName) facts.push(`at ${e.locationName}`);
-    if (e.isFree) facts.push(take(["free to attend", "no ticket needed", "free"], i));
-    else if (typeof e.priceMin === "number") facts.push(`from $${e.priceMin}`);
-    if (e.social > 0) facts.push(take(["friends are going", "people you follow are going"], i));
-    if (lat !== undefined && lng !== undefined && e.latitude !== undefined && e.longitude !== undefined) {
-      const miles = haversineMiles(lat, lng, e.latitude, e.longitude);
-      if (miles < 25) facts.push(`${miles.toFixed(1)} mi away`);
+  chain.sort((a, b) => a.startMs - b.startMs);
+  // Too little on the anchor's day (one event per day is common two weeks out): continue with the next
+  // best-ranked events on later days, no two within two hours, so the plan still has 2–3 real stops.
+  let spansDays = false;
+  if (chain.length + (flexible ? 1 : 0) < 2) {
+    for (const e of rows) {
+      if (chain.length >= 3) break;
+      if (e.allDay || chain.includes(e)) continue;
+      if (chain.some((c) => Math.abs(c.startMs - e.startMs) < 120 * 60_000)) continue;
+      chain.push(e); spansDays = true;
     }
-    return { eventId: e.id, why: `${e.category}: ${facts.join(", ")}.` };
+    chain.sort((a, b) => a.startMs - b.startMs);
+  }
+  const chosen = flexible && (first.allDay || chain.length < 3) ? [...chain, flexible] : chain;
+  const weekday = new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", weekday: "long" }).format(first.startMs);
+  // The plan card already shows each event's time, venue and price; the why adds what it can't.
+  const stops = chosen.map((e, i) => {
+    const parts: string[] = [];
+    if (e === first) parts.push("Your best-ranked match for these choices");
+    if (e.allDay) {
+      parts.push(e === first ? "runs all day, so fit it in when it suits" : "Runs all day, so fit it in when it suits");
+    } else if (i > 0 && !chosen[i - 1].allDay) {
+      const prev = chosen[i - 1];
+      const leg = legMinutes(prev, e);
+      const gap = Math.round((e.startMs - prev.startMs) / 60_000);
+      const gapText = gap >= 60 ? `${Math.floor(gap / 60)} h${gap % 60 ? ` ${gap % 60} min` : ""}` : `${gap} min`;
+      if (spansDays && localISODate(e.startMs) !== localISODate(prev.startMs)) {
+        parts.push(`${new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", weekday: "long" }).format(e.startMs)} at ${clockLA(e.startMs)}`);
+      } else {
+        parts.push(leg ? (leg.minutes === 0 ? `Same venue as ${prev.title}` : `${capitalize(leg.text)} from ${prev.title}`)
+          : `After ${prev.title}`);
+        parts.push(`starts ${gapText} after it`);
+      }
+    } else if (e !== first) {
+      parts.push("The first timed event of the day");
+    }
+    if (e === first && e.organizer) parts.push(`hosted by ${e.organizer}`);
+    if (e.social >= 0.69) parts.push("a friend is going");
+    return { eventId: e.id, why: `${parts.join(" · ")}.` };
   });
-  const span = chosen.length ? `${clock(chosen[0].startMs)} to ${clock(chosen[chosen.length - 1].startMs)}` : "";
-  return {
-    title: chosen.length === 3 ? "Three real events, in order" : "Two real events, in order",
-    intro: `${chosen.length} events that fit your choices, from ${span}, spaced so you can get from one to the next.`,
-    stops,
-  };
+  const timed = chosen.filter((e) => !e.allDay);
+  const free = chosen.every((e) => e.isFree);
+  const title = spansDays && timed.length >= 2 ? `Next up: ${chosen.length} events over ${new Set(timed.map((e) => localISODate(e.startMs))).size} days`
+    : timed.length >= 2 ? `${weekday}: ${chosen.length} events from ${clockLA(timed[0].startMs)}`
+    : `${weekday}: ${first.title}`.slice(0, 80);
+  const timedText = spansDays && timed.length >= 2
+    ? `${timed.length} events in date order, starting ${weekday} at ${clockLA(timed[0].startMs)}; nothing else matched on that day, so the rest fall on later days.`
+    : timed.length >= 2
+    ? `${timed.length} timed events in order, ${clockLA(timed[0].startMs)} to about ${clockLA(timed[timed.length - 1].startMs + ASSUMED_EVENT_MINUTES * 60_000)}, each reachable after the one before.`
+    : timed.length === 1 ? `${timed[0].title} starts at ${clockLA(timed[0].startMs)}.` : "";
+  const flexibleText = flexible && chosen.includes(flexible) ? `${flexible.title} runs all day, so fit it in when it suits.` : "";
+  const intro = [timedText, flexibleText, free ? "All free." : ""].filter(Boolean).join(" ")
+    || `Only one matching event fits that day.`;
+  return { title, intro, stops };
 }
-const fallbackPlan = (rows: EventPlanCandidate[], lat?: number, lng?: number) => deterministicEventPlan(rows, lat, lng);
+
+const fallbackPlan = (rows: EventPlanCandidate[]) => sequenceEventsFallback(rows);
 
 export const planEvents = onCall({ secrets: [ANTHROPIC_API_KEY] }, async (req) => {
   const uid = requireUid(req.auth);
@@ -252,7 +323,9 @@ export const planEvents = onCall({ secrets: [ANTHROPIC_API_KEY] }, async (req) =
       latitude: typeof x.latitude === "number" ? x.latitude : undefined,
       longitude: typeof x.longitude === "number" ? x.longitude : undefined,
       ageSuitability: safeText(x.ageSuitability, 20), social: ranked[i]?.parts.social ?? 0,
-      description: safeText(x.description, 300) }];
+      description: safeText(x.description, 300),
+      allDay: isAllDayListing(x.date instanceof Timestamp ? x.date.toMillis() : 0,
+        x.endDate instanceof Timestamp ? x.endDate.toMillis() : undefined, typeof x.time === "string" ? x.time : undefined) }];
   });
   const userSnapshot = await db.collection("users").doc(uid).get();
   const recent = Array.isArray(userSnapshot.data()?.recentPlanEventIDs)
@@ -274,9 +347,9 @@ export const planEvents = onCall({ secrets: [ANTHROPIC_API_KEY] }, async (req) =
       selectedIDs: [], lat: input.lat ?? null, lng: input.lng ?? null,
       modelCalls: 0, refinements: 0, createdAt: FieldValue.serverTimestamp(), month });
   });
-  let plan = fallbackPlan(candidates, input.lat, input.lng);
+  let plan = fallbackPlan(candidates);
   let modelUsed = false;
-  const key = ANTHROPIC_API_KEY.value();
+  const key = modelKey();
   if (key && candidates.length >= 2) {
     try { plan = await sequenceWithModel(candidates, key); modelUsed = true; }
     catch (error) { console.warn("[planEvents] deterministic fallback:", error); }

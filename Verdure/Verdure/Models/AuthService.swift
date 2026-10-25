@@ -18,6 +18,10 @@ final class AuthService {
     var isLoading = false
     var errorMessage: String?
     var ageRegistrationPending = false
+    /// Set once a new account's profile (interests, student status) and age band are stored.
+    /// The auth listener fires at createUser, before either exists, so a feed ranked then
+    /// would ignore the picks; RootView refetches on this.
+    private(set) var signupProfileSavedAt: Date?
 
     // MARK: - Private
 
@@ -148,6 +152,7 @@ final class AuthService {
             } catch {
                 ageRegistrationPending = true
             }
+            signupProfileSavedAt = Date()
 
             let user = VerdureUser(
                 uid: uid,

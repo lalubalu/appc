@@ -59,6 +59,10 @@ private final class PartnerDiscoveryResources {
 final class PartnerDiscoveryService {
     private(set) var offers: [PartnerMapOffer] = []
     private(set) var nearYou: PartnerMapOffer?
+    /// True once every invalidation listener for the displayed offers has had its first server
+    /// snapshot — from then on a withdrawal reaches the app through the listener.
+    private(set) var isWatchingForWithdrawals = false
+    @ObservationIgnored private var awaitingServer = Set<String>()
     private(set) var layerEnabled = true
     private(set) var error: String?
     private var uid: String?
@@ -74,6 +78,7 @@ final class PartnerDiscoveryService {
 
     private func stopListening() {
         listenerID = UUID()
+        isWatchingForWithdrawals = false
         for listener in resources.listeners { listener.remove() }
         resources.listeners = []
         resources.invalidationTask?.cancel()
@@ -174,6 +179,7 @@ final class PartnerDiscoveryService {
     private func listenForInvalidation(account: String) {
         stopListening()
         let generation = listenerID
+        awaitingServer = []
         let displayed = offers + (nearYou.map { [$0] } ?? [])
         var paths = Set<String>()
         for offer in displayed {
@@ -181,10 +187,18 @@ final class PartnerDiscoveryService {
                 ("partnerStatus/\(offer.partnerID)", offer.partnerRevision, true),
                 ("perkStatus/\(offer.id)", offer.perkRevision, false)
             ] where paths.insert(path).inserted {
+                awaitingServer.insert(path)
                 let targetID = partner ? offer.partnerID : offer.id
                 let registration = Firestore.firestore().document(path).addSnapshotListener(includeMetadataChanges: true) { [weak self] snapshot, _ in
                     // A stale disk/cache snapshot must not invalidate a newer
                     // callable response. Missing metadata permits legacy offers.
+                    if let snapshot, !snapshot.metadata.isFromCache {
+                        Task { @MainActor [weak self] in
+                            guard let self, self.listenerID == generation else { return }
+                            self.awaitingServer.remove(path)
+                            if self.awaitingServer.isEmpty { self.isWatchingForWithdrawals = true }
+                        }
+                    }
                     guard let snapshot, !snapshot.metadata.isFromCache, let data = snapshot.data() else { return }
                     let unavailable = data["available"] as? Bool == false ||
                         (!partner && (data["expiresAtMs"] as? Double ?? .greatestFiniteMagnitude) <= Date().timeIntervalSince1970 * 1000)

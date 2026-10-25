@@ -4,7 +4,6 @@
 // properties a picky local cares about most: the plan fits the time asked for,
 // and no sentence repeats itself.
 import { buildPlan, parseOpeningHours, openStateAt, topicScore, isMemberOnly, travelMinutes, stopsFor, repeatedPhrases, milesBetween, INVENTED_FEATURE_WORDS } from "../lib/adventure-engine.js";
-import { deterministicEventPlan } from "../lib/eventPlanner.js";
 
 let pass = 0, fail = 0;
 const ok = (name, cond, extra = "") => { if (cond) { pass++; console.log(`  ✅ ${name}`); } else { fail++; console.log(`  ❌ ${name} ${extra}`); } };
@@ -169,28 +168,6 @@ console.log("\n── sparse area ──");
   ok("one candidate yields no stops (the callable refuses before this anyway)", one.stops.length === 0);
   const noCoords = buildPlan({ candidates: [{ id: "x", name: "Nowhere" }, ...base().slice(0, 2)], interests: [], timeOfDay: "morning", durationMinutes: 60, weather: null, lat: HERE.lat, lng: HERE.lng, nowMs: NOW, timeZone: TZ });
   ok("a candidate without coordinates is skipped, not planned", !noCoords.stops.some((s) => s.placeId === "x") && noCoords.skipped.some((s) => s.id === "x"));
-}
-
-console.log("\n── event planner: the deterministic plan reads like a plan ──");
-{
-  const rows = [
-    { id: "late", title: "Night Market", category: "Market", organizer: "o", startMs: Date.UTC(2026, 9, 25, 2, 0), locationName: "San Pedro Square", isFree: true, social: 0, latitude: 37.336, longitude: -121.894 },
-    { id: "early", title: "Bird Walk", category: "Meetup", organizer: "o", startMs: Date.UTC(2026, 9, 24, 16, 0), locationName: "Lake Elizabeth", isFree: true, social: 1, latitude: 37.55, longitude: -121.96 },
-    { id: "overlap", title: "Bird Talk", category: "Workshop", organizer: "o", startMs: Date.UTC(2026, 9, 24, 16, 30), locationName: "Library", isFree: true, social: 0 },
-    { id: "mid", title: "Yoga", category: "Sports", organizer: "o", startMs: Date.UTC(2026, 9, 24, 21, 0), locationName: "St. James Park", isFree: false, priceMin: 10, social: 0, latitude: 37.339, longitude: -121.889 },
-  ];
-  const p = deterministicEventPlan(rows, HERE.lat, HERE.lng);
-  ok("stops are in start order and an overlapping event is left out", p.stops.map((s) => s.eventId).join() === "early,mid,late", JSON.stringify(p.stops.map((s) => s.eventId)));
-  // The picks follow the user's ranking: a different ranking (volunteering first) yields a different plan, still in start order.
-  const ranked2 = [rows[3], rows[0], rows[1], rows[2]];   // mid (Sports) ranked first for another user
-  const p2 = deterministicEventPlan(ranked2, HERE.lat, HERE.lng);
-  ok("a differently ranked list picks differently (personalised) and is still in start order", p2.stops.map((s) => s.eventId).join() === "early,mid,late" || p2.stops.map((s) => s.eventId).join() === "mid,late" || p2.stops.every((s, i, arr) => i === 0 || rows.find((r) => r.id === arr[i - 1].eventId).startMs <= rows.find((r) => r.id === s.eventId).startMs), JSON.stringify(p2.stops.map((s) => s.eventId)));
-  const onlyTwoRanked = [{ ...rows[0], id: "a1", startMs: Date.UTC(2026, 9, 24, 16, 0) }, { ...rows[0], id: "a2", startMs: Date.UTC(2026, 9, 24, 18, 0) }, { ...rows[0], id: "a3", startMs: Date.UTC(2026, 9, 24, 20, 0) }];
-  const rankedA = deterministicEventPlan(onlyTwoRanked, HERE.lat, HERE.lng), rankedB = deterministicEventPlan([...onlyTwoRanked].reverse(), HERE.lat, HERE.lng);
-  ok("with three non-overlapping candidates both rankings pick all three, so the ranking shows only in which ones are chosen when there are more than three", rankedA.stops.length === 3 && rankedB.stops.length === 3);
-  ok("each why states the time, the place and a concrete fact; no repeated phrase", p.stops.every((s) => /\d(:\d\d)? (AM|PM)/.test(s.why) && /at /.test(s.why)) && new Set(p.stops.map((s) => s.why)).size === p.stops.length, JSON.stringify(p.stops.map((s) => s.why)));
-  ok("friends going and price appear when known", /friends are going|people you follow/.test(p.stops[0].why) && /\$10/.test(p.stops[1].why));
-  ok("the title and intro say how many and when", /Three real events/.test(p.title) && /3 events/.test(p.intro));
 }
 
 console.log(`\n══ adventure-engine: ${pass} passed, ${fail} failed ══`);

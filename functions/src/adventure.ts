@@ -34,6 +34,7 @@ import { defineSecret, defineString } from "firebase-functions/params";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { plusActiveFrom } from "./common.js";
 import { buildPlan, type EngineWeather } from "./adventure-engine.js";
+import { modelKey } from "./model-key.js";
 
 const db = () => getFirestore();
 
@@ -343,7 +344,9 @@ export const planAdventure = onCall(
         "Not enough nearby places to plan an outing yet.");
     }
 
-    const apiKey = ANTHROPIC_API_KEY.value();
+    // Read from the environment the secret binding populates: unlike .value() it logs no
+    // "No value found for secret parameter" warning on every plan when no key is configured.
+    const apiKey = modelKey();
     const nowMs = Date.now();
     const weather = await fetchWeather(lat, lng);
 

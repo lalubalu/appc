@@ -435,8 +435,10 @@ final class GameStateManager {
             UserDefaults.standard.set(try? JSONEncoder().encode(pendingOps), forKey: "pendingServerOps")
         }
 
-        // Seed demo data on first launch
-        if !UserDefaults.standard.bool(forKey: "gameStateSeeded_v2") {
+        // Seed demo data on first launch — QA fixture harness only. Ungated, every real
+        // install started with 280 points and sample check-ins, and sign-in then synced
+        // the sample collection into the user's Firestore document.
+        if SampleData.isEnabled, !UserDefaults.standard.bool(forKey: "gameStateSeeded_v2") {
             seedDemoData()
             UserDefaults.standard.set(true, forKey: "gameStateSeeded_v2")
         }

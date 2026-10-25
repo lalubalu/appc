@@ -28,9 +28,12 @@ import XCTest
 
         app = QA.launch(tab: "explore", extraArguments: ["-QAOfflineData", "NO", "-QAUseFirestoreEmulator", "YES"])
         // Places first: the planner tile exists only once three real places are on screen.
-        let credit = app.links["openStreetMapCredit"].firstMatch
+        let osmCard = app.buttons["nearbyPlaceCard-osm"].firstMatch
+        for _ in 0..<12 where !osmCard.exists { app.swipeUp() }
+        XCTAssertTrue(osmCard.waitForExistence(timeout: 40), "an OpenStreetMap place must be on Explore (live, this area's cache or the bundled snapshot)")
+        let credit = app.links["© OpenStreetMap contributors"].firstMatch
         for _ in 0..<12 where !credit.exists { app.swipeUp() }
-        XCTAssertTrue(credit.waitForExistence(timeout: 40), "the OpenStreetMap credit must be on Explore with real places (live, cached or the bundled snapshot)")
+        XCTAssertTrue(credit.waitForExistence(timeout: 10), "the ODbL credit must accompany the places")
         let placesShot = XCTAttachment(screenshot: app.screenshot()); placesShot.name = "explore-places-osm-credit"; placesShot.lifetime = .keepAlways; add(placesShot)
 
         let entry = app.buttons["Plan my adventure"].firstMatch

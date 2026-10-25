@@ -213,7 +213,7 @@ struct ExploreView: View {
 
     // MARK: - Daily Gem (wide immersive — today's fun fact)
 
-    /// Entry point to the Adventure Planner. Hidden until there are at least two places
+    /// Entry point to the AI planner. Hidden until there are at least two places
     /// with real coordinates to plan around — offering to build an itinerary and
     /// then failing for lack of input is a worse experience than not offering.
     @ViewBuilder
@@ -413,12 +413,13 @@ struct ExploreView: View {
                                 NearbyCard(place: place, collected: isCollected(place))
                             }
                             .buttonStyle(Card3DButtonStyle())
+                            .accessibilityIdentifier(place.id.hasPrefix("osm-") ? "nearbyPlaceCard-osm" : "nearbyPlaceCard-other")
                         }
                     }
                     .padding(.vertical, 4)
                 }
                 if filteredPlaces.contains(where: { $0.id.hasPrefix("osm-") }) {
-                    OpenStreetMapCredit(snapshotDate: placesService.snapshotDate)
+                    OpenStreetMapCredit(asOf: placesService.osmDataDate)
                 }
             }
         }

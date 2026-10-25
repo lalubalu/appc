@@ -29,7 +29,7 @@ export const PATTERNS = [
   ["Google service-account JSON", /"private_key_id"\s*:\s*"[0-9a-f]{20,}"/],
 ];
 /** Paths that must never be tracked (the ignore rules in .gitignore cover them). */
-export const FORBIDDEN_TRACKED = [/^Verdure\/Secrets\.xcconfig$/, /GoogleService-Info\.plist$/, /^functions\/\.secret\.local$/, /^functions\/\.env\.local$/, /\.p8$/];
+export const FORBIDDEN_TRACKED = [/^Verdure\/Secrets\.xcconfig$/, /GoogleService-Info\.plist$/, /^functions\/\.secret\.local$/, /^functions\/\.env$/, /^functions\/\.env\.local$/, /\.p8$/];
 /** Binary or generated paths the text scan skips. */
 const SKIP = /\.(png|jpg|jpeg|gif|webp|ttf|otf|gz|zip|pbf|storekit|xcassets)$|^functions\/lib\//;
 

@@ -5,6 +5,20 @@ import XCTest
 @testable import Verdure
 
 @MainActor final class RewardsLiveCatalogTests: XCTestCase {
+    /// The expiry timer calls refresh(); if it fired between sign-out and the auth
+    /// listener's connect(nil), refresh() marked the signed-out catalog loaded, so the
+    /// Rewards screen's gift-card section depended on which ran first. No network needed.
+    func testRefreshWhileSignedOutLeavesTheSignedOutState() async throws {
+        try? Auth.auth().signOut()
+        let service = EconomyService()
+        service.connect(nil)
+        XCTAssertFalse(service.hasLoaded)
+        await service.refresh()
+        XCTAssertFalse(service.hasLoaded, "a signed-out refresh must not mark the catalog loaded")
+        XCTAssertTrue(service.catalog.perks.isEmpty)
+        XCTAssertTrue(service.myCodes.isEmpty)
+    }
+
     // Actual server mutations, SDK status listeners and clock boundaries. No
     // client-side imitation of the server's status hash or eligibility policy.
     func testStaffChangesStockExpiryAndAccountClearCachedRewards() async throws {
@@ -24,7 +38,8 @@ import XCTest
         func until(_ stage: String, _ predicate: () -> Bool) async throws {
             let end = Date().addingTimeInterval(12)
             while !predicate() && Date() < end { try await Task.sleep(for: .milliseconds(40)) }
-            XCTAssertTrue(predicate(), "Native Rewards failed to observe \(stage) without manual refresh.")
+            XCTAssertTrue(predicate(), "Native Rewards failed to observe \(stage) without manual refresh. " +
+                "perks=\(service.catalog.perks.map(\.id)) codes=\(service.myCodes.count) hasLoaded=\(service.hasLoaded) auth=\(Auth.auth().currentUser?.uid ?? "nil")")
         }
         var partner: [String: Any] = ["partnerId": partnerID, "name": "Fictional Native Rewards Business",
             "category": "retail", "address": "42 Fictional Native Rewards Road", "contactName": "Fictional owner",
@@ -88,11 +103,15 @@ import XCTest
             try await until("partner withdrawal") { !service.catalog.perks.contains { $0.partnerID == partnerID } }
             XCTAssertEqual(service.myCodes.count, 1, "Withdrawal does not erase an already issued code.")
             try await call("savePartner", partner)
-            var opening = perk(window, early: Date().addingTimeInterval(6)); opening["codes"] = ["LOCAL-NATIVE-WINDOW"]
+            var opening = perk(window, early: Date().addingTimeInterval(8)); opening["codes"] = ["LOCAL-NATIVE-WINDOW"]
             try await call("upsertPartnerPerk", opening)
             // Explicitly hydrate newly created/restored offers, then let only
-            // the service's clock/listeners update the already displayed rows.
+            // the service's clock/listeners update the already displayed rows. Restoring the
+            // partner also triggers the service's own listener refresh, which supersedes this
+            // one (requestID), so wait for the catalog to hold the new offer rather than
+            // assuming this call's result is the one applied.
             await service.refresh()
+            try await until("new offer hydrated") { service.catalog.perks.contains { $0.id == window } }
             XCTAssertEqual(service.catalog.perks.first { $0.id == window }?.plusOnlyUntilOpens, true)
             try await until("early-access opening") {
                 service.catalog.perks.contains { $0.id == window && !$0.plusOnlyUntilOpens && $0.redeemable }

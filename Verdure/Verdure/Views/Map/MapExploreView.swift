@@ -162,7 +162,7 @@ struct MapExploreView: View {
                 .background(ClayBackground(style: .surface, radius: Radius.md, elevation: 0.9))
                 statusPill
                 if placesService.places.contains(where: { $0.id.hasPrefix("osm-") }) {
-                    OpenStreetMapCredit(snapshotDate: placesService.snapshotDate)
+                    OpenStreetMapCredit(asOf: placesService.osmDataDate)
                         .padding(.horizontal, 8).padding(.vertical, 4)
                         .background(Palette.surface.opacity(0.92), in: Capsule())
                 }

@@ -96,7 +96,8 @@ export function interestTerms(raw: readonly unknown[] | undefined): string[] {
 /** The user's own label behind a term ("Parks" for outdoors), or the term's plain name. */
 export function labelForTerm(raw: readonly unknown[] | undefined, term: string): string {
   const owner = normalizeInterests(raw).find((n) => n.terms.includes(term));
-  if (owner && owner.label.toLowerCase() !== term) return owner.label;
+  // An app label ("Community", "Parks") reads verbatim — even when it spells a term name; a stored server term reads as its plain name.
+  if (owner && (owner.label.toLowerCase() in APP_LABEL_TO_TERMS || owner.label.toLowerCase() !== term)) return owner.label;
   return TERM_PRETTY[term] ?? term;
 }
 
@@ -301,13 +302,16 @@ export function retrievalCategories(terms: readonly string[]): string[] {
 const VENUE_RUN = /(?:[A-Z][\p{L}\p{N}'’.&-]*\s+){0,4}(?:Library|Libraries|Branch|Room|Rooms|Center|Centre|Hall|Auditorium|Theater|Theatre|Campus|School|College|University|Plaza|Building|Lobby|Lounge|Area|Wing|Floor|Gallery|Pavilion|Clubhouse|Church|Temple|Mosque|Synagogue|Office|Station|Studio)\b(?:\s*·\s*[^.\n]{0,60})?/gu;
 const ADDRESS = /\b\d{2,6}\s+(?:[NSEW]\.?\s+)?[A-Z][\p{L}'’.-]*(?:\s+[A-Z][\p{L}'’.-]*){0,3}\s+(?:St|Street|Ave|Avenue|Blvd|Boulevard|Rd|Road|Dr|Drive|Way|Ln|Lane|Ct|Court|Pl|Place|Pkwy|Parkway|Hwy|Highway)\b\.?(?:,?\s*(?:Suite|Ste|#)\s*\w+)?/gu;
 
+/** SJPL listings are bilingual: "biblioteca Rose Garden", "sucursal Educational Park" name the branch too. */
+const SPANISH_BRANCH = /\b(?:biblioteca|sucursal)\s+(?:de\s+)?[A-Z][\p{L}\p{N}'’.-]*(?:\s+[A-Z][\p{L}\p{N}'’.-]*){0,3}/gu;
+
 export function stripVenueNames(text: string, ev: Pick<RankableEvent, "organizer" | "locationName">): string {
   let out = String(text ?? "");
   for (const name of [ev.locationName, ev.organizer]) {
     const n = String(name ?? "").trim();
     if (n.length >= 3) out = out.split(n).join(" ");
   }
-  return out.replace(ADDRESS, " ").replace(VENUE_RUN, " ").replace(/\s+/g, " ").trim();
+  return out.replace(ADDRESS, " ").replace(SPANISH_BRANCH, " ").replace(VENUE_RUN, " ").replace(/\s+/g, " ").trim();
 }
 
 // ── Matching ────────────────────────────────────────────────────────────────

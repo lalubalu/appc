@@ -70,6 +70,26 @@ node scripts/rank-eval.mjs ../docs/audits/rank-corpus-preview-2026-09-27.json ..
 - **W6.2** cut as planned.
 - **Documented deviation carried from `a92da73`:** public institutions (.edu/.gov/.us, library platforms) pass the terms rule with the matched platform clause recorded, because the literal rule would reject SJSU, SJPL and careercenter.sjsu.edu, which the spec names as must-pass.
 
+### 4a. Final pass results (2026-10-22/23, macOS, local emulators; nothing deployed)
+
+| Suite | Result | Notes |
+| --- | --- | --- |
+| `npm run build` / `tsc` | clean | |
+| `check:classifier` | frozen-file hashes match the manifest (6/6) | the second half (`git show d4b71507`) cannot run: this copy has no git history |
+| `check:indexes` | 49 checks | `docs/FIRESTORE-INDEXES.md` regenerated (line numbers only) |
+| `test:units` (all suites) | all green except discovery-unit **159/160** | fulfillment 15, subscription 8, ingest 235, ranking 67, ranking-v2 68, notifications 31, partners 38, event-planner 13, parks 81, offline 24, programs 34, place-stories 34, rank-eval 42 |
+| `test:discovery` | **159/160** | terms + careercenter fixtures copied byte-for-byte from `live-2026-10-21`; the SJPL case was corrected to the recorded evidence ("no restrictive clause"). **cdm.org: not in the recording** (every terms path answered 403), so its fixture cannot be extracted without a live run |
+| `e2e` | **357/357** | |
+| `redteam` | **96 blocked, 0 vulnerable** | was 95 / **1 vulnerable**: `sourceIntake` accepted a `google.com/maps/...` URL (deny-list checked the host only). Fixed |
+| `e2e:ingest` | 33/33 | |
+| `e2e:sources` | 30/30 | |
+| `e2e:discovery` (replay) | **55/57** | fixed: self-healing over-strict count (×2), 304 erased `lastEventCount` (real bug, fixed), rediscovery check. Remaining: CDM (above) and the audit flags `events.stanford.edu` realEvents = 0 because the recording holds no Stanford feed response — both need the one live record run |
+| `acceptance` | **60/62** | the two failures are the same Stanford replay gap |
+| `baseline` (label `end`) | `docs/BASELINE-2026-10-23-end.json` | same 2026-10-18 corpus replayed with a later clock: more listings are already past, so `rejectedListings` 20 → 903 and active counts fall accordingly; unchanged-run writes stay minimal |
+| iOS build + unit (`VerdureTests`) | build clean; **150 run, 0 failed, 1 skipped** (local website not running) | two live-emulator tests (`RewardsLiveCatalogTests`, `PartnerDiscoveryTests`) fail intermittently on some full-suite runs and pass on rerun; cause not established |
+| iOS UI (one class at a time) | AccessibilityAudit 15/15, ExploreBeta 1/1, LivePartnerConsent 1/1, PlaceStory 1/1, TextSizeMatrix 10/10, OnboardingRegression 2/2, DemoWalkthrough 2 + 1 skipped (planner: no model key), PartnerSurface 4/4, Journey __JOURNEY__ | details and flake history in `../FINAL-REPORT.md` |
+| Ranking judge | **not run** | no local model endpoint at `127.0.0.1:11434`; `config/ranking` stays **v1** (`functions/seed/ranking-config.json` is not present in this copy; the code defaults to v1) |
+
 ## 5. Next sprint, first items
 
 1. Extract the terms fixtures, make `discovery-unit` 160/160 and the discovery replay green; fix the four live-run assertions.
