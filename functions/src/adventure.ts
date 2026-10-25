@@ -1,5 +1,12 @@
 /**
- * AI Adventure Planner — an itinerary built from REAL nearby places.
+ * Adventure Planner — an itinerary built from REAL nearby places.
+ *
+ * CAC 2026 (1.2): there is no Anthropic key and none is being bought. The plan
+ * is built by the deterministic engine in adventure-engine.ts — the same
+ * allowlist, open hours, weather, sunset and the user's picks, applied as
+ * rules. The model path below stays intact and runs ONLY when a key is
+ * configured; if the model call fails, the engine answers instead. Either way
+ * every stop is matched back to a supplied candidate before it leaves.
  *
  * THE DESIGN CONSTRAINT THAT SHAPES EVERYTHING HERE.
  * This repo spent a whole release removing fabricated data — invented ratings,
@@ -26,6 +33,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret, defineString } from "firebase-functions/params";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { plusActiveFrom } from "./common.js";
+import { buildPlan, type EngineWeather } from "./adventure-engine.js";
 
 const db = () => getFirestore();
 
@@ -41,10 +49,10 @@ const PLAN_LIMIT = { max: 30, windowMs: 60 * 60 * 1000 };
 /// Verdure+ sells (see PaywallView.features, first row).
 export const FREE_PLANS_PER_MONTH = 5;
 
-/// What one plan costs us in vendor spend, in cents. One Claude call plus the
-/// Open-Meteo lookup (free). Rounded up deliberately — an under-estimate here
-/// silently understates the treasury burn that decides whether this feature
-/// can stay free at all.
+/// What one MODEL plan costs us in vendor spend, in cents. One Claude call plus
+/// the Open-Meteo lookup (free). Rounded up deliberately — an under-estimate
+/// here silently understates the treasury burn that decides whether this
+/// feature can stay free at all. A rules-engine plan costs 0 and is booked as 0.
 export const PLAN_VENDOR_COST_CENTS = 2;
 
 /// Calendar month in UTC. Quota keys and treasury buckets must agree on this,
@@ -76,32 +84,38 @@ interface Stop {
   why: string;
 }
 
-/** Current conditions, or null when the service is unreachable. */
-async function fetchWeather(lat: number, lng: number): Promise<{
-  temperatureF: number; precipitation: number; code: number; summary: string;
-} | null> {
+/** Current conditions plus today's sunrise and sunset, or null when the service is unreachable. Exported for the planner review script. */
+export async function fetchWeather(lat: number, lng: number, fetchImpl: typeof fetch = fetch): Promise<EngineWeather | null> {
   const q = new URLSearchParams({
     latitude: String(lat),
     longitude: String(lng),
     current: "temperature_2m,precipitation,weather_code",
+    daily: "sunrise,sunset",
+    forecast_days: "1",
+    timeformat: "unixtime",
+    timezone: "auto",
     temperature_unit: "fahrenheit",
   });
   try {
-    const res = await fetch(`https://api.open-meteo.com/v1/forecast?${q}`, {
+    const res = await fetchImpl(`https://api.open-meteo.com/v1/forecast?${q}`, {
       signal: AbortSignal.timeout(8000),
     });
     if (!res.ok) return null;
     const body = await res.json() as {
       current?: { temperature_2m?: number; precipitation?: number; weather_code?: number };
+      daily?: { sunrise?: number[]; sunset?: number[] };
     };
     const c = body.current;
     if (!c) return null;
     const code = Number(c.weather_code ?? 0);
+    const sunrise = Number(body.daily?.sunrise?.[0]), sunset = Number(body.daily?.sunset?.[0]);
     return {
       temperatureF: Number(c.temperature_2m ?? 0),
       precipitation: Number(c.precipitation ?? 0),
       code,
       summary: describeWeather(code),
+      sunriseMs: Number.isFinite(sunrise) && sunrise > 0 ? sunrise * 1000 : undefined,
+      sunsetMs: Number.isFinite(sunset) && sunset > 0 ? sunset * 1000 : undefined,
     };
   } catch {
     return null;
@@ -109,7 +123,7 @@ async function fetchWeather(lat: number, lng: number): Promise<{
 }
 
 /** WMO weather codes → plain English, so the prompt reads like a forecast. */
-function describeWeather(code: number): string {
+export function describeWeather(code: number): string {
   if (code === 0) return "clear";
   if (code <= 3) return "partly cloudy";
   if (code <= 48) return "foggy";
@@ -330,11 +344,25 @@ export const planAdventure = onCall(
     }
 
     const apiKey = ANTHROPIC_API_KEY.value();
-    if (!apiKey) throw new HttpsError("failed-precondition", "The planner isn't configured yet.");
-
+    const nowMs = Date.now();
     const weather = await fetchWeather(lat, lng);
-    const prompt = buildPrompt({ interests, timeOfDay, durationMinutes, weather, candidates });
-    const plan = await callClaude(prompt, apiKey, ADVENTURE_MODEL.value());
+
+    // The rules engine is the default. The model runs only when a key is set,
+    // and the engine still answers if the model call fails.
+    let engine: "rules" | "model" = "rules";
+    let plan: { title: string; intro: string; stops: Stop[]; notes?: string[] };
+    if (apiKey) {
+      try {
+        const prompt = buildPrompt({ interests, timeOfDay, durationMinutes, weather, candidates });
+        plan = await callClaude(prompt, apiKey, ADVENTURE_MODEL.value());
+        engine = "model";
+      } catch (e) {
+        console.warn("[planAdventure] model failed; rules engine answers instead:", e instanceof Error ? e.message : e);
+        plan = buildPlan({ candidates, interests, timeOfDay, durationMinutes, weather, lat, lng, nowMs });
+      }
+    } else {
+      plan = buildPlan({ candidates, interests, timeOfDay, durationMinutes, weather, lat, lng, nowMs });
+    }
 
     // THE GUARANTEE. Drop any stop that isn't a candidate we supplied, and
     // re-attach OUR name and coordinates rather than the model's — so even a
@@ -365,18 +393,21 @@ export const planAdventure = onCall(
     }
 
     if (stops.length === 0) {
-      throw new HttpsError("internal", "Couldn't build a plan from nearby places. Try again.");
+      // The engine says why (everything closed after dark, nothing open for the time you have); the client shows this sentence.
+      throw new HttpsError("failed-precondition", plan.notes?.[0] ?? "Not enough nearby places to plan an outing yet.");
     }
 
     // Vendor spend, recorded only once the plan actually succeeded — a failed
-    // Claude call bills nothing and must not show up as burn. Best-effort: a
-    // bookkeeping write must never fail a plan the user already paid a quota
-    // slot for. Same /treasury/{yyyy-mm} bucket the cash ledger uses, under a
-    // separate key so gift-card liability and API spend stay distinguishable.
+    // Claude call bills nothing and must not show up as burn, and a rules-engine
+    // plan costs 0. Best-effort: a bookkeeping write must never fail a plan the
+    // user already paid a quota slot for. Same /treasury/{yyyy-mm} bucket the
+    // cash ledger uses, under a separate key so gift-card liability and API
+    // spend stay distinguishable.
     try {
       await db().collection("treasury").doc(mk).set({
         plannerCalls: FieldValue.increment(1),
-        plannerCostCents: FieldValue.increment(PLAN_VENDOR_COST_CENTS),
+        plannerCostCents: FieldValue.increment(engine === "model" ? PLAN_VENDOR_COST_CENTS : 0),
+        plannerRulesCalls: FieldValue.increment(engine === "rules" ? 1 : 0),
         plannerPlusCalls: FieldValue.increment(isPlus ? 1 : 0),
         updatedAt: FieldValue.serverTimestamp(),
       }, { merge: true });
@@ -388,8 +419,11 @@ export const planAdventure = onCall(
       title: plan.title,
       intro: plan.intro,
       stops,
+      notes: Array.isArray(plan.notes) ? plan.notes.slice(0, 4) : [],
+      engine,
       weather: weather
-        ? { temperatureF: Math.round(weather.temperatureF), summary: weather.summary }
+        ? { temperatureF: Math.round(weather.temperatureF), summary: weather.summary,
+            sunsetMs: weather.sunsetMs ?? null, attribution: "Weather data by Open-Meteo.com" }
         : null,
       plansRemaining: isPlus ? null : Math.max(0, FREE_PLANS_PER_MONTH - usedAfter),
       isPlus,

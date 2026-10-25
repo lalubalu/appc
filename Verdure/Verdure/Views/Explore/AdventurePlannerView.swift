@@ -1,15 +1,16 @@
 import SwiftUI
 import CoreLocation
 
-// MARK: - AI Adventure Planner
+// MARK: - Adventure Planner
 //
 // Ask for how long you've got, get an itinerary of real nearby places shaped by
-// the current weather and time of day.
+// the current weather, the sunset and time of day.
 //
-// Everything shown here comes back from the server already grounded: the model
-// picks only from places the app fetched from its providers, and any stop it
-// invents is dropped before the response is sent. So there is no "AI might be
-// making this up" disclaimer to write — the constraint is structural.
+// Everything shown here comes back from the server already grounded: the
+// planner (a rules engine; a language model only if the project ever sets a
+// key) picks only from places the app fetched from its providers, and any stop
+// it invents is dropped before the response is sent. So there is no "this
+// might be made up" disclaimer to write — the constraint is structural.
 
 struct AdventurePlannerView: View {
     let places: [Place]
@@ -218,6 +219,21 @@ struct AdventurePlannerView: View {
 
             ForEach(plan.stops) { stop in
                 stopRow(stop)
+            }
+
+            // Sunset, heat, rain and unposted-hours notes from the planner.
+            ForEach(plan.notes, id: .self) { note in
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: "info.circle")
+                        .font(.system(size: 11, weight: .semibold))
+                        .accessibilityHidden(true)
+                    Text(note)
+                        .font(VType.scaledBody(12))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .foregroundStyle(Palette.inkSoft)
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("plannerNote")
             }
         }
         .padding(Spacing.lg)

@@ -171,10 +171,50 @@ async function sequenceWithModel(candidates: EventPlanCandidate[], key: string):
   return { title: safeText(raw.title, 80) || "Your plan", intro: safeText(raw.intro, 300), stops };
 }
 
-const fallbackPlan = (rows: EventPlanCandidate[]) => ({
-  title: "A plan nearby", intro: "Real events that fit your choices.",
-  stops: rows.slice(0, 3).map((e) => ({ eventId: e.id, why: `${e.category} at ${e.locationName}.` })),
-});
+/**
+ * The deterministic event plan (CAC 2026, 1.2): the path that runs with no
+ * model key, so it has to read like a plan. Two or three real events in START
+ * ORDER that do not overlap, nearest-first among same-hour choices, each with a
+ * concrete reason (time, place, price, friends) and no phrase used twice.
+ */
+export function deterministicEventPlan(rows: EventPlanCandidate[], lat?: number, lng?: number): {
+  title: string; intro: string; stops: Array<{ eventId: string; why: string }>;
+} {
+  const byStart = [...rows].sort((a, b) => a.startMs - b.startMs || a.id.localeCompare(b.id));
+  const chosen: EventPlanCandidate[] = [];
+  let lastEnd = -Infinity;
+  for (const e of byStart) {
+    if (chosen.length >= 3) break;
+    // Allow 90 minutes per event plus 30 to get between them before the next one may start.
+    if (e.startMs < lastEnd) continue;
+    chosen.push(e);
+    lastEnd = e.startMs + 120 * 60_000;
+  }
+  if (chosen.length < 2) { chosen.length = 0; chosen.push(...byStart.slice(0, Math.min(3, byStart.length))); }
+  const clock = (ms: number) => new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", weekday: "short", hour: "numeric", minute: "2-digit" }).format(ms);
+  const used = new Set<string>();
+  const take = (pool: string[], seed: number) => { const fresh = pool.filter((p) => !used.has(p)); const v = (fresh.length ? fresh : pool)[seed % (fresh.length ? fresh : pool).length]; used.add(v); return v; };
+  const stops = chosen.map((e, i) => {
+    const facts: string[] = [];
+    facts.push(i === 0 ? take([`starts ${clock(e.startMs)}`, `kicks off ${clock(e.startMs)}`], i) : take([`then ${clock(e.startMs)}`, `next up at ${clock(e.startMs)}`, `follows at ${clock(e.startMs)}`], i));
+    if (e.locationName) facts.push(`at ${e.locationName}`);
+    if (e.isFree) facts.push(take(["free to attend", "no ticket needed", "free"], i));
+    else if (typeof e.priceMin === "number") facts.push(`from $${e.priceMin}`);
+    if (e.social > 0) facts.push(take(["friends are going", "people you follow are going"], i));
+    if (lat !== undefined && lng !== undefined && e.latitude !== undefined && e.longitude !== undefined) {
+      const miles = haversineMiles(lat, lng, e.latitude, e.longitude);
+      if (miles < 25) facts.push(`${miles.toFixed(1)} mi away`);
+    }
+    return { eventId: e.id, why: `${e.category}: ${facts.join(", ")}.` };
+  });
+  const span = chosen.length ? `${clock(chosen[0].startMs)} to ${clock(chosen[chosen.length - 1].startMs)}` : "";
+  return {
+    title: chosen.length === 3 ? "Three real events, in order" : "Two real events, in order",
+    intro: `${chosen.length} events that fit your choices, from ${span}, spaced so you can get from one to the next.`,
+    stops,
+  };
+}
+const fallbackPlan = (rows: EventPlanCandidate[], lat?: number, lng?: number) => deterministicEventPlan(rows, lat, lng);
 
 export const planEvents = onCall({ secrets: [ANTHROPIC_API_KEY] }, async (req) => {
   const uid = requireUid(req.auth);
@@ -234,7 +274,7 @@ export const planEvents = onCall({ secrets: [ANTHROPIC_API_KEY] }, async (req) =
       selectedIDs: [], lat: input.lat ?? null, lng: input.lng ?? null,
       modelCalls: 0, refinements: 0, createdAt: FieldValue.serverTimestamp(), month });
   });
-  let plan = fallbackPlan(candidates);
+  let plan = fallbackPlan(candidates, input.lat, input.lng);
   let modelUsed = false;
   const key = ANTHROPIC_API_KEY.value();
   if (key && candidates.length >= 2) {
