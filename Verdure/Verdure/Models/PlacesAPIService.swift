@@ -5,6 +5,54 @@ import Observation
 
 // MARK: - Places API Service (Overpass / OpenStreetMap)
 
+/// The HTTP call the service makes; tests inject one that answers from fixtures.
+typealias PlacesTransport = @Sendable (URLRequest) async throws -> (Data, URLResponse)
+
+/// Where the places on screen came from. The credit shows the snapshot date when
+/// the bundled snapshot is what the user is looking at.
+enum PlacesSource: Equatable {
+    case none
+    /// A live Overpass answer, naming the mirror that gave it.
+    case live(mirror: String)
+    /// The per-area on-device cache (from an earlier live answer).
+    case cache
+    /// The OpenStreetMap snapshot bundled with the app, with its capture date.
+    case snapshot(date: String)
+}
+
+/// The OpenStreetMap extract shipped in the bundle (Resources/osm-snapshot-san-jose.json):
+/// the app's own Overpass query for the launch area, captured once so that the
+/// first launch and every launch with Overpass at capacity still has real places.
+/// It is the same data the live path returns, so the ODbL credit is the same.
+struct OSMSnapshot: Decodable {
+    struct Center: Decodable { let lat: Double; let lon: Double }
+    let center: Center
+    let radiusMeters: Double
+    /// ISO-8601 capture time, shown next to the credit as "snapshot <date>".
+    let fetchedAt: String
+    let endpoint: String
+    let attribution: String
+    let elements: [OSMElement]
+
+    static let resourceName = "osm-snapshot-san-jose"
+
+    static func bundled(in bundle: Bundle = .main) -> OSMSnapshot? {
+        guard let url = bundle.url(forResource: resourceName, withExtension: "json"),
+              let data = try? Data(contentsOf: url) else { return nil }
+        return try? JSONDecoder().decode(OSMSnapshot.self, from: data)
+    }
+
+    /// The snapshot is only honest near where it was captured: within its radius plus 10 km.
+    func covers(_ c: CLLocationCoordinate2D) -> Bool {
+        let a = CLLocation(latitude: center.lat, longitude: center.lon)
+        let b = CLLocation(latitude: c.latitude, longitude: c.longitude)
+        return a.distance(from: b) <= radiusMeters + 10_000
+    }
+
+    /// "2026-10-25" from the capture time.
+    var dateLabel: String { String(fetchedAt.prefix(10)) }
+}
+
 @MainActor @Observable
 final class PlacesAPIService {
 
@@ -14,24 +62,56 @@ final class PlacesAPIService {
     var collectiblePlaces: [CollectiblePlace] = []
     var isLoading = false
     var lastError: String? = nil
+    /// What the current `places` came from; drives the credit's snapshot date.
+    private(set) var source: PlacesSource = .none
+
+    /// The date to show after "© OpenStreetMap contributors" when the bundled
+    /// snapshot is on screen; nil for live or cached answers.
+    var snapshotDate: String? {
+        if case .snapshot(let date) = source { return date }
+        return nil
+    }
 
     // MARK: - Private
 
     private var cachedCenter: CLLocationCoordinate2D?
     private let maxPlaces = 30
     private let radiusMeters = 5000 // 5 km search radius
-    private let cacheKey = "cachedPlacesJSON"
-    private let cacheCenterKey = "cachedPlacesCenter"
-    private let cacheTimestampKey = "cachedPlacesTimestamp"
+    /// Per-area cache (CAC 2026, 1.4): keys carry the area cell so a cache for
+    /// one neighbourhood is never served for another. One cell ≈ 5.5 km.
+    private static let cachePrefix = "cachedPlaces.v3"
+    private static let lastAreaKey = "cachedPlaces.v3.lastArea"
     private let cacheTTL: TimeInterval = 3600 // 1 hour
+    private let transport: PlacesTransport
+    private let snapshot: OSMSnapshot?
+
+    /// Overpass mirrors, tried in order with a 25-second limit each. The public
+    /// instance was at capacity for a whole night on 2026-10-22; the others
+    /// are community mirrors of the same data.
+    static let overpassMirrors: [String] = [
+        "https://overpass-api.de/api/interpreter",
+        "https://overpass.private.coffee/api/interpreter",
+        "https://overpass.kumi.systems/api/interpreter",
+        "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+    ]
+    static let mirrorTimeout: TimeInterval = 25
+    /// Identifies the app to Overpass (it answers 406 to generic agents). No personal address.
+    static let userAgent = "Verdure/1.0 (+https://verdure-app.com)"
 
     // MARK: - Init
 
-    init() {
-        loadCachedPlaces()
+    init(transport: PlacesTransport? = nil, snapshot: OSMSnapshot? = OSMSnapshot.bundled()) {
+        self.transport = transport ?? { request in try await URLSession.shared.data(for: request) }
+        self.snapshot = snapshot
+        if let last = UserDefaults.standard.string(forKey: Self.lastAreaKey) { loadCachedPlaces(areaKey: last) }
         if places.isEmpty {
             useSampleFallback()
         }
+    }
+
+    /// ~5.5 km cells, so a cache is only reused where it was fetched.
+    static func areaKey(_ c: CLLocationCoordinate2D) -> String {
+        "\(Int((c.latitude * 20).rounded(.down)))_\(Int((c.longitude * 20).rounded(.down)))"
     }
 
     // MARK: - Public API
@@ -40,8 +120,9 @@ final class PlacesAPIService {
     /// Falls back to SampleData on failure.
     func fetchNearbyPlaces(around center: CLLocationCoordinate2D) async {
         if QAData.offline { return }   // QA: cached/sample data only
+        let key = Self.areaKey(center)
         // Skip if we already fetched for a nearby coordinate recently
-        if let cached = cachedCenter, isCacheValid(),
+        if let cached = cachedCenter, isCacheValid(areaKey: key),
            distance(cached, center) < 500 { // within 500m of cached center
             return
         }
@@ -51,13 +132,24 @@ final class PlacesAPIService {
 
         // Unstructured task so a cancelled SwiftUI .task can't kill the fetch.
         await Task { @MainActor in
-            // Primary source: OpenStreetMap / Overpass (free, no key, global).
+            // Primary source: OpenStreetMap / Overpass (free, no key, global),
+            // through the mirror list; then this area's cache; then the bundled
+            // snapshot. Each step is real OpenStreetMap data — never a sample.
             var merged: [Place] = []
+            var liveSource: PlacesSource = .none
             do {
-                let osmElements = try await self.queryOverpass(center: center)
+                let (osmElements, mirror) = try await self.queryOverpass(center: center)
                 merged = self.mapToPlaces(osmElements, center: center)
+                liveSource = .live(mirror: mirror)
             } catch {
                 self.lastError = error.localizedDescription
+                if let cached = self.cachedPlaces(areaKey: key), !cached.isEmpty {
+                    merged = cached
+                    liveSource = .cache
+                } else if let snap = self.snapshot, snap.covers(center) {
+                    merged = self.mapToPlaces(snap.elements, center: center)
+                    liveSource = .snapshot(date: snap.dateLabel)
+                }
             }
 
             // Additional free sources — no-ops unless their keys are configured.
@@ -78,7 +170,10 @@ final class PlacesAPIService {
                 self.places = Array(merged.prefix(self.maxPlaces + 15))
                 self.collectiblePlaces = Self.buildCollectibles(from: self.places, center: center)
                 self.cachedCenter = center
-                self.persistCache(center: center)
+                self.source = liveSource
+                // Only a live answer refreshes the per-area cache; a snapshot or an
+                // old cache is not re-stamped as fresh.
+                if case .live = liveSource { self.persistCache(center: center, areaKey: key) }
             }
             self.isLoading = false
         }.value
@@ -91,14 +186,13 @@ final class PlacesAPIService {
 
     // MARK: - Overpass Query
 
-    private func queryOverpass(center: CLLocationCoordinate2D) async throws -> [OSMElement] {
+    /// The app's Overpass query, exported so the snapshot capture uses the same one.
+    static func overpassQuery(center: CLLocationCoordinate2D, radiusMeters r: Int, limit: Int) -> String {
         let lat = center.latitude
         let lon = center.longitude
-        let r = radiusMeters
-
         // Query parks, trails, gardens, playgrounds, waterfront, sports, scenic, community spaces
-        let query = """
-        [out:json][timeout:15];
+        return """
+        [out:json][timeout:25];
         (
           node["leisure"="park"](around:\(r),\(lat),\(lon));
           way["leisure"="park"](around:\(r),\(lat),\(lon));
@@ -116,31 +210,39 @@ final class PlacesAPIService {
           way["leisure"="nature_reserve"](around:\(r),\(lat),\(lon));
           node["natural"="beach"](around:\(r),\(lat),\(lon));
         );
-        out center body qt \(maxPlaces * 2);
+        out center body qt \(limit);
         """
+    }
 
-        let urlString = "https://overpass-api.de/api/interpreter"
-        guard let url = URL(string: urlString) else {
-            throw PlacesAPIError.invalidURL
+    /// Ask each mirror in turn (25 s each) and return the first good answer with
+    /// the mirror that gave it. Throws `allMirrorsFailed` with the last error
+    /// when none answers, so the caller can fall back to the cache or snapshot.
+    private func queryOverpass(center: CLLocationCoordinate2D) async throws -> ([OSMElement], String) {
+        let query = Self.overpassQuery(center: center, radiusMeters: radiusMeters, limit: maxPlaces * 2)
+        var lastFailure = "no mirror answered"
+        for mirror in Self.overpassMirrors {
+            guard let url = URL(string: mirror) else { continue }
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.httpBody = "data=\(query)".data(using: .utf8)
+            request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+            // Overpass answers 406 to generic agents (seen 2026-10-22); identify the app.
+            request.setValue(Self.userAgent, forHTTPHeaderField: "User-Agent")
+            request.timeoutInterval = Self.mirrorTimeout
+            do {
+                let (data, response) = try await transport(request)
+                guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+                    lastFailure = "\(url.host ?? mirror): HTTP \((response as? HTTPURLResponse)?.statusCode ?? 0)"
+                    continue
+                }
+                let decoded = try JSONDecoder().decode(OverpassResponse.self, from: data)
+                return (decoded.elements, url.host ?? mirror)
+            } catch {
+                lastFailure = "\(url.host ?? mirror): \(error.localizedDescription)"
+                continue
+            }
         }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.httpBody = "data=\(query)".data(using: .utf8)
-        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        // Overpass answers 406 to generic agents (seen 2026-10-22); identify the app.
-        request.setValue("Verdure/1.0 (+https://verdure-app.com)", forHTTPHeaderField: "User-Agent")
-        request.timeoutInterval = 20
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw PlacesAPIError.serverError
-        }
-
-        let decoded = try JSONDecoder().decode(OverpassResponse.self, from: data)
-        return decoded.elements
+        throw PlacesAPIError.allMirrorsFailed(lastFailure)
     }
 
     // MARK: - Mapping OSM -> Place
@@ -412,32 +514,46 @@ final class PlacesAPIService {
         }
     }
 
-    // MARK: - Cache
+    // MARK: - Cache (per area)
 
-    private func persistCache(center: CLLocationCoordinate2D) {
-        let encodable = places.map { CachedPlace(from: $0) }
-        if let data = try? JSONEncoder().encode(encodable) {
-            UserDefaults.standard.set(data, forKey: cacheKey)
-        }
-        UserDefaults.standard.set([center.latitude, center.longitude], forKey: cacheCenterKey)
-        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: cacheTimestampKey)
+    private func cacheKeys(_ areaKey: String) -> (places: String, center: String, stamp: String) {
+        ("\(Self.cachePrefix).\(areaKey).places", "\(Self.cachePrefix).\(areaKey).center", "\(Self.cachePrefix).\(areaKey).stamp")
     }
 
-    private func loadCachedPlaces() {
-        guard let data = UserDefaults.standard.data(forKey: cacheKey),
-              let cached = try? JSONDecoder().decode([CachedPlace].self, from: data),
-              let centerArr = UserDefaults.standard.array(forKey: cacheCenterKey) as? [Double],
+    private func persistCache(center: CLLocationCoordinate2D, areaKey: String) {
+        let keys = cacheKeys(areaKey)
+        let encodable = places.map { CachedPlace(from: $0) }
+        if let data = try? JSONEncoder().encode(encodable) {
+            UserDefaults.standard.set(data, forKey: keys.places)
+        }
+        UserDefaults.standard.set([center.latitude, center.longitude], forKey: keys.center)
+        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: keys.stamp)
+        UserDefaults.standard.set(areaKey, forKey: Self.lastAreaKey)
+    }
+
+    /// This area's cached places regardless of age (a stale cache still beats nothing when Overpass is down).
+    private func cachedPlaces(areaKey: String) -> [Place]? {
+        guard let data = UserDefaults.standard.data(forKey: cacheKeys(areaKey).places),
+              let cached = try? JSONDecoder().decode([CachedPlace].self, from: data) else { return nil }
+        return cached.map { $0.toPlace() }
+    }
+
+    private func loadCachedPlaces(areaKey: String) {
+        let keys = cacheKeys(areaKey)
+        guard let cached = cachedPlaces(areaKey: areaKey),
+              let centerArr = UserDefaults.standard.array(forKey: keys.center) as? [Double],
               centerArr.count == 2,
-              isCacheValid() else { return }
+              isCacheValid(areaKey: areaKey) else { return }
 
         let center = CLLocationCoordinate2D(latitude: centerArr[0], longitude: centerArr[1])
         cachedCenter = center
-        places = cached.map { $0.toPlace() }
+        places = cached
         collectiblePlaces = Self.buildCollectibles(from: places, center: center)
+        source = .cache
     }
 
-    private func isCacheValid() -> Bool {
-        let ts = UserDefaults.standard.double(forKey: cacheTimestampKey)
+    private func isCacheValid(areaKey: String) -> Bool {
+        let ts = UserDefaults.standard.double(forKey: cacheKeys(areaKey).stamp)
         guard ts > 0 else { return false }
         return Date().timeIntervalSince1970 - ts < cacheTTL
     }
@@ -472,11 +588,11 @@ final class PlacesAPIService {
 
 // MARK: - Overpass API Models
 
-private struct OverpassResponse: Decodable {
+struct OverpassResponse: Decodable {
     let elements: [OSMElement]
 }
 
-private struct OSMElement: Decodable {
+struct OSMElement: Decodable {
     let type: String
     let id: Int
     let lat: Double?
@@ -485,7 +601,7 @@ private struct OSMElement: Decodable {
     let tags: [String: String]?
 }
 
-private struct OSMCenter: Decodable {
+struct OSMCenter: Decodable {
     let lat: Double
     let lon: Double
 }
@@ -553,12 +669,15 @@ enum PlacesAPIError: LocalizedError {
     case invalidURL
     case serverError
     case decodingError
+    /// Every Overpass mirror failed; carries the last failure for the log.
+    case allMirrorsFailed(String)
 
     var errorDescription: String? {
         switch self {
         case .invalidURL: return "Invalid API URL"
         case .serverError: return "Server returned an error"
         case .decodingError: return "Could not parse response"
+        case .allMirrorsFailed(let last): return "OpenStreetMap is busy right now (\(last))"
         }
     }
 }

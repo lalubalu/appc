@@ -181,8 +181,12 @@ struct RootView: View {
             Task { await socialService.refreshAll() }
             Task {
                 let center = locationManager.userCoordinate
-                await placesService.fetchNearbyPlaces(around: center)
-                await eventsService.fetchNearbyEvents(around: center)
+                // CAC 2026 (1.4): these used to run one after the other, so the
+                // Events tab waited the full Overpass timeout (~22 s on a bad day)
+                // for places it does not use. They start together now.
+                await StartupFetches.run(
+                    places: { await placesService.fetchNearbyPlaces(around: center) },
+                    events: { await eventsService.fetchNearbyEvents(around: center) })
             }
         }
     }

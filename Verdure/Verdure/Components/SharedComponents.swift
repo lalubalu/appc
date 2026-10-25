@@ -326,10 +326,16 @@ struct Card3DButtonStyle: ButtonStyle {
 /// from OpenStreetMap (id prefixed `osm-`, see `PlacesAPIService`) is on screen.
 struct OpenStreetMapCredit: View {
     var color: Color = Palette.inkSoft
+    /// When the bundled snapshot is what is on screen, the capture date follows
+    /// the credit ("© OpenStreetMap contributors · snapshot 2026-10-25").
+    var snapshotDate: String? = nil
 
     var body: some View {
-        Link("© OpenStreetMap contributors", destination: URL(string: "https://www.openstreetmap.org/copyright")!)
-            .font(VType.body(11))
-            .foregroundStyle(color)
+        Link(destination: URL(string: "https://www.openstreetmap.org/copyright")!) {
+            Text(snapshotDate.map { "© OpenStreetMap contributors · snapshot \($0)" } ?? "© OpenStreetMap contributors")
+        }
+        .font(VType.body(11))
+        .foregroundStyle(color)
+        .accessibilityIdentifier("openStreetMapCredit")
     }
 }
