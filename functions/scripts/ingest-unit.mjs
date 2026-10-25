@@ -704,6 +704,8 @@ console.log("\n── sources are data (W4.1) ──");
 
 console.log("\n── CAC 2026 (1.5): a missing provider key is a silent skip, never an error ──");
 {
+  const { sourceDocFromSeed } = await import("../lib/ingest/sources-registry.js");
+  const { seedsOfType } = await import("../lib/ingest/sources-config.js");
   const npsDoc = sourceDocFromSeed(seedsOfType("nps", "san-jose-ca")[0]);
   let threw = null, records = null;
   const neverFetch = async () => { throw new Error("the network must not be touched when the key is missing"); };
