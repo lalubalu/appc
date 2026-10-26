@@ -99,15 +99,17 @@ ours. ⟨confirm⟩ And we learned, by finding old API keys in our own git histo
 unless a check blocks them, so we wrote that check into the build.
 
 ### Q6. What would you change about your app if you were to create a 2.0 version?
-Deploy the backend to the cloud and ship through TestFlight, so anyone can install Verdure
-instead of running our local stack. Recruit the three South Bay organisers whose sites block
-automated access (City of San José, Santa Clara University, Santa Clara County Parks) by asking
-them for a calendar feed, since no parser can fix a 403. Add a real "Outdoors" event category;
-guided hikes currently classify as Sports. Geocode venues for WordPress-calendar sources so
-volunteer plantings appear on the map. Replace placeholder place icons with real photos, and add
-real social features: follows and per-user feeds. Turn on the second-generation ranker, which
-learns from what each user actually attends, after a blind evaluation against the current one.
-And add more launch areas beyond San Jose, which the ingestion pipeline is already built to take.
+The honest first answer is that 2.0 would actually be on the App Store. Right now the backend only runs on our own machines through the Firebase emulators, because deploying Cloud Functions needs a paid billing plan and none of us wanted to put a credit card behind a school project yet. Everything is written and tested for the real thing, so 2.0 starts with flipping that switch, deploying, and shipping through TestFlight so someone can install Verdure without cloning a repo.
+
+The second change is less about code and more about asking people for help. Three of the biggest event sources in our area, the City of San José, Santa Clara University and Santa Clara County Parks, block automated requests outright. Our rule was never to scrape a site that doesn't want us there, so we just don't have their events. No parser fixes a 403. In 2.0 we would email those organizations and ask for a calendar feed, which is a very different skill than the ones we practiced this year.
+
+A few things in the app itself bother us. Guided hikes currently show up under Sports because our category list has no Outdoors, and for an app about going outside that's embarrassing. Volunteer plantings from WordPress calendars often have no coordinates, so they never appear on the map. Places still use clay icons instead of real photos. The social side is thin: there's a friends leaderboard and a community board, but no follows and no personal feed, and we think seeing that a friend checked in somewhere is the thing that would actually get people out the door.
+
+We also have a second ranking engine already built that learns from what each person attends instead of just what they said they liked during onboarding. It stays switched off until we can run a blind comparison against the current one, because we'd rather prove it's better than assume.
+
+Finally, we would move past San Jose. The ingestion pipeline was built for multiple launch areas from the start, and the discovery job that finds new civic calendars works anywhere. So far it has only ever run on one city.
+
+None of this is a rewrite. The hard parts, the server-side points, the real data pipeline and the offline queue, are done. 2.0 is mostly about letting real people use them.
 
 ---
 
