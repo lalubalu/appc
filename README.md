@@ -13,6 +13,25 @@ outside into real rewards.
   <img src="demo-screens/planner-plan.jpg" width="200" alt="Adventure Planner plan with weather">
 </p>
 
+
+## For Congressional App Challenge judges (CA-10, 2026)
+
+- **Team:** Lalith, Rishit, John, Vishvak.
+- **Demonstration video (≤ 3 min):** [TEAM: paste the public YouTube/Vimeo link before submitting]
+- **What it is, in one sentence:** Verdure rewards people for going outside and showing up at
+  real local parks and community events, verified by location and photo.
+- **Languages:** Swift (iOS app), TypeScript (Cloud Functions), Python (discovery reference
+  engine), JavaScript/TSX (website).
+- **AI assistance and third-party code:** fully disclosed in
+  [`AI-AND-THIRD-PARTY-DISCLOSURE.md`](AI-AND-THIRD-PARTY-DISCLOSURE.md).
+- **Run it yourself (Mac, Xcode 15+, Java 21, Node 20+):** `./run-all.command` starts the
+  Firebase emulators with the saved data, loads the public events and park guides, and launches
+  the app in the simulator. Sign in as `demo-judge@example.test` / `local-demo-walkthrough`.
+  The backend is not deployed to the cloud (see *Deploy status* below), so the app needs the local
+  stack to show data. Screenshots of every screen are in [`demo-screens/`](demo-screens/).
+- **Where to read next:** [`docs/CAC-2026-SUBMISSION-REVIEW.md`](docs/CAC-2026-SUBMISSION-REVIEW.md)
+  (rules and rubric check), [`FINAL-REPORT.md`](FINAL-REPORT.md) (what was built, with numbers).
+
 ---
 
 ## What it does
