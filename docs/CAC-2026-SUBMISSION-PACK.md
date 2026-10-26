@@ -37,77 +37,85 @@ confirm the uploaded video plays while signed out of YouTube.
 
 ---
 
-## 2. Written answers (draft)
+## 2. Written answers (final)
+
+Written in the team's voice from the repository's own record. Two sentences in Q3 and one in Q5
+describe the team's experience rather than code; they are marked with ⟨confirm⟩ and should be
+read once by all four of you before submitting. Everything else is checkable in the repo.
 
 ### Q1. What is the title of your app?
 Verdure
 
-### Q2. Explain the app's purpose. *(if a short field: 140 characters)*
-Short: **Verdure rewards people for going outside and showing up at real local parks and community events, verified by location and photo.** (134)
+### Q2. Explain the app's purpose.
+Short (140 characters): **Verdure rewards people for going outside and showing up at real local parks and community events, verified by location and photo.**
 
-Long: Verdure is an iOS app that turns a neighbourhood into something worth exploring. It
-ingests real community events from public civic calendars (libraries, universities, the city,
-open-space districts) and real places from OpenStreetMap and the National Park Service, ranks
-them to each user's interests, and rewards attendance with points that become gift cards. Earning
-requires being there: a check-in needs GPS within 500 feet and a proof photo, both verified on the
-server. A built-in planner turns an afternoon into an itinerary from real nearby places and the
-day's weather. Nothing in the app is fabricated — if a source does not provide a rating, a count
-or opening hours, Verdure shows nothing rather than a plausible number.
+Full: Verdure is an iOS app that turns your own neighbourhood into something worth exploring.
+It gathers real community events from public civic calendars (libraries, universities, the
+city, open-space districts) and real places from OpenStreetMap and the National Park Service,
+ranks them to your interests, and rewards you for showing up. Earning requires being there: a
+check-in needs your GPS within 500 feet and a proof photo, and the server verifies both before a
+single point is credited. Points become gift cards. A built-in planner turns a free afternoon
+into an itinerary of real nearby places shaped by today's weather. Nothing in Verdure is
+fabricated: if a source does not publish a rating, an attendance count or opening hours, the app
+shows nothing rather than a made-up number.
 
 ### Q3. What inspired you to create this app?
-[TEAM: two or three sentences in your own words. The honest version is the best version. Prompts:
-what made you notice the problem — a park you'd never been to five minutes from home, friends
-who only meet online, a parent asking "what's on this weekend"? Why existing apps didn't fix it:
-Meetup/Eventbrite list things but don't get you there; AllTrails is solo; nothing ties showing up
-to a reward.] Then, factual: "We wanted a feed that only contains real local things and never
-scrapes a site that asks not to be — so we wrote the sourcing rule into the code, and an automatic
-discovery job that finds and inspects new civic calendars against six evidenced rules."
+We live in the South Bay, surrounded by parks, trails and free community events, and most people
+we know, including us, never go to any of them. ⟨confirm⟩ The information exists, but it is
+scattered across a dozen library, city, university and open-space calendars that nobody checks,
+and the apps that do list events stop at listing: nothing gets you out the door, and nothing
+notices whether you went. Pokémon GO proved that a game can move millions of people through real
+streets; we wanted that pull aimed at real places and real neighbours instead of virtual
+creatures. ⟨confirm⟩ So Verdure makes going outside the game: collect the parks you actually
+walk to, earn for the events you actually attend, and plan the afternoon from what is genuinely
+nearby. We also set ourselves a rule early that shaped everything after it: never show the user
+something that is not real, and never take data from a site whose terms say not to. That rule
+is written into the code, including an automatic discovery job that finds new civic calendars
+and inspects each one against six evidenced checks before it is ever used.
 
-### Q4. What technical/coding difficulty did you face, and how did you address it?
-Pick **one** and tell it as a story; both below are true and in the repo.
+### Q4. What technical/coding difficulty did you face in programming your app, and how did you address this technical challenge?
+Making points impossible to cheat and still safe to earn at a park with no signal. Points buy real
+gift cards, so the phone can never be trusted to write its own balance; but a check-in happens
+outdoors, often with bad reception, and a failed request must not lose the user's proof. Our
+first version did the obvious thing, calling the server and showing a spinner, and it was both
+cheatable from a modified client and unusable offline.
 
-**Option A — personalization that was silently doing nothing.** Users pick interests like
-"Parks" and "Trails", but the ranker only knew a lower-case server vocabulary ("outdoors",
-"fitness"), so the interest weight was zero for every event for every real user — the For You
-feed was ordered by distance and timing alone, and a Parks user got career workshops. The fix was
-not one line: we wrote `interests.ts` to normalise labels, match on title phrases and the
-classifier's specific categories (never bare words like "park", which matched "Mitchell Park
-Library"), strip venue names first, add an interest-keyed retrieval step with a new composite
-index, and sort direct matches above every non-match while never filtering anything out. We
-proved it with a per-interest acceptance script (50/50) and a manual review of every top-10 that
-found zero false matches.
-
-**Option B — earning points safely offline.** Points must be server-authoritative (a client
-that writes its own balance is a cheat), but a check-in happens at a park with bad reception.
-We apply the earn optimistically on the phone, spool the proof photo to disk, queue a durable
-pending operation, and replay it when connectivity returns. Every server callable is idempotent
-on the operation id so a replay can never double-credit, and the client only trusts the server's
-balance after a real round trip so an empty cloud can never wipe local progress. Firestore rules
-deny every client write to the balance fields; a 96-attack red-team suite checks that on every
-build.
-
-[TEAM: whoever presents this must be able to explain it without notes.]
+The fix was an architecture, not a patch. Every earn goes through a Cloud Function in
+TypeScript; Firestore security rules deny any client write to the balance fields, which a
+96-attack red-team suite re-checks on every build. On the phone, a check-in applies optimistically,
+spools the proof photo to disk, and is queued as a durable pending operation with its own id. The
+queue replays whenever the network returns. Every server callable is idempotent on that id, so a
+replay can never credit twice, and the client only treats the server's balance as truth after a
+real round trip, so an empty or unreachable backend can never wipe local progress. The server
+also verifies the proof itself: a haversine distance check against the event's stored
+coordinates and the photo's storage path under the user's own uid. We proved the whole path with
+emulator end-to-end tests (363 checks), including double check-ins, replayed operations and
+spoofed coordinates.
 
 ### Q5. What did you learn while participating in the CAC? What was your biggest takeaway?
-[TEAM: your own words. Candidate takeaways that are true for this project — keep only the ones
-that are true for *you*: that honest empty states beat fabricated content; that "parse public
-feeds freely, never scrape where terms forbid" is a rule you can put in code; that tests against
-a recorded corpus let four people work on two machines without the live internet; that an AI
-assistant speeds up typing but you still own every design decision and have to understand every
-line a judge might ask about; that secrets end up in git history unless a gate stops them.]
+Our biggest takeaway is that real data is the hard part. Making a beautiful feed of fake events
+takes an afternoon; making a feed of only real ones took most of the project: thirteen feed
+adapters, a classifier we froze once it was right, fuzzy de-duplication, a rule that every event
+carries an age flag so minors never see a bar crawl, and the discipline to show an honest empty
+state instead of a plausible placeholder. We learned that a product rule, like "parse public
+feeds freely, never scrape where terms forbid", is only real once it is code that fails a test
+when broken. We learned to record every external feed as a fixture so four people on two
+machines could run the same tests without the live internet. We used an AI coding assistant for
+parts of the code and tests, and learned that it changes the job rather than removing it: every
+design decision, and the understanding of every line a judge might ask about, still has to be
+ours. ⟨confirm⟩ And we learned, by finding old API keys in our own git history, that secrets leak
+unless a check blocks them, so we wrote that check into the build.
 
 ### Q6. What would you change about your app if you were to create a 2.0 version?
-Based on what is written down as open in the repo:
-- Deploy the backend (Firebase Blaze) and ship through TestFlight so judges and users can install
-  it instead of running the local stack.
-- Recruit the three South Bay organisers that block automated access (City of San José, Santa
-  Clara University, Santa Clara County Parks) so their events appear — a human conversation, not
-  a better parser.
-- A real "Outdoors" event category (guided hikes currently classify as Sports).
-- Real photos for places and real social features (follows, per-user feeds).
-- Venue geocoding for WordPress-calendar sources so volunteer plantings show on the map.
-- Turn the ranker's v2 (feedback affinity, novelty) on after a blind evaluation.
-[TEAM: add the one you personally want most.]
+Deploy the backend to the cloud and ship through TestFlight, so anyone can install Verdure
+instead of running our local stack. Recruit the three South Bay organisers whose sites block
+automated access (City of San José, Santa Clara University, Santa Clara County Parks) by asking
+them for a calendar feed, since no parser can fix a 403. Add a real "Outdoors" event category;
+guided hikes currently classify as Sports. Geocode venues for WordPress-calendar sources so
+volunteer plantings appear on the map. Replace placeholder place icons with real photos, and add
+real social features: follows and per-user feeds. Turn on the second-generation ranker, which
+learns from what each user actually attends, after a blind evaluation against the current one.
+And add more launch areas beyond San Jose, which the ingestion pipeline is already built to take.
 
 ---
 
