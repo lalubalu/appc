@@ -1,5 +1,11 @@
 # Handoff to the Mac — what to run, in order (2026-10-25)
 
+> **Done on the Mac, 2026-10-25** — results, the eleven fixes and every deviation are in
+> `docs/MAC-VERIFICATION-2026-10-25.md`. Two corrections to the commands below: Xcode 26.5 has no
+> "iPhone 16 Pro" simulator (use `name=iPhone 17 Pro` or a device id), and
+> `PartnerSurfaceTests` runs directly (`QA.launch` sets the simulated location), without
+> `partner-detail-native.sh`. Screenshots are `demo-screens/*.jpg` (full resolution, JPEG 90).
+
 For whoever picks up branch `cac-2026` on a Mac with Xcode (the agent or the person). Everything
 below is what could NOT be done on the Windows machine that produced this branch. The full
 account of what was done and why is `FINAL-REPORT.md`; this file is only the to-do list for

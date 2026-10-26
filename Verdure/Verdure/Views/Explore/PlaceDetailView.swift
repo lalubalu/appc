@@ -68,7 +68,7 @@ struct PlaceDetailView: View {
                     }
                 }
                 .padding(Spacing.md)
-                .padding(.bottom, Spacing.xxl)
+                .padding(.bottom, 110)   // clear the floating tab bar: the OpenStreetMap credit is the last row
             }
             .task(id: place.id) {
                 matchedParks = []; parkMatchError = false

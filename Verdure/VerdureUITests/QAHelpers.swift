@@ -123,11 +123,23 @@ enum QA {
                 start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: -max(lift, 60))),
                             withVelocity: .slow, thenHoldForDuration: 0.3)
             } else {
-                app.swipeUp()
+                scroll(app)
             }
             swiped = true
         }
         if swiped { settle(element) }
+    }
+
+    /// Scroll by 40 % of the screen with a held drag: the finger stops before it lifts, so
+    /// nothing coasts afterwards. After a swipe the list keeps moving for seconds below what frame
+    /// polling can see, and a tap in that tail only stops the scroll — the Curated Program poster
+    /// and Profile's Sign in were lost that way. Use swipes only where nothing is tapped next.
+    /// The drag stays in the middle band, clear of a raised keyboard, bottom bars and the tab bar:
+    /// started at 80 % it landed on the offline-pack search keyboard and scrolled nothing.
+    static func scroll(_ app: XCUIApplication, up: Bool = true) {
+        let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: up ? 0.55 : 0.15))
+        let to = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: up ? 0.15 : 0.55))
+        from.press(forDuration: 0.05, thenDragTo: to, withVelocity: .fast, thenHoldForDuration: 0.3)
     }
 
     /// A swipe keeps the list coasting for a few seconds, and a tap during deceleration
@@ -192,6 +204,9 @@ enum QA {
 
     /// Types into a field once it has settled (a sheet or keyboard may still be moving it) and
     /// owns the keyboard after a single tap; a tap that doesn't focus the field fails.
+    /// End the text with "\n" when the next field sits under the keyboard: XCTest otherwise
+    /// scrolls that field into view itself and taps while the form still moves, and the
+    /// password field then never took focus.
     static func type(_ text: String, into field: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
         XCTAssertTrue(waitUntilStable(field), "\(field) never settled", file: file, line: line)
         field.tap()

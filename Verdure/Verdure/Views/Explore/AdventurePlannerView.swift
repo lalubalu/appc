@@ -222,7 +222,7 @@ struct AdventurePlannerView: View {
             }
 
             // Sunset, heat, rain and unposted-hours notes from the planner.
-            ForEach(plan.notes, id: .self) { note in
+            ForEach(plan.notes, id: \.self) { note in
                 HStack(alignment: .top, spacing: 6) {
                     Image(systemName: "info.circle")
                         .font(.system(size: 11, weight: .semibold))

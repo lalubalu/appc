@@ -42,7 +42,7 @@ See [Firebase index types](https://firebase.google.com/docs/firestore/query-data
 | `functions/src/ingest/health.ts:32` | ingestRuns / COLLECTION | source ==; areaId == | Implicit/default | `COLLECTION/ingestRuns/areaId:ASCENDING,source:ASCENDING` |
 | `functions/src/ingest/health.ts:34` | ingestRuns / COLLECTION | source ==; areaId == | runAt DESCENDING | `COLLECTION/ingestRuns/source:ASCENDING,areaId:ASCENDING,runAt:DESCENDING` |
 | `functions/src/ingest/health.ts:35` | ingestRuns / COLLECTION | source ==; areaId ==; errors == | runAt DESCENDING | `COLLECTION/ingestRuns/source:ASCENDING,areaId:ASCENDING,errors:ASCENDING,runAt:DESCENDING` |
-| `functions/src/ingest/index.ts:381` | events / COLLECTION | areaId ==; active == | Implicit/default | `COLLECTION/events/areaId:ASCENDING,active:ASCENDING` |
+| `functions/src/ingest/index.ts:382` | events / COLLECTION | areaId ==; active == | Implicit/default | `COLLECTION/events/areaId:ASCENDING,active:ASCENDING` |
 | `functions/src/ingest/sources-registry.ts:103` | sources / COLLECTION | areaId ==; status == | Implicit/default | `COLLECTION/sources/areaId:ASCENDING,status:ASCENDING` |
 | `functions/src/ingest/sources-registry.ts:104` | sources / COLLECTION | areaId ==; status ==; type == | Implicit/default | `COLLECTION/sources/areaId:ASCENDING,status:ASCENDING,type:ASCENDING` |
 | `functions/src/ingest/sources-registry.ts:152` | sources / COLLECTION | areaId ==; status == | Implicit/default | `COLLECTION/sources/areaId:ASCENDING,status:ASCENDING` |

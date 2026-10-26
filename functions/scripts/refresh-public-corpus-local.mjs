@@ -19,4 +19,6 @@ for (const source of ["bibliocommons", "libcal", "localist", "livewhale", "legis
 }
 report.finishedAt = new Date().toISOString();
 writeFileSync(output, JSON.stringify(report, null, 2) + "\n");
-if (report.results.some(r => r.errors.length || !r.fetched)) throw new Error("A configured public source failed; inspect the report and staff source health.");
+// A 304 is a feed that answered with nothing new (its events are already loaded), not a failure:
+// treating it as one aborted every second run-all.command reload on an unchanged feed.
+if (report.results.some(r => r.errors.length || (!r.fetched && !r.notModified))) throw new Error("A configured public source failed; inspect the report and staff source health.");

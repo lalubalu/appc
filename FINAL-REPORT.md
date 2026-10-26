@@ -6,6 +6,12 @@ was used. Every Swift change in this report is **written but not compiled here**
 suite says **not run**, and there are **no new screenshots** — those three things need a Mac
 and are listed under "What is not perfect" with exactly what to run.
 
+**Mac pass, 2026-10-25 (`docs/MAC-VERIFICATION-2026-10-25.md`):** the Mac half of the handoff
+is done. The Swift compiled after one fix, every iOS suite ran (each UI class alone, the
+intermittent ones three times in a row — all but the partner-consent test, which stays open), `demo-screens/` holds the ordered screenshots, and the
+backend final proof was rerun on the final code. Eleven defects were found and fixed, each with
+the test that catches it; the 1.6 table and "What is not perfect" below carry the Mac results.
+
 ## How this branch relates to the Mac's work
 
 The handoff described work on Rishit's Mac that never reached the team remote
@@ -37,7 +43,8 @@ the zip's tree on the shared base; merge commit `ada4950`):
 | `6d54d15` `ada4950` | merge | the Mac tree and its three-way merge |
 | `8edea91` `9c463d9` | 1.6 | museum terms fixture (discovery-unit 160/160), CLAUDE.md |
 | `6f1734a` `3a36929` `0e42149` | 1.6 / 1.1 cause 5 | live discovery recording, five sources, corroboration rule, fresh corpus, www fallback, same-time alternatives |
-| (this commit) | — | final suite numbers |
+| `6d5e431` | — | final suite numbers (Windows) |
+| (Mac pass) | Mac | compile fix, OSM credit above the tab bar, map pill, `run-all.command` fixes, 304 reloads, test fixes, screenshots, Mac numbers (`docs/MAC-VERIFICATION-2026-10-25.md`) |
 
 ---
 
@@ -229,21 +236,38 @@ All backend numbers below are from the final code on this branch, run 2026-10-25
 | Personalization acceptance | **50 / 50** on the loaded corpus (after the new sources) | `node scripts/personalization-e2e.mjs` |
 | For You demo accounts (the Mac's check) | **4 / 4** | `node scripts/foryou-interests-e2e.mjs --keep` |
 | Planner review | **11 / 11** scenarios, hand-reviewed | `node scripts/planner-review.mjs` |
-| iOS unit (`VerdureTests`) | **not run** (no Xcode here) | see `docs/MAC-HANDOFF-2026-10-25.md` § 1 |
-| iOS UI, each class alone | **not run** | idem |
-| Fresh-install walkthrough + screenshots | **not done** | `DemoWalkthroughUITests` on the Mac |
+| iOS unit (`VerdureTests`) | **not run** here (no Xcode) — Mac: see below | `docs/MAC-HANDOFF-2026-10-25.md` § 1 |
+| iOS UI, each class alone | **not run** here — Mac: see below | idem |
+| Fresh-install walkthrough + screenshots | **not done** here — Mac: see below | `DemoWalkthroughUITests` |
 
-The intermittent UI tests (Curated Program, partner consent, partner map): the Mac's
-`QAHelpers` rewrite (reveal/settle/type helpers, per-launch simulated location, the location
-prompt answered, audit without retries or sleeps) and its edits to `JourneyTests`,
-`LivePartnerConsentUITests` and `PartnerSurfaceTests` are what changed them; **three green runs
-in a row were not possible here** (no Xcode). The two intermittent unit tests: the Mac's
-`RewardsLiveCatalogTests` / `PartnerDiscoveryTests` edits; same caveat.
+**Mac, 2026-10-25, on the final code** (Xcode 26.5, iPhone 17 Pro / iOS 26.5; full detail in
+`docs/MAC-VERIFICATION-2026-10-25.md`):
+
+| Suite | Result |
+|---|---|
+| Backend units | **17 suites green** (the 16 above + `run-all` 10); classifier ✓, secret scan ✓ (5,471 files), indexes ✓ |
+| Backend E2E · red team · acceptance | **363 / 363** · **96 blocked, 0 vulnerable** · **64 / 64** |
+| Discovery E2E | **59 / 59** (the 58 above + the 304 check) |
+| For You accounts | **12 / 12** (the 4 above + one account per pick) |
+| `VerdureTests` | **161 / 161, 0 skipped** |
+| `RewardsLiveCatalogTests`, `PartnerDiscoveryTests` | three in a row each, green (Rewards fixed: it could not run twice) |
+| `JourneyTests`, `PartnerSurfaceTests` | **16 / 16** and **4 / 4**, three in a row each |
+| `LivePartnerConsentUITests` | **not proved**: 6 of 8 runs green; two lost Notifications taps, cause not found (open) |
+| `AccessibilityAuditTests` · `TextSizeMatrixTests` · `PlaceStoryUITests` · `ExploreBetaUITests` · `OnboardingRegressionUITests` | **15 / 15** · **10 / 10** · **1 / 1** · **1 / 1** · **2 / 2** |
+| `DemoWalkthroughUITests` | **6 / 6** on the final app code; 5 / 6 in each of three later runs on the final test code, every failure diagnosed (planner quota, a Sunday-afternoon weekend, a tap lost under 12 GB of swap); screenshots in `demo-screens/` |
+
+The intermittent tests the Windows pass could not check: `RewardsLiveCatalogTests` failed every
+time it ran after a first run (fixed codes; now per-run), the Curated Program and partner taps were
+lost to scroll momentum, re-renders and a moving row (fixed in the tests: held drags, settle waits,
+waiting for the row), and the partner-consent Notifications tap is still lost in some runs with no
+cause found — recorded, not hidden.
 
 ## 1.7 Ready to record
 
 `run-all.command` (repo root) does the whole stack in one double-click on the Mac — see its
-header. **Not run here.** `../emulator-data` holds the export it imports.
+header. `../emulator-data` holds the export it imports. **Run on the Mac 2026-10-25** after four
+fixes (executable bit, Java 21 pick, the discovery replay, the counts step) and the 304 fix in
+`refresh-public-corpus-local.mjs`; a full reload gives 19 active sources and 8,630 events.
 
 ---
 
@@ -275,14 +299,19 @@ One thing the new sources exposed and this branch fixed: allcove's "senses and s
 
 ## What is not perfect, and exactly why
 
-1. **No Swift was compiled and no iOS test ran** — Windows, no Xcode. Files this branch changed
-   on the Swift side beyond the Mac's: `Models.swift` (fallback map), `CoreLogicTests.swift`
-   (its test), `AdventurePlannerService.swift` / `AdventurePlannerView.swift` (notes, error
-   sentence), `Legal.swift`, `PaywallView.swift`, `ExploreView.swift` (comment). Run
-   `xcodegen generate` first, then both suites.
-2. **No new screenshots** — `demo-screens/` was not produced; the Mac's
-   `DemoWalkthroughUITests` attaches ordered screenshots when run.
-3. **Flaky-test determinism not proved** — see 1.6.
+1. ~~No Swift compiled, no iOS test run, no screenshots, flakes unproved~~ — done on the Mac
+   2026-10-25; see the Mac table in 1.6 and `docs/MAC-VERIFICATION-2026-10-25.md`.
+2. **The Mac engine's "… km from where you started" intro is gone.** The merge kept this
+   branch's planner engine, whose intro gives the plan's length and stop count; the Mac's UI
+   test was updated to that. Re-adding a distance-home sentence would be an engine change with
+   its own review, not a fix.
+3. **Live OpenStreetMap was unreachable on 2026-10-25** — all four public Overpass mirrors timed
+   out from the Mac's network, so every place on screen came from the dated snapshot
+   (2026-10-23), with its date beside the credit. The Map no longer spins while that happens.
 4. **History not purged in this clone** — `docs/NEW-REPO-PUSH.md`.
 5. **Hosts that refuse automated access** — Santa Clara County Parks, City of San José and
    SCU still return 403 and need a human to ask; see the discovery section.
+6. **The 8 GB Mac needs everything else closed for a full run.** With a browser holding ~5.7 GB
+   the machine swapped 13 GB: the Firestore emulator answered acceptance writes with
+   `DEADLINE_EXCEEDED` after 15+ minutes (2 hours, 6 "failures") and app pages took 10 s to draw.
+   The same suites passed with it closed (acceptance 64/64 in 53 s). Close browsers first.

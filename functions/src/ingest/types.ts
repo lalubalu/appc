@@ -96,6 +96,8 @@ export interface IngestResult {
   rejectedByReason: Record<string, number>;
   /** Document writes this run issued (upsertBatch + markStale), the number the free-tier budget is measured in. */
   writes: number;
+  /** W4.4: feeds of this type that answered 304 Not Modified — a successful run that read nothing new. */
+  notModified: number;
   errors: string[];
   durationMs: number;
 }

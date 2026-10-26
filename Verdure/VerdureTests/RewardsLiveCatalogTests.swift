@@ -26,8 +26,12 @@ import XCTest
             throw XCTSkip("Requires the explicitly local Firebase test host.")
         }
         let service = EconomyService()
-        let partnerID = "qa-rewards-native-partner", stocked = "qa-rewards-native-stocked"
-        let soldout = "qa-rewards-native-soldout", window = "qa-rewards-native-window"
+        // Offer ids and codes are per run: a redeemed code can never be re-uploaded, so with fixed
+        // ones every run after the first (without reseeding rewards-native-fixture.mjs) was refused
+        // "At least one code already exists in this perk".
+        let run = UUID().uuidString.prefix(8).lowercased()
+        let partnerID = "qa-rewards-native-partner", stocked = "qa-rewards-native-stocked-\(run)"
+        let soldout = "qa-rewards-native-soldout-\(run)", window = "qa-rewards-native-window-\(run)"
         let ids = Set([stocked, soldout, window])
         func call(_ name: String, _ data: [String: Any]) async throws {
             // Transfer a fresh JSON graph to the SDK, rather than transferring
@@ -57,8 +61,10 @@ import XCTest
         }
         do {
             _ = try await Auth.auth().signIn(withEmail: "qa-rewards-native-staff@example.test", password: "local-rewards-native-only")
+            await service.loadMyCodes()
+            let codesBefore = service.myCodes.count   // codes issued by earlier runs stay issued
             try await call("savePartner", partner)
-            var first = perk(stocked); first["codes"] = ["LOCAL-NATIVE-FIRST", "LOCAL-NATIVE-SECOND"]
+            var first = perk(stocked); first["codes"] = ["LOCAL-NATIVE-FIRST-\(run)", "LOCAL-NATIVE-SECOND-\(run)"]
             try await call("upsertPartnerPerk", first)
             try await call("upsertPartnerPerk", perk(soldout))
             // Simulate a persisted pre-v2 status document. Its hash used a
@@ -86,7 +92,7 @@ import XCTest
             try await call("redeemReward", ["rewardId": stocked])
             try await until("partial stock decrement") { service.catalog.perks.first { $0.id == stocked }?.codesLeft == 1 }
             await service.loadMyCodes()
-            XCTAssertEqual(service.myCodes.count, 1)
+            XCTAssertEqual(service.myCodes.count, codesBefore + 1)
             try await call("deactivatePartnerOffer", ["kind": "perk", "targetId": soldout, "reason": "Withdraw fictional sold-out offer"])
             try await until("sold-out withdrawal") { !service.catalog.perks.contains { $0.id == soldout } }
             XCTAssertTrue(service.catalog.perks.contains { $0.id == stocked })
@@ -101,9 +107,9 @@ import XCTest
             }
             try await call("deactivatePartnerOffer", ["kind": "partner", "targetId": partnerID, "reason": "Withdraw fictional business"])
             try await until("partner withdrawal") { !service.catalog.perks.contains { $0.partnerID == partnerID } }
-            XCTAssertEqual(service.myCodes.count, 1, "Withdrawal does not erase an already issued code.")
+            XCTAssertEqual(service.myCodes.count, codesBefore + 1, "Withdrawal does not erase an already issued code.")
             try await call("savePartner", partner)
-            var opening = perk(window, early: Date().addingTimeInterval(8)); opening["codes"] = ["LOCAL-NATIVE-WINDOW"]
+            var opening = perk(window, early: Date().addingTimeInterval(8)); opening["codes"] = ["LOCAL-NATIVE-WINDOW-\(run)"]
             try await call("upsertPartnerPerk", opening)
             // Explicitly hydrate newly created/restored offers, then let only
             // the service's clock/listeners update the already displayed rows. Restoring the

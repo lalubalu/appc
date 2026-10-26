@@ -13,7 +13,7 @@ final class JourneyTests: XCTestCase {
         QA.reveal(signIn, in: app)
         QA.waitFor(signIn, "guest sign-in entry").tap()
         let email = QA.waitFor(app.textFields["Email address"], "email field")
-        QA.type("program-native-adult@example.test", into: email)
+        QA.type("program-native-adult@example.test\n", into: email)
         let password = app.secureTextFields["Password"]
         QA.type("local-program-native-only\n", into: password)   // Return closes the keyboard that covers submit
         let submit = app.buttons["authSubmit"]
@@ -39,7 +39,7 @@ final class JourneyTests: XCTestCase {
         for _ in 0..<10 {
             let row = categories.frame.intersection(usableScreen)
             if !row.isNull && row.width > 40 && row.height > 10 { break }
-            if categories.frame.height > 0 && categories.frame.maxY < usableScreen.minY { app.swipeDown() } else { app.swipeUp() }
+            QA.scroll(app, up: !(categories.frame.height > 0 && categories.frame.maxY < usableScreen.minY))
         }
         for _ in 0..<6 where !program.exists || program.frame.isEmpty || !usableScreen.contains(program.frame) {
             let row = categories.frame.intersection(usableScreen)
@@ -65,13 +65,18 @@ final class JourneyTests: XCTestCase {
         program.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         let card = app.buttons.matching(identifier: "event-poster").matching(NSPredicate(format: "label BEGINSWITH %@", "Fictional native program 0, Program")).firstMatch
         QA.waitFor(card, "actual curated Program poster", timeout: 30)
-        // Bring the poster above the persistent tab bar before tapping it.
+        // Bring the poster above the persistent tab bar before tapping it, with held drags: a
+        // swipe keeps the feed coasting for seconds after its frame looks still, and the tap
+        // then only stops the scroll (the sheet never opened on a loaded Mac).
         for _ in 0..<8 {
             let centerY = card.frame.midY
             if centerY > 240 && centerY < app.frame.height - 160 { break }
-            if centerY >= app.frame.height - 160 { app.swipeUp() } else { app.swipeDown() }
+            let shift = min(max(app.frame.height / 2 - centerY, -app.frame.height * 0.4), app.frame.height * 0.4)
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: shift < 0 ? 0.75 : 0.3))
+            start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: shift)),
+                        withVelocity: .slow, thenHoldForDuration: 0.3)
         }
-        QA.settle(card)   // a tap while the swipe still coasts only stops the scroll
+        QA.settle(card)
         card.tap()
         let opened = XCTAttachment(screenshot: app.screenshot()); opened.name = "Program after card tap"; opened.lifetime = .keepAlways; add(opened)
         let official = app.buttons["programOfficialListing"]
@@ -91,7 +96,7 @@ final class JourneyTests: XCTestCase {
         QA.reveal(signIn, in: app)
         QA.waitFor(signIn, "guest sign-in entry").tap()
         let email = QA.waitFor(app.textFields["Email address"], "email field")
-        QA.type("offline-native-plus@example.test", into: email)
+        QA.type("offline-native-plus@example.test\n", into: email)
         let password = app.secureTextFields["Password"]
         QA.type("local-offline-native-only\n", into: password)   // Return closes the keyboard that covers submit
         let submit = app.buttons["authSubmit"]
@@ -112,7 +117,7 @@ final class JourneyTests: XCTestCase {
         QA.reveal(county, in: app, maxSwipes: 12)
         QA.waitFor(county, "real County selection", timeout: 60).tap()
         let prepare = app.buttons["prepareOfflinePack"]
-        for _ in 0..<8 where !prepare.isHittable { app.swipeDown() }
+        for _ in 0..<8 where !prepare.isHittable { QA.scroll(app, up: false) }
         QA.waitFor(prepare, "prepare size preview").tap()
         QA.waitFor(app.staticTexts["offlineDownloadSize"], "size before download", timeout: 60)
         XCTAssertFalse(app.staticTexts["Pack downloaded"].exists)
@@ -370,7 +375,10 @@ final class JourneyTests: XCTestCase {
 
     func testInterestTuningFlow() {
         let app = QA.launch(tab: "events")
-        QA.waitFor(app.buttons["Tune recommendations"].firstMatch, "tune button").tap()
+        let tune = QA.waitFor(app.buttons["Tune recommendations"].firstMatch, "tune button")
+        // Tapped 1 s after it first appeared, the tap was lost and the picker never opened.
+        XCTAssertTrue(QA.waitUntilStable(tune), "tune button never settled")
+        tune.tap()
         QA.waitFor(app.staticTexts["Your Interests"], "interest picker")
         app.buttons["Gardens"].firstMatch.tap()
         app.buttons["Done"].firstMatch.tap()
@@ -383,7 +391,7 @@ final class JourneyTests: XCTestCase {
         let app = QA.launch(tab: "explore")
         let tile = QA.waitFor(app.buttons.matching(NSPredicate(
             format: "label BEGINSWITH 'Today\\'s Gem'")).firstMatch, "gem tile")
-        for _ in 0..<8 where tile.frame.midY > app.frame.height - 160 { app.swipeUp() }
+        for _ in 0..<8 where tile.frame.midY > app.frame.height - 160 { QA.scroll(app) }
         QA.settle(tile)
         tile.tap()
         let gem = QA.waitFor(app.staticTexts["Daily Gem"], "gem splash title")

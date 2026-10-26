@@ -37,7 +37,16 @@ final class CoreLogicTests: XCTestCase {
             if page.documents.count < 500 { break }
             cursor = page.documents.last
         }
-        XCTAssertGreaterThan(expected.count, 80, "This connected test requires the refreshed public corpus, not synthetic supply")
+        // The property needs supply the first discovery page (EventsAPIService.maxEvents = 80
+        // chronological cards, every category) cannot hold. A fixed count (> 80) stood in for that
+        // and failed on a day the live feeds listed 79 public volunteer events.
+        let firstPage = try await Firestore.firestore().collection("events")
+            .whereField("hidden", isEqualTo: false).whereField("active", isEqualTo: true)
+            .whereField("broadcast", isEqualTo: true).whereField("adultOnly", isEqualTo: false)
+            .whereField("date", isGreaterThanOrEqualTo: Timestamp(date: Date().addingTimeInterval(-3600))).order(by: "date")
+            .limit(to: 80).getDocuments(source: .server)
+        XCTAssertFalse(expected.isSubset(of: Set(firstPage.documents.map(\.documentID))),
+                       "This connected test requires the refreshed public corpus: volunteer listings beyond the first discovery page")
         let service = EventsAPIService()
         await service.refresh(around: CLLocationCoordinate2D(latitude: 37.3382, longitude: -121.8863))
         XCTAssertEqual(Set(service.events.filter { $0.category == .volunteer }.map(\.id)), expected)

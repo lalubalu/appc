@@ -16,7 +16,8 @@
 # Layout it expects (Rishit's Mac): this file at the repo root, the helper folder one level up:
 #   ../emulator-data        the emulator export (created on first run)
 #   ../park-capture.json.gz optional: a permission-checked park capture for parks-local.mjs
-#   tools/bin/java          Java 21 (Java 8 breaks the emulators); falls back to a JDK 21 on PATH
+#   tools/bin/java          Java 21 (Java 8 breaks the emulators); falls back to a registered or
+#                           Homebrew JDK 21, then to a JDK 21 already on PATH
 set -euo pipefail
 cd "$(dirname "$0")"
 ROOT="$(pwd)"
@@ -31,9 +32,10 @@ say_step() { printf '\n\033[1;32m== %s\033[0m\n' "$*"; }
 fail() { printf '\n\033[1;31m!! %s\033[0m\n' "$*"; exit 1; }
 
 # ── Java 21 first on PATH ─────────────────────────────────────────────────────
-if [ -x "$ROOT/tools/bin/java" ]; then export PATH="$ROOT/tools/bin:$PATH"
-elif [ -x "$ROOT/tools/jdk/Contents/Home/bin/java" ]; then export PATH="$ROOT/tools/jdk/Contents/Home/bin:$PATH"
-elif /usr/libexec/java_home -v 21 >/dev/null 2>&1; then export JAVA_HOME="$(/usr/libexec/java_home -v 21)"; export PATH="$JAVA_HOME/bin:$PATH"
+. "$ROOT/functions/scripts/java21.sh"
+if JAVA21_BIN="$(java21_bin "$ROOT/tools/bin" "$ROOT/tools/jdk/Contents/Home/bin" "$(/usr/libexec/java_home -v 21 2>/dev/null)/bin" \
+     /opt/homebrew/opt/openjdk@21/bin /usr/local/opt/openjdk@21/bin)"; then
+  export PATH="$JAVA21_BIN:$PATH"
 fi
 java -version 2>&1 | head -1 | grep -q '"21' || fail "Java 21 is required first on PATH (found: $(java -version 2>&1 | head -1)). Put it in tools/bin."
 
@@ -75,6 +77,8 @@ if [ "$RELOAD" -eq 1 ]; then
   else node functions/scripts/parks-local.mjs --live | tail -3; fi
   say_step "Data: outdoor and volunteer sources found by discovery (replays the recorded fixtures; no network)"
   node functions/scripts/migrate-sources.mjs >"$LOG_DIR/migrate-sources.log" 2>&1 || echo "  (sources already seeded)"
+  node functions/scripts/activate-discovered-local.mjs "$LOG_DIR/discovered-sources.json" >"$LOG_DIR/discovered-sources.log" 2>&1 \
+    && tail -1 "$LOG_DIR/discovered-sources.log" || echo "  discovered sources failed — see $LOG_DIR/discovered-sources.log"
   say_step "Data: native test fixtures (programs, rewards, stories, offline packs)"
   node functions/scripts/offline-native-fixture.mjs >"$LOG_DIR/fixtures.log" 2>&1 || true
   node functions/scripts/program-native-fixture.mjs >>"$LOG_DIR/fixtures.log" 2>&1 || true
@@ -84,13 +88,14 @@ if [ "$RELOAD" -eq 1 ]; then
   node functions/scripts/demo-investor-local.mjs >"$LOG_DIR/demo-account.log" 2>&1 && tail -1 "$LOG_DIR/demo-account.log" || echo "  demo account seeding failed — see $LOG_DIR/demo-account.log"
   node functions/scripts/foryou-interests-e2e.mjs --keep >"$LOG_DIR/foryou-accounts.log" 2>&1 && echo "  For You demo accounts kept" || echo "  For You accounts failed — see $LOG_DIR/foryou-accounts.log"
   say_step "Data: counts"
-  node --input-type=module -e '
+  # From functions/: an inline module resolves firebase-admin from the working directory.
+  (cd functions && node --input-type=module -e '
     import { initializeApp } from "firebase-admin/app"; import { getFirestore } from "firebase-admin/firestore";
     initializeApp({ projectId: "connectify-19dd8" }); const db = getFirestore();
     const events = (await db.collection("events").count().get()).data().count;
     const sources = (await db.collection("sources").where("status", "==", "active").count().get()).data().count;
     const parks = (await db.doc("parkCatalog/current").get()).data()?.counts ?? {};
-    console.log(`  events: ${events}  active sources: ${sources}  parks: ${JSON.stringify(parks)}`);' 2>/dev/null || true
+    console.log(`  events: ${events}  active sources: ${sources}  parks: ${JSON.stringify(parks)}`);') || echo "  counts failed"
   say_step "Data: export now (so a crash before the window closes loses nothing)"
   npx firebase-tools@13 emulators:export "$DATA_DIR" --project connectify-19dd8 --force >"$LOG_DIR/export.log" 2>&1 && echo "  exported to $DATA_DIR"
 fi

@@ -190,7 +190,9 @@ struct MapExploreView: View {
 
     @ViewBuilder
     private var statusPill: some View {
-        if placesService.isLoading {
+        // Stored places (the area cache or the dated snapshot) are on the map while the mirrors are
+        // asked, up to four at 25 s each; the pill is only for a map with nothing on it yet.
+        if placesService.isLoading && placesService.places.isEmpty {
             pill(icon: nil, text: "Locating places…", tint: Palette.teal.base) {
                 ProgressView().scaleEffect(0.6).tint(Palette.teal.base)
             }

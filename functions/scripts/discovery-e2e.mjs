@@ -260,6 +260,12 @@ ok("a 304 to the conditional request is a successful run: no parsing, no event w
   JSON.stringify({ notModified: second.notModified, succeeded: second.succeeded, records: second.records.length, failures: second.failures, streak: stored2.failureStreak, last: stored2.lastEventCount }));
 let nm = false; try { await conditionalFetchFor({ etag: "\"v1\"", lastModified: null }, etagFetch).fetchImpl("https://cond.example.org/events.ics"); } catch (e) { nm = e instanceof NotModified; }
 ok("conditionalFetchFor signals NotModified instead of handing the adapter an empty body", nm);
+// runSource carries the 304 out, so a caller can tell "every feed answered, nothing new" from "nothing
+// ran" (refresh-public-corpus-local.mjs read fetched 0 as a failure and aborted every second reload).
+const realFetch = globalThis.fetch; globalThis.fetch = etagFetch;
+let viaRun; try { viaRun = await runSource("ics", area, {}, undefined, [{ ...icsDoc, etag: stored.etag }]); } finally { globalThis.fetch = realFetch; }
+ok("runSource reports the 304 as notModified with no error, so an unchanged feed is not read as a failed one",
+  viaRun.notModified === 1 && viaRun.fetched === 0 && viaRun.errors.length === 0, JSON.stringify({ notModified: viaRun.notModified, fetched: viaRun.fetched, errors: viaRun.errors }));
 
 // ── 7. Intake ───────────────────────────────────────────────────────────────
 console.log("── W4.4: intake ──");
